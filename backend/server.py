@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,7 +8,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import httpx
 import asyncio
 from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -24,6 +24,17 @@ db = client[os.environ['DB_NAME']]
 # API Keys
 ALPHA_VANTAGE_KEY = os.environ.get('ALPHA_VANTAGE_KEY', 'demo')
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
+DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
+
+# Signal Engine State (in-memory for fast access)
+signal_engine_state = {
+    "kill_switch": False,
+    "started_at": datetime.now(timezone.utc).isoformat(),
+    "total_signals": 0,
+    "errors": 0,
+    "last_signal_time": None,
+    "last_error": None,
+}
 
 # Create the main app without a prefix
 app = FastAPI()
@@ -113,6 +124,150 @@ class AIAnalysisRequest(BaseModel):
     symbol: str
     context: Optional[str] = None
     analysis_type: str = "general"  # general, entry, exit, sentiment
+
+class PositionSizeRequest(BaseModel):
+    entry_price: float
+    stop_loss: float
+    risk_amount: float = 30.0  # Default $30 risk (middle of $20-$40 range)
+    account_balance: Optional[float] = None
+
+class PositionSizeResponse(BaseModel):
+    entry_price: float
+    stop_loss: float
+    risk_amount: float
+    risk_per_share: float
+    position_size: int
+    total_position_value: float
+    target_1r: float  # 1:1 risk-reward
+    target_2r: float  # 1:2 risk-reward
+    max_loss: float
+    potential_profit_1r: float
+    potential_profit_2r: float
+
+# ============== Signal Engine Models ==============
+
+class TradingViewWebhook(BaseModel):
+    type: Optional[str] = None  # buy, sell
+    symbol: Optional[str] = "MNQ"
+    price: Optional[str] = None
+    time: Optional[str] = None
+
+class Signal(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    symbol: str = "MNQ"
+    side: str  # long, short
+    entry_price: float
+    stop_loss: float
+    tp1: float
+    tp2: float
+    confluence_score: int = 0
+    components: Dict[str, bool] = {}
+    trend_direction: str = "neutral"
+    status: str = "active"  # active, hit_tp1, hit_tp2, stopped, expired
+    outcome: Optional[str] = None  # win, loss, breakeven
+    pnl_points: Optional[float] = None
+    discord_sent: bool = False
+    source: str = "engine"  # engine, webhook, test
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class KillSwitchRequest(BaseModel):
+    enabled: bool
+    reason: Optional[str] = None
+
+# ============== Signal Engine Functions ==============
+
+async def send_discord_signal(signal: dict):
+    """Send signal to Discord webhook"""
+    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL":
+        logger.info("Discord webhook not configured, skipping delivery")
+        return False
+
+    side_emoji = "🟢" if signal["side"] == "long" else "🔴"
+    side_label = "LONG" if signal["side"] == "long" else "SHORT"
+
+    embed = {
+        "embeds": [{
+            "title": f"{side_emoji} {side_label} Signal — {signal['symbol']}",
+            "color": 0x34C759 if signal["side"] == "long" else 0xFF3B30,
+            "fields": [
+                {"name": "Entry", "value": f"${signal['entry_price']:.2f}", "inline": True},
+                {"name": "Stop Loss", "value": f"${signal['stop_loss']:.2f}", "inline": True},
+                {"name": "TP1", "value": f"${signal['tp1']:.2f}", "inline": True},
+                {"name": "TP2", "value": f"${signal['tp2']:.2f}", "inline": True},
+                {"name": "Confluence", "value": f"{signal['confluence_score']}/3", "inline": True},
+                {"name": "Trend", "value": signal["trend_direction"].upper(), "inline": True},
+            ],
+            "footer": {"text": f"MNQ Stack Signal Engine | {signal.get('source', 'engine')}"},
+            "timestamp": signal.get("created_at", datetime.now(timezone.utc).isoformat()),
+        }]
+    }
+
+    try:
+        async with httpx.AsyncClient() as http_client:
+            resp = await http_client.post(DISCORD_WEBHOOK_URL, json=embed, timeout=5.0)
+            return resp.status_code in (200, 204)
+    except Exception as e:
+        logger.error(f"Discord send failed: {e}")
+        return False
+
+
+async def check_duplicate_signal(symbol: str, side: str, minutes: int = 5) -> bool:
+    """Check if a similar signal was already sent recently"""
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=minutes)).isoformat()
+    existing = await db.signals.find_one({
+        "symbol": symbol,
+        "side": side,
+        "created_at": {"$gte": cutoff},
+        "status": "active"
+    })
+    return existing is not None
+
+
+def compute_confluence(price: float, prev_high: float, prev_low: float,
+                       open_price: float, close_price: float,
+                       high_price: float, low_price: float,
+                       ema20: float, ema50: float) -> dict:
+    """Compute the MNQ Stack confluence score"""
+    # Key Level proximity (psychological 00/50 levels)
+    level_00 = round(price / 100) * 100
+    level_50 = level_00 + 50 if price > level_00 else level_00 - 50
+    near_level = min(abs(price - level_00), abs(price - level_50)) < 10
+
+    # Rejection detection
+    body = abs(close_price - open_price)
+    bull_rejection = (low_price < prev_low) and (close_price > open_price) and ((open_price - low_price) > body)
+    bear_rejection = (high_price > prev_high) and (close_price < open_price) and ((high_price - open_price) > body)
+
+    # Momentum break
+    bull_break = close_price > prev_high
+    bear_break = close_price < prev_low
+
+    # Trend filter
+    trend_long = ema20 > ema50
+    trend_short = ema20 < ema50
+
+    # Confluence scores
+    long_score = int(near_level) + int(bull_rejection) + int(bull_break)
+    short_score = int(near_level) + int(bear_rejection) + int(bear_break)
+
+    long_signal = long_score >= 2 and trend_long
+    short_signal = short_score >= 2 and trend_short
+
+    return {
+        "near_level": near_level,
+        "bull_rejection": bull_rejection,
+        "bear_rejection": bear_rejection,
+        "bull_break": bull_break,
+        "bear_break": bear_break,
+        "trend_long": trend_long,
+        "trend_short": trend_short,
+        "long_score": long_score,
+        "short_score": short_score,
+        "long_signal": long_signal,
+        "short_signal": short_signal,
+        "trend_direction": "bullish" if trend_long else ("bearish" if trend_short else "neutral"),
+    }
 
 # ============== Stock Data Functions ==============
 
@@ -526,6 +681,85 @@ async def delete_alert(alert_id: str):
         raise HTTPException(status_code=404, detail="Alert not found")
     return {"message": "Deleted"}
 
+# Position Sizing Calculator
+@api_router.post("/calculator/position-size", response_model=PositionSizeResponse)
+async def calculate_position_size(request: PositionSizeRequest):
+    """Calculate optimal position size based on risk parameters"""
+    entry = request.entry_price
+    stop = request.stop_loss
+    risk = request.risk_amount
+    
+    # Calculate risk per share (distance to stop loss)
+    risk_per_share = abs(entry - stop)
+    
+    if risk_per_share == 0:
+        raise HTTPException(status_code=400, detail="Stop loss cannot equal entry price")
+    
+    # Calculate position size (shares you can buy within risk tolerance)
+    position_size = int(risk / risk_per_share)
+    
+    if position_size < 1:
+        position_size = 1
+    
+    # Total position value
+    total_value = position_size * entry
+    
+    # Calculate targets (1:1 and 1:2 risk-reward)
+    is_long = entry > stop
+    if is_long:
+        target_1r = entry + risk_per_share
+        target_2r = entry + (risk_per_share * 2)
+    else:
+        target_1r = entry - risk_per_share
+        target_2r = entry - (risk_per_share * 2)
+    
+    # Calculate potential profits
+    max_loss = position_size * risk_per_share
+    potential_profit_1r = position_size * risk_per_share
+    potential_profit_2r = position_size * risk_per_share * 2
+    
+    return PositionSizeResponse(
+        entry_price=entry,
+        stop_loss=stop,
+        risk_amount=risk,
+        risk_per_share=round(risk_per_share, 4),
+        position_size=position_size,
+        total_position_value=round(total_value, 2),
+        target_1r=round(target_1r, 4),
+        target_2r=round(target_2r, 4),
+        max_loss=round(max_loss, 2),
+        potential_profit_1r=round(potential_profit_1r, 2),
+        potential_profit_2r=round(potential_profit_2r, 2)
+    )
+
+# MNQ Position Size (futures specific - $2 per point per contract)
+@api_router.post("/calculator/mnq-position")
+async def calculate_mnq_position(stop_points: int = 15, risk_amount: float = 30.0):
+    """Calculate MNQ contracts based on stop loss points and risk"""
+    # MNQ = $2 per point per contract
+    dollar_per_point = 2.0
+    risk_per_contract = stop_points * dollar_per_point
+    
+    contracts = int(risk_amount / risk_per_contract)
+    if contracts < 1:
+        contracts = 1
+    
+    actual_risk = contracts * risk_per_contract
+    target_1r_profit = actual_risk
+    target_2r_profit = actual_risk * 2
+    
+    return {
+        "stop_points": stop_points,
+        "risk_amount": risk_amount,
+        "contracts": contracts,
+        "actual_risk": round(actual_risk, 2),
+        "target_points_1r": stop_points,
+        "target_points_2r": stop_points * 2,
+        "potential_profit_1r": round(target_1r_profit, 2),
+        "potential_profit_2r": round(target_2r_profit, 2),
+        "dollar_per_point": dollar_per_point
+    }
+
 # AI Analysis Routes
 @api_router.post("/ai/analyze")
 async def ai_analyze(request: AIAnalysisRequest):
@@ -594,6 +828,309 @@ async def ai_analyze(request: AIAnalysisRequest):
     except Exception as e:
         logger.error(f"AI analysis error: {e}")
         raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+
+# ============== Signal Engine Routes ==============
+
+# TradingView Webhook Receiver
+@api_router.post("/webhook/tradingview")
+async def receive_tradingview_webhook(payload: TradingViewWebhook, background_tasks: BackgroundTasks):
+    """Receive signals from TradingView webhook"""
+    global signal_engine_state
+
+    if signal_engine_state["kill_switch"]:
+        return {"status": "blocked", "reason": "Kill switch active"}
+
+    # Check duplicate
+    side = "long" if payload.type and payload.type.lower() == "buy" else "short"
+    symbol = payload.symbol or "MNQ"
+    is_dup = await check_duplicate_signal(symbol, side, minutes=3)
+    if is_dup:
+        signal_engine_state["errors"] += 1
+        return {"status": "duplicate", "reason": "Signal already active"}
+
+    price = float(payload.price) if payload.price else 18500.0
+
+    # Calculate entry/stop/tp
+    if side == "long":
+        stop = price - 8
+        tp1 = price + 10
+        tp2 = price + 20
+    else:
+        stop = price + 8
+        tp1 = price - 10
+        tp2 = price - 20
+
+    signal_obj = Signal(
+        symbol=symbol,
+        side=side,
+        entry_price=price,
+        stop_loss=stop,
+        tp1=tp1,
+        tp2=tp2,
+        confluence_score=2,
+        components={"webhook": True},
+        trend_direction="bullish" if side == "long" else "bearish",
+        source="webhook",
+    )
+    doc = signal_obj.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.signals.insert_one(doc)
+
+    signal_engine_state["total_signals"] += 1
+    signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
+
+    # Send to Discord in background
+    doc.pop("_id", None)
+    background_tasks.add_task(send_discord_signal, doc)
+
+    return {"status": "received", "signal_id": signal_obj.id, "side": side}
+
+
+# Get all signals
+@api_router.get("/signals")
+async def get_signals(limit: int = 50, status: Optional[str] = None):
+    """Get signal history"""
+    query = {}
+    if status:
+        query["status"] = status
+    signals = await db.signals.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return signals
+
+
+# Update signal outcome
+@api_router.patch("/signals/{signal_id}")
+async def update_signal(signal_id: str, status: str, pnl_points: Optional[float] = None):
+    """Update signal status (hit_tp1, hit_tp2, stopped, expired)"""
+    update_data = {"status": status}
+    if pnl_points is not None:
+        update_data["pnl_points"] = pnl_points
+    if status == "stopped":
+        update_data["outcome"] = "loss"
+    elif status in ("hit_tp1", "hit_tp2"):
+        update_data["outcome"] = "win"
+
+    result = await db.signals.update_one({"id": signal_id}, {"$set": update_data})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Signal not found")
+    return {"message": "Updated"}
+
+
+# Signal Engine Stats
+@api_router.get("/signals/stats")
+async def get_signal_stats():
+    """Get signal performance metrics"""
+    all_signals = await db.signals.find({}, {"_id": 0}).to_list(1000)
+    closed = [s for s in all_signals if s.get("outcome") in ("win", "loss")]
+    wins = [s for s in closed if s.get("outcome") == "win"]
+    losses = [s for s in closed if s.get("outcome") == "loss"]
+    active = [s for s in all_signals if s.get("status") == "active"]
+
+    total_pnl = sum(s.get("pnl_points", 0) for s in closed if s.get("pnl_points"))
+    avg_rr = 0
+    if losses:
+        avg_win_pts = sum(s.get("pnl_points", 0) for s in wins) / len(wins) if wins else 0
+        avg_loss_pts = abs(sum(s.get("pnl_points", 0) for s in losses) / len(losses)) if losses else 1
+        avg_rr = round(avg_win_pts / avg_loss_pts, 2) if avg_loss_pts > 0 else 0
+
+    # Signal frequency (signals per day over last 7 days)
+    seven_days_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    recent = [s for s in all_signals if s.get("created_at", "") >= seven_days_ago]
+    freq = round(len(recent) / 7, 1) if recent else 0
+
+    return {
+        "total_signals": len(all_signals),
+        "active_signals": len(active),
+        "closed_signals": len(closed),
+        "wins": len(wins),
+        "losses": len(losses),
+        "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
+        "total_pnl_points": round(total_pnl, 1),
+        "avg_rr": avg_rr,
+        "signal_frequency_per_day": freq,
+        "missed_signals": signal_engine_state["errors"],
+    }
+
+
+# Kill Switch
+@api_router.post("/signals/kill-switch")
+async def toggle_kill_switch(request: KillSwitchRequest):
+    """Enable/disable the kill switch"""
+    global signal_engine_state
+    signal_engine_state["kill_switch"] = request.enabled
+    action = "ENABLED" if request.enabled else "DISABLED"
+    logger.warning(f"Kill switch {action}: {request.reason or 'No reason'}")
+
+    # Log to db
+    await db.system_logs.insert_one({
+        "event": "kill_switch",
+        "action": action,
+        "reason": request.reason,
+        "timestamp": datetime.now(timezone.utc).isoformat()
+    })
+
+    return {"kill_switch": request.enabled, "message": f"Kill switch {action}"}
+
+
+@api_router.get("/signals/kill-switch")
+async def get_kill_switch():
+    """Get kill switch status"""
+    return {"kill_switch": signal_engine_state["kill_switch"]}
+
+
+# System Health
+@api_router.get("/signals/health")
+async def get_system_health():
+    """Get system health metrics"""
+    total = signal_engine_state["total_signals"]
+    errors = signal_engine_state["errors"]
+    error_rate = round(errors / total * 100, 1) if total > 0 else 0
+
+    # Check auto kill-switch threshold (>5% error rate)
+    auto_kill = error_rate > 5 and total > 10
+
+    discord_configured = bool(DISCORD_WEBHOOK_URL) and DISCORD_WEBHOOK_URL != "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL"
+
+    return {
+        "status": "degraded" if signal_engine_state["kill_switch"] else ("warning" if error_rate > 3 else "healthy"),
+        "kill_switch": signal_engine_state["kill_switch"],
+        "auto_kill_triggered": auto_kill,
+        "uptime_since": signal_engine_state["started_at"],
+        "total_signals_processed": total,
+        "errors": errors,
+        "error_rate_pct": error_rate,
+        "last_signal_time": signal_engine_state["last_signal_time"],
+        "discord_configured": discord_configured,
+    }
+
+
+# Test Signal Generator
+@api_router.post("/signals/test")
+async def generate_test_signal(background_tasks: BackgroundTasks):
+    """Generate a test signal for validation"""
+    import random
+    global signal_engine_state
+
+    if signal_engine_state["kill_switch"]:
+        return {"status": "blocked", "reason": "Kill switch active"}
+
+    side = random.choice(["long", "short"])
+    base_price = 18500 + random.uniform(-100, 100)
+
+    if side == "long":
+        entry = round(base_price, 2)
+        stop = round(entry - 8, 2)
+        tp1 = round(entry + 10, 2)
+        tp2 = round(entry + 20, 2)
+    else:
+        entry = round(base_price, 2)
+        stop = round(entry + 8, 2)
+        tp1 = round(entry - 10, 2)
+        tp2 = round(entry - 20, 2)
+
+    # Simulate confluence computation
+    near_level = random.choice([True, False])
+    rejection = random.choice([True, False])
+    momentum = random.choice([True, False])
+    score = int(near_level) + int(rejection) + int(momentum)
+
+    signal_obj = Signal(
+        symbol="MNQ",
+        side=side,
+        entry_price=entry,
+        stop_loss=stop,
+        tp1=tp1,
+        tp2=tp2,
+        confluence_score=score,
+        components={
+            "near_level": near_level,
+            "rejection": rejection,
+            "momentum_break": momentum,
+        },
+        trend_direction="bullish" if side == "long" else "bearish",
+        source="test",
+    )
+    doc = signal_obj.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.signals.insert_one(doc)
+
+    signal_engine_state["total_signals"] += 1
+    signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
+
+    background_tasks.add_task(send_discord_signal, doc)
+
+    # Remove MongoDB _id before returning
+    doc.pop("_id", None)
+    return {"status": "generated", "signal": doc}
+
+
+# Pine Script Reference
+@api_router.get("/signals/pinescript")
+async def get_pine_script():
+    """Get the Pine Script for TradingView"""
+    pine = '''//@version=5
+indicator("MNQ Stack Signal", overlay=true)
+
+// EMAs
+ema20 = ta.ema(close, 20)
+ema50 = ta.ema(close, 50)
+
+// Trend
+trend_long = ema20 > ema50
+trend_short = ema20 < ema50
+
+// Rejections
+bull_rejection = (low < low[1]) and (close > open) and ((open - low) > (close - open))
+bear_rejection = (high > high[1]) and (close < open) and ((high - open) > (open - close))
+
+// Breaks
+bull_break = close > high[1]
+bear_break = close < low[1]
+
+// Level proximity
+level_00 = math.round(close / 100) * 100
+near_level = math.abs(close - level_00) < 10
+
+// Scores
+long_score = (near_level ? 1 : 0) + (bull_rejection ? 1 : 0) + (bull_break ? 1 : 0)
+short_score = (near_level ? 1 : 0) + (bear_rejection ? 1 : 0) + (bear_break ? 1 : 0)
+
+// Signals
+long_signal = long_score >= 2 and trend_long
+short_signal = short_score >= 2 and trend_short
+
+// Plot signals
+plotshape(long_signal, location=location.belowbar, color=color.green, style=shape.labelup, text="BUY")
+plotshape(short_signal, location=location.abovebar, color=color.red, style=shape.labeldown, text="SELL")
+
+// EMAs on chart
+plot(ema20, color=color.new(color.blue, 30), linewidth=2, title="EMA 20")
+plot(ema50, color=color.new(color.orange, 30), linewidth=2, title="EMA 50")
+
+// Background
+bgcolor(long_signal ? color.new(color.green, 90) : short_signal ? color.new(color.red, 90) : na)
+
+// Alerts
+alertcondition(long_signal, title="Long Signal", message='{"type":"buy","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
+alertcondition(short_signal, title="Short Signal", message='{"type":"sell","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
+'''
+    webhook_instructions = f"""
+## TradingView Webhook Setup
+
+1. Open TradingView → Add the Pine Script indicator above
+2. Create an Alert on the chart (right-click → Add Alert)
+3. Condition: "MNQ Stack Signal" → "Long Signal" or "Short Signal"
+4. Enable "Webhook URL" and paste:
+   {os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')}/api/webhook/tradingview
+
+5. Webhook message (auto-filled by alertcondition):
+   {{"type":"buy","symbol":"{{{{ticker}}}}","price":"{{{{close}}}}","time":"{{{{time}}}}"}}
+"""
+
+    return {
+        "pine_script": pine,
+        "webhook_instructions": webhook_instructions,
+        "webhook_url": f"/api/webhook/tradingview"
+    }
 
 # Seed default data
 @api_router.post("/seed")
