@@ -1,0 +1,102 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 2 (Performance Pro) - Tactical Command Center",
+  "typography": {
+    "heading_font": "Chivo",
+    "body_font": "IBM Plex Sans",
+    "mono_font": "JetBrains Mono",
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl tracking-tighter font-black",
+      "h2": "text-xl sm:text-2xl tracking-tight font-bold",
+      "h3": "text-lg tracking-tight font-semibold",
+      "data_large": "text-3xl sm:text-4xl tracking-tighter font-mono font-medium",
+      "data_medium": "text-xl font-mono",
+      "data_small": "text-sm font-mono",
+      "body": "text-sm",
+      "overline": "text-xs font-bold uppercase tracking-[0.2em] text-zinc-400"
+    }
+  },
+  "colors": {
+    "background": "#0A0A0A",
+    "surface": "#121212",
+    "surface_hover": "#1A1A1A",
+    "border": "rgba(255, 255, 255, 0.1)",
+    "text_primary": "#FFFFFF",
+    "text_secondary": "#A1A1AA",
+    "accent_primary": "#007AFF",
+    "accent_hover": "#3395FF",
+    "semantic": {
+      "bullish_green": "#34C759",
+      "bearish_red": "#FF3B30",
+      "warning": "#FFCC00"
+    }
+  },
+  "layout": {
+    "spacing_scale": "dense",
+    "grid_system": "Control Room Grid (Dense)",
+    "container_padding": "p-4",
+    "gap": "gap-4",
+    "radius": "rounded-sm",
+    "patterns": {
+      "dashboard_grid": "grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-4 h-full",
+      "widget_panel": "bg-[#121212] border border-white/10 rounded-sm flex flex-col overflow-hidden h-full",
+      "header": "h-14 border-b border-white/10 bg-[#0A0A0A]/80 backdrop-blur-xl flex items-center justify-between px-4 sticky top-0 z-50",
+      "sidebar": "w-16 md:w-64 border-r border-white/10 bg-[#0A0A0A] flex flex-col shrink-0"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#007AFF] text-white hover:bg-[#3395FF] rounded-sm font-semibold tracking-tight px-4 py-2 transition-colors",
+      "buy": "bg-[#34C759]/10 text-[#34C759] border border-[#34C759]/50 hover:bg-[#34C759] hover:text-white rounded-sm font-bold uppercase px-4 py-2 transition-colors",
+      "sell": "bg-[#FF3B30]/10 text-[#FF3B30] border border-[#FF3B30]/50 hover:bg-[#FF3B30] hover:text-white rounded-sm font-bold uppercase px-4 py-2 transition-colors",
+      "outline": "border border-white/10 text-white hover:bg-white/5 rounded-sm px-4 py-2"
+    },
+    "tables": {
+      "row": "border-b border-white/5 hover:bg-white/5 transition-colors cursor-pointer",
+      "cell": "py-2 px-3 text-sm",
+      "header_cell": "text-xs uppercase tracking-wider text-zinc-500 py-2 px-3 font-semibold"
+    },
+    "cards": {
+      "base": "bg-[#121212] border border-white/10 rounded-sm p-4 h-full flex flex-col",
+      "stat_box": "flex flex-col gap-1 p-3 bg-white/5 rounded-sm border border-white/5"
+    }
+  },
+  "visual_enhancers": {
+    "shadows": "none",
+    "glows": "drop-shadow-[0_0_8px_rgba(52,199,89,0.3)] for bullish indicators, drop-shadow-[0_0_8px_rgba(255,59,48,0.3)] for bearish",
+    "borders": "1px solid strokes everywhere to define boundaries. No soft shadows.",
+    "textures": "Subtle repeating linear gradient (scanlines) for the terminal feel in specific AI analysis empty states"
+  },
+  "motion": {
+    "hover": "transition-colors duration-150 ease-in-out",
+    "price_flash_up": "animate-[flashGreen_0.5s_ease-out]",
+    "price_flash_down": "animate-[flashRed_0.5s_ease-out]"
+  },
+  "media": {
+    "image_urls": [
+      {
+        "url": "https://images.unsplash.com/photo-1643962577481-4ff81600e439?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwxfHxzdG9jayUyMG1hcmtldCUyMGNoYXJ0JTIwZGFya3xlbnwwfHx8fDE3NzY0NTMyNTl8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Abstract trading chart overlay",
+        "category": "empty_state_background"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzV8MHwxfHNlYXJjaHwzfHxzdG9jayUyMG1hcmtldCUyMGNoYXJ0JTIwZGFya3xlbnwwfHx8fDE3NzY0NTMyNTl8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Red and blue tech streaks",
+        "category": "ai_analysis_header"
+      }
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Install and use Phosphor Icons (@phosphor-icons/react) with duotone weight for a highly technical feel. Alternatively use lucide-react if already installed, keeping icons sharp and small.",
+    "Use Recharts for the MNQ Futures Tracker and P&L charts. Customize axes to use JetBrains Mono, remove chart grids entirely or use very faint white/5 opacity lines. Add VWAP, 9 EMA, 21 EMA, RSI overlays natively.",
+    "For live prices, ensure all numbers are tabulated using JetBrains Mono (font-mono) so digits align perfectly vertically. Add `font-variant-numeric: tabular-nums` to global CSS for tables.",
+    "Do NOT use thick rounded corners. The app must feel like a precision instrument (rounded-sm or rounded-none).",
+    "Use Shadcn UI tables but strip out the generous padding to make them dense ('p-1' or 'p-2'). Use Mode B 'Control Room Grid' styling.",
+    "Implement Sonner toasts for Breakout and VWAP alerts with custom styling: dark background and neon green/red borders based on alert type.",
+    "The UI must prioritize data density. The 'Control Room Grid' means using almost every pixel. Utilize h-full on widgets to stretch them correctly.",
+    "Never use generic placeholders. Use the provided Unsplash images for backgrounds behind empty state panels, set to very low opacity (10%).",
+    "Implement pure CSS neon text shadows for active price changes (e.g., text-green-500 drop-shadow-[0_0_8px_rgba(34,197,94,0.8)]).",
+    "Ensure all interactive elements have descriptive, role-based data-testid attributes (e.g., data-testid='buy-mnq-button', data-testid='watchlist-item-sofi').",
+    "You have .js files not .tsx files, keep components clean of typescript types."
+  ]
+}
