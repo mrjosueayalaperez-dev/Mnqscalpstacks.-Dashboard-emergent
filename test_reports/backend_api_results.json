@@ -1,0 +1,13 @@
+{
+  "total_tests": 20,
+  "passed_tests": 19,
+  "failed_tests": 1,
+  "success_rate": 95.0,
+  "failed_test_details": [
+    {
+      "name": "AI Analysis",
+      "details": "Status: 500"
+    }
+  ],
+  "timestamp": "2026-04-17T19:23:15.427074"
+}
