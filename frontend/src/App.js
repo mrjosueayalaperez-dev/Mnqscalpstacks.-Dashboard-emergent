@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import "@/App.css";
 import axios from "axios";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import SignalDashboard from "@/components/SignalDashboard";
+import PerformancePage from "@/components/PerformancePage";
 import {
   TrendingUp,
   TrendingDown,
@@ -58,6 +60,14 @@ const Header = ({ onRefresh, lastUpdate }) => (
       </h1>
     </div>
     <div className="flex items-center gap-4">
+      <a
+        href="/performance"
+        className="flex items-center gap-1 px-2.5 py-1 text-xs bg-[#FFCC00]/15 text-[#FFCC00] rounded-sm hover:bg-[#FFCC00]/25 transition-colors font-bold"
+        data-testid="performance-link"
+      >
+        <BarChart3 className="w-3 h-3" />
+        Performance
+      </a>
       <span className="text-xs text-zinc-500 font-mono">
         {lastUpdate ? `Updated: ${lastUpdate}` : "Loading..."}
       </span>
@@ -1437,4 +1447,15 @@ function App() {
   );
 }
 
-export default App;
+function AppRouter() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<App />} />
+        <Route path="/performance" element={<PerformancePage />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
+
+export default AppRouter;

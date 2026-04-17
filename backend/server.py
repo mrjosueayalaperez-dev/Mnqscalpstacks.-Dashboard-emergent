@@ -1183,6 +1183,155 @@ async def seed_data():
     
     return {"message": "Data seeded successfully"}
 
+
+# ============== Public Performance Dashboard ==============
+
+@api_router.get("/public/performance")
+async def get_public_performance():
+    """Public-facing performance data for the signal system"""
+    all_signals = await db.signals.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    closed = [s for s in all_signals if s.get("outcome") in ("win", "loss")]
+    wins = [s for s in closed if s.get("outcome") == "win"]
+    losses = [s for s in closed if s.get("outcome") == "loss"]
+    active = [s for s in all_signals if s.get("status") == "active"]
+
+    total_pnl = sum(s.get("pnl_points", 0) for s in closed if s.get("pnl_points"))
+    win_rate = round(len(wins) / len(closed) * 100, 1) if closed else 0
+
+    avg_win_pts = round(sum(s.get("pnl_points", 0) for s in wins) / len(wins), 1) if wins else 0
+    avg_loss_pts = round(abs(sum(s.get("pnl_points", 0) for s in losses) / len(losses)), 1) if losses else 0
+    avg_rr = round(avg_win_pts / avg_loss_pts, 2) if avg_loss_pts > 0 else 0
+
+    # Build P&L curve data
+    pnl_curve = []
+    running_pnl = 0
+    for sig in sorted(closed, key=lambda x: x.get("created_at", "")):
+        running_pnl += sig.get("pnl_points", 0)
+        pnl_curve.append({
+            "date": sig.get("created_at", "")[:10],
+            "pnl": round(running_pnl, 1),
+            "side": sig.get("side", ""),
+            "outcome": sig.get("outcome", ""),
+        })
+
+    # Recent signals (public view - limited info)
+    recent_public = []
+    for sig in all_signals[:15]:
+        recent_public.append({
+            "id": sig["id"],
+            "symbol": sig.get("symbol", "MNQ"),
+            "side": sig.get("side", ""),
+            "entry_price": sig.get("entry_price", 0),
+            "tp1": sig.get("tp1", 0),
+            "tp2": sig.get("tp2", 0),
+            "stop_loss": sig.get("stop_loss", 0),
+            "confluence_score": sig.get("confluence_score", 0),
+            "status": sig.get("status", ""),
+            "outcome": sig.get("outcome"),
+            "pnl_points": sig.get("pnl_points"),
+            "created_at": sig.get("created_at", ""),
+        })
+
+    # Best streak calculation
+    current_streak = 0
+    best_streak = 0
+    for sig in sorted(closed, key=lambda x: x.get("created_at", "")):
+        if sig.get("outcome") == "win":
+            current_streak += 1
+            best_streak = max(best_streak, current_streak)
+        else:
+            current_streak = 0
+
+    return {
+        "overview": {
+            "total_signals": len(all_signals),
+            "closed_signals": len(closed),
+            "active_signals": len(active),
+            "win_rate": win_rate,
+            "total_pnl_points": round(total_pnl, 1),
+            "avg_win_points": avg_win_pts,
+            "avg_loss_points": avg_loss_pts,
+            "avg_rr": avg_rr,
+            "best_win_streak": best_streak,
+            "wins": len(wins),
+            "losses": len(losses),
+        },
+        "pnl_curve": pnl_curve,
+        "recent_signals": recent_public,
+    }
+
+
+@api_router.post("/public/seed-demo")
+async def seed_demo_performance():
+    """Seed demo performance data for the public dashboard"""
+    import random
+
+    existing = await db.signals.count_documents({"source": "demo"})
+    if existing > 0:
+        return {"message": "Demo data already seeded"}
+
+    # Generate 30 days of realistic signal history
+    outcomes = (
+        [("win", 10, "hit_tp1")] * 6 +
+        [("win", 20, "hit_tp2")] * 3 +
+        [("loss", -8, "stopped")] * 4
+    )  # ~69% win rate, positive expectancy
+
+    base_time = datetime.now(timezone.utc) - timedelta(days=30)
+    signals_to_insert = []
+
+    for day_offset in range(30):
+        day = base_time + timedelta(days=day_offset)
+        # 1-3 signals per day
+        num_signals = random.randint(1, 3)
+        for i in range(num_signals):
+            outcome_data = random.choice(outcomes)
+            outcome, pnl, status = outcome_data
+            side = random.choice(["long", "short"])
+            base_price = 18300 + random.uniform(-200, 200)
+            entry = round(base_price, 2)
+
+            if side == "long":
+                stop = round(entry - 8, 2)
+                tp1 = round(entry + 10, 2)
+                tp2 = round(entry + 20, 2)
+            else:
+                stop = round(entry + 8, 2)
+                tp1 = round(entry - 10, 2)
+                tp2 = round(entry - 20, 2)
+
+            score = random.randint(2, 3)
+            sig_time = day + timedelta(hours=random.choice([9, 10, 15, 16]), minutes=random.randint(0, 59))
+
+            sig = {
+                "id": str(uuid.uuid4()),
+                "symbol": "MNQ",
+                "side": side,
+                "entry_price": entry,
+                "stop_loss": stop,
+                "tp1": tp1,
+                "tp2": tp2,
+                "confluence_score": score,
+                "components": {
+                    "near_level": random.choice([True, False]),
+                    "rejection": True,
+                    "momentum_break": score >= 2,
+                },
+                "trend_direction": "bullish" if side == "long" else "bearish",
+                "status": status,
+                "outcome": outcome,
+                "pnl_points": pnl,
+                "discord_sent": True,
+                "source": "demo",
+                "created_at": sig_time.isoformat(),
+            }
+            signals_to_insert.append(sig)
+
+    if signals_to_insert:
+        await db.signals.insert_many(signals_to_insert)
+
+    return {"message": f"Seeded {len(signals_to_insert)} demo signals"}
+
 # Include the router in the main app
 app.include_router(api_router)
 
