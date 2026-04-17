@@ -537,6 +537,14 @@ async def ai_analyze(request: AIAnalysisRequest):
     quote = await fetch_stock_quote(request.symbol)
     indicators = await fetch_technical_indicators(request.symbol)
     
+    # Handle None values safely
+    price = quote.get('price', 'N/A') if quote else 'N/A'
+    change_pct = quote.get('change_percent', 'N/A') if quote else 'N/A'
+    volume = quote.get('volume', 'N/A') if quote else 'N/A'
+    ema9 = indicators.get('ema9', 'N/A') if indicators else 'N/A'
+    ema21 = indicators.get('ema21', 'N/A') if indicators else 'N/A'
+    rsi = indicators.get('rsi', 'N/A') if indicators else 'N/A'
+    
     system_message = """You are an expert trading analyst specializing in MNQ futures and momentum stocks ($1-$20 range). 
     Provide concise, actionable analysis. Focus on:
     - Entry/exit points based on technical indicators
@@ -546,12 +554,12 @@ async def ai_analyze(request: AIAnalysisRequest):
     
     context_data = f"""
     Symbol: {request.symbol}
-    Current Price: ${quote.get('price', 'N/A') if quote else 'N/A'}
-    Change: {quote.get('change_percent', 'N/A')}%
-    Volume: {quote.get('volume', 'N/A') if quote else 'N/A'}
-    EMA 9: {indicators.get('ema9', 'N/A')}
-    EMA 21: {indicators.get('ema21', 'N/A')}
-    RSI (14): {indicators.get('rsi', 'N/A')}
+    Current Price: ${price}
+    Change: {change_pct}%
+    Volume: {volume}
+    EMA 9: {ema9}
+    EMA 21: {ema21}
+    RSI (14): {rsi}
     """
     
     prompts = {
