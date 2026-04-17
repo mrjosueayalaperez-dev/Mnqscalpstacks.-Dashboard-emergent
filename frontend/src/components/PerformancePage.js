@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { toast, Toaster } from "sonner";
 import {
   LineChart,
   Line,
@@ -23,6 +24,13 @@ import {
   Activity,
   ChevronRight,
   ExternalLink,
+  Check,
+  Star,
+  Crown,
+  Mail,
+  User,
+  Loader2,
+  ArrowRight,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -258,18 +266,280 @@ const RecentSignals = ({ signals }) => (
   </div>
 );
 
+// ===================== Pricing Section =====================
+const PricingSection = ({ subscriberCount }) => {
+  const [tiers, setTiers] = useState([]);
+
+  useEffect(() => {
+    axios.get(`${API}/subscribers/tiers`).then((r) => setTiers(r.data)).catch(() => {});
+  }, []);
+
+  const tierIcons = { Free: Zap, Pro: Star, Elite: Crown };
+  const tierColors = {
+    Free: { border: "border-white/10", accent: "text-[#007AFF]", bg: "bg-white/5", btn: "bg-white/10 text-white hover:bg-white/20" },
+    Pro: { border: "border-[#FFCC00]/30", accent: "text-[#FFCC00]", bg: "bg-[#FFCC00]/5", btn: "bg-[#FFCC00] text-black hover:bg-[#FFCC00]/80" },
+    Elite: { border: "border-[#34C759]/30", accent: "text-[#34C759]", bg: "bg-[#34C759]/5", btn: "bg-[#34C759] text-black hover:bg-[#34C759]/80" },
+  };
+
+  return (
+    <div className="py-8" data-testid="pricing-section">
+      <div className="text-center mb-8">
+        <h2 className="text-2xl md:text-3xl font-black tracking-tighter text-white mb-2">
+          Get Real-Time Signals
+        </h2>
+        <p className="text-zinc-500 text-sm">
+          Join {subscriberCount?.total || 0}+ traders already receiving MNQ Stack signals
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 max-w-4xl mx-auto">
+        {tiers.map((tier) => {
+          const Icon = tierIcons[tier.name] || Zap;
+          const colors = tierColors[tier.name] || tierColors.Free;
+          const isPopular = tier.name === "Pro";
+
+          return (
+            <div
+              key={tier.id}
+              className={`relative ${colors.bg} border ${colors.border} rounded-sm p-5 flex flex-col ${
+                isPopular ? "ring-1 ring-[#FFCC00]/50" : ""
+              }`}
+              data-testid={`tier-${tier.id}`}
+            >
+              {isPopular && (
+                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 bg-[#FFCC00] text-black text-[0.6rem] font-black uppercase rounded-sm">
+                  Most Popular
+                </div>
+              )}
+              <div className="flex items-center gap-2 mb-3">
+                <Icon className={`w-5 h-5 ${colors.accent}`} />
+                <h3 className={`font-bold ${colors.accent}`}>{tier.name}</h3>
+              </div>
+              <div className="mb-4">
+                <span className="text-3xl font-mono font-bold text-white">
+                  {tier.price === 0 ? "Free" : `$${tier.price}`}
+                </span>
+                {tier.price > 0 && <span className="text-zinc-500 text-sm">/month</span>}
+              </div>
+              <ul className="space-y-2 flex-1 mb-4">
+                {tier.features.map((f, i) => (
+                  <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
+                    <Check className={`w-4 h-4 mt-0.5 shrink-0 ${colors.accent}`} />
+                    {f}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ===================== Signup Form =====================
+const SignupForm = ({ onSignup, onCheckout, loading, signedUp, discordInvite }) => {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [selectedTier, setSelectedTier] = useState("free");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!email) return;
+    if (selectedTier === "free") {
+      onSignup(email, name);
+    } else {
+      onCheckout(email, name, selectedTier);
+    }
+  };
+
+  if (signedUp && discordInvite) {
+    return (
+      <div className="max-w-lg mx-auto text-center py-8 bg-[#121212] border border-[#34C759]/30 rounded-sm p-6" data-testid="signup-success">
+        <div className="w-12 h-12 rounded-full bg-[#34C759]/20 flex items-center justify-center mx-auto mb-4">
+          <Check className="w-6 h-6 text-[#34C759]" />
+        </div>
+        <h3 className="text-xl font-bold text-white mb-2">You're In!</h3>
+        <p className="text-zinc-400 text-sm mb-4">Welcome to MNQ Stack Signals. Join the Discord to start receiving signals.</p>
+        {discordInvite && discordInvite !== "REPLACE_WITH_FREE_DISCORD_INVITE" ? (
+          <a
+            href={discordInvite}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-6 py-2.5 bg-[#5865F2] text-white font-bold rounded-sm hover:bg-[#4752c4] transition-colors"
+            data-testid="discord-invite-link"
+          >
+            Join Discord <ExternalLink className="w-4 h-4" />
+          </a>
+        ) : (
+          <p className="text-zinc-500 text-sm">Discord invite link will be shared soon!</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="max-w-lg mx-auto" data-testid="signup-form">
+      <div className="bg-[#121212] border border-white/10 rounded-sm p-6">
+        <h3 className="text-lg font-bold text-white mb-1 text-center">Start Receiving Signals</h3>
+        <p className="text-zinc-500 text-xs text-center mb-5">Enter your email to get started</p>
+
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input
+              type="email"
+              placeholder="your@email.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              className="w-full pl-10 text-sm"
+              data-testid="signup-email"
+            />
+          </div>
+          <div className="relative">
+            <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <input
+              type="text"
+              placeholder="Name (optional)"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full pl-10 text-sm"
+              data-testid="signup-name"
+            />
+          </div>
+
+          {/* Tier Selection */}
+          <div className="grid grid-cols-3 gap-2">
+            {[
+              { id: "free", label: "Free", price: "$0" },
+              { id: "pro", label: "Pro", price: "$49/mo" },
+              { id: "elite", label: "Elite", price: "$149/mo" },
+            ].map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                onClick={() => setSelectedTier(t.id)}
+                className={`p-2 rounded-sm text-center text-xs font-bold transition-all border ${
+                  selectedTier === t.id
+                    ? t.id === "elite"
+                      ? "bg-[#34C759]/10 border-[#34C759]/50 text-[#34C759]"
+                      : t.id === "pro"
+                      ? "bg-[#FFCC00]/10 border-[#FFCC00]/50 text-[#FFCC00]"
+                      : "bg-[#007AFF]/10 border-[#007AFF]/50 text-[#007AFF]"
+                    : "bg-white/5 border-white/10 text-zinc-400 hover:border-white/20"
+                }`}
+                data-testid={`select-tier-${t.id}`}
+              >
+                <div>{t.label}</div>
+                <div className="font-mono mt-0.5">{t.price}</div>
+              </button>
+            ))}
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading || !email}
+            className={`w-full py-2.5 rounded-sm font-bold text-sm transition-all flex items-center justify-center gap-2 ${
+              selectedTier === "elite"
+                ? "bg-[#34C759] text-black hover:bg-[#34C759]/80"
+                : selectedTier === "pro"
+                ? "bg-[#FFCC00] text-black hover:bg-[#FFCC00]/80"
+                : "bg-[#007AFF] text-white hover:bg-[#3395FF]"
+            } disabled:opacity-50`}
+            data-testid="signup-submit-btn"
+          >
+            {loading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : selectedTier === "free" ? (
+              <>Join Free <ArrowRight className="w-4 h-4" /></>
+            ) : (
+              <>Subscribe — ${selectedTier === "pro" ? "49" : "149"}/mo <ArrowRight className="w-4 h-4" /></>
+            )}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+// ===================== Success Panel (post-payment) =====================
+const SuccessPanel = ({ tier, discordInvite }) => (
+  <div className="max-w-lg mx-auto text-center py-8 bg-[#121212] border border-[#34C759]/30 rounded-sm p-6" data-testid="payment-success">
+    <div className="w-14 h-14 rounded-full bg-[#34C759]/20 flex items-center justify-center mx-auto mb-4">
+      <Crown className="w-7 h-7 text-[#34C759]" />
+    </div>
+    <h3 className="text-2xl font-black text-white mb-2">Welcome to {tier?.title() || "Pro"}!</h3>
+    <p className="text-zinc-400 text-sm mb-5">
+      Your subscription is active. Join the exclusive Discord channel now.
+    </p>
+    {discordInvite && !discordInvite.startsWith("REPLACE") ? (
+      <a
+        href={discordInvite}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-2 px-6 py-3 bg-[#5865F2] text-white font-bold rounded-sm hover:bg-[#4752c4] transition-colors text-sm"
+        data-testid="discord-invite-paid"
+      >
+        Join {tier?.title()} Discord <ExternalLink className="w-4 h-4" />
+      </a>
+    ) : (
+      <p className="text-zinc-500 text-sm">Your Discord invite will be delivered shortly!</p>
+    )}
+  </div>
+);
+
 // ===================== Main Performance Page =====================
 const PerformancePage = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [signupLoading, setSignupLoading] = useState(false);
+  const [signedUp, setSignedUp] = useState(false);
+  const [discordInvite, setDiscordInvite] = useState("");
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [paymentTier, setPaymentTier] = useState(null);
+  const [subscriberCount, setSubscriberCount] = useState(null);
+
+  // Check for returning from Stripe
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const sessionId = params.get("session_id");
+    const tier = params.get("tier");
+
+    if (sessionId) {
+      // Poll payment status
+      const pollStatus = async (attempts = 0) => {
+        if (attempts >= 5) return;
+        try {
+          const res = await axios.get(`${API}/checkout/status/${sessionId}`);
+          if (res.data.payment_status === "paid") {
+            setPaymentSuccess(true);
+            setPaymentTier(tier || "pro");
+            setDiscordInvite(tier === "elite" ? "" : ""); // Will be set from env
+            toast.success("Payment successful! Welcome aboard.");
+          } else if (res.data.status !== "expired") {
+            setTimeout(() => pollStatus(attempts + 1), 2000);
+          }
+        } catch (e) {
+          console.error("Status poll error:", e);
+        }
+      };
+      pollStatus();
+      // Clean URL
+      window.history.replaceState({}, "", "/performance");
+    }
+  }, []);
 
   useEffect(() => {
     const fetchPerformance = async () => {
       try {
-        // Seed demo data first (idempotent)
         await axios.post(`${API}/public/seed-demo`);
-        const res = await axios.get(`${API}/public/performance`);
-        setData(res.data);
+        const [perfRes, countRes] = await Promise.all([
+          axios.get(`${API}/public/performance`),
+          axios.get(`${API}/subscribers/count`),
+        ]);
+        setData(perfRes.data);
+        setSubscriberCount(countRes.data);
       } catch (e) {
         console.error("Error fetching performance:", e);
       }
@@ -284,6 +554,38 @@ const PerformancePage = () => {
     }, 15000);
     return () => clearInterval(interval);
   }, []);
+
+  const handleSignup = async (email, name) => {
+    setSignupLoading(true);
+    try {
+      const res = await axios.post(`${API}/subscribers`, { email, name, tier: "free" });
+      setSignedUp(true);
+      setDiscordInvite(res.data.discord_invite || "");
+      toast.success("Welcome! You're signed up.");
+    } catch (e) {
+      toast.error("Signup failed. Please try again.");
+    }
+    setSignupLoading(false);
+  };
+
+  const handleCheckout = async (email, name, tier) => {
+    setSignupLoading(true);
+    try {
+      // First create subscriber record
+      await axios.post(`${API}/subscribers`, { email, name, tier });
+      // Then create checkout
+      const res = await axios.post(`${API}/checkout/create`, {
+        tier,
+        origin_url: window.location.origin,
+      });
+      if (res.data.url) {
+        window.location.href = res.data.url;
+      }
+    } catch (e) {
+      toast.error("Checkout failed. Please try again.");
+      setSignupLoading(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -306,6 +608,12 @@ const PerformancePage = () => {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A]" data-testid="performance-page">
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: { background: "#121212", border: "1px solid rgba(255,255,255,0.1)", color: "#fff" },
+        }}
+      />
       {/* Header */}
       <header className="border-b border-white/10 bg-[#0A0A0A]/90 backdrop-blur-xl sticky top-0 z-50">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between">
@@ -378,7 +686,23 @@ const PerformancePage = () => {
         {/* Recent Signals */}
         <RecentSignals signals={data.recent_signals} />
 
-        {/* CTA */}
+        {/* Pricing Section */}
+        <PricingSection subscriberCount={subscriberCount} />
+
+        {/* Signup / Success section */}
+        {paymentSuccess ? (
+          <SuccessPanel tier={paymentTier} discordInvite={discordInvite} />
+        ) : (
+          <SignupForm
+            onSignup={handleSignup}
+            onCheckout={handleCheckout}
+            loading={signupLoading}
+            signedUp={signedUp}
+            discordInvite={discordInvite}
+          />
+        )}
+
+        {/* Footer CTA */}
         <div className="text-center py-8 border-t border-white/10">
           <p className="text-zinc-500 text-xs mb-3 uppercase tracking-widest">
             Powered by MNQ Stack Signal Engine

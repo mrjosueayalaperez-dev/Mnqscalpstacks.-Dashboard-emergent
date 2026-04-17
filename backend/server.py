@@ -25,6 +25,21 @@ db = client[os.environ['DB_NAME']]
 ALPHA_VANTAGE_KEY = os.environ.get('ALPHA_VANTAGE_KEY', 'demo')
 EMERGENT_LLM_KEY = os.environ.get('EMERGENT_LLM_KEY')
 DISCORD_WEBHOOK_URL = os.environ.get('DISCORD_WEBHOOK_URL', '')
+STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
+
+# Subscription tiers
+SUBSCRIPTION_TIERS = {
+    "free": {"name": "Free", "price": 0.0, "discord_env": "DISCORD_INVITE_FREE"},
+    "pro": {"name": "Pro", "price": 49.00, "discord_env": "DISCORD_INVITE_PRO"},
+    "elite": {"name": "Elite", "price": 149.00, "discord_env": "DISCORD_INVITE_ELITE"},
+}
+
+# Discord invite links
+DISCORD_INVITES = {
+    "free": os.environ.get("DISCORD_INVITE_FREE", ""),
+    "pro": os.environ.get("DISCORD_INVITE_PRO", ""),
+    "elite": os.environ.get("DISCORD_INVITE_ELITE", ""),
+}
 
 # Signal Engine State (in-memory for fast access)
 signal_engine_state = {
@@ -174,6 +189,15 @@ class Signal(BaseModel):
 class KillSwitchRequest(BaseModel):
     enabled: bool
     reason: Optional[str] = None
+
+class SubscriberCreate(BaseModel):
+    email: str
+    name: Optional[str] = None
+    tier: str = "free"  # free, pro, elite
+
+class CheckoutRequest(BaseModel):
+    tier: str  # pro, elite
+    origin_url: str
 
 # ============== Signal Engine Functions ==============
 
@@ -1331,6 +1355,178 @@ async def seed_demo_performance():
         await db.signals.insert_many(signals_to_insert)
 
     return {"message": f"Seeded {len(signals_to_insert)} demo signals"}
+
+
+# ============== Subscriber & Stripe Routes ==============
+
+from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
+from starlette.requests import Request
+
+@api_router.post("/subscribers")
+async def create_subscriber(sub: SubscriberCreate):
+    """Register a new subscriber (free tier)"""
+    # Check if email already exists
+    existing = await db.subscribers.find_one({"email": sub.email}, {"_id": 0})
+    if existing:
+        return {
+            "status": "existing",
+            "subscriber": existing,
+            "discord_invite": DISCORD_INVITES.get(existing.get("tier", "free"), ""),
+        }
+
+    subscriber = {
+        "id": str(uuid.uuid4()),
+        "email": sub.email,
+        "name": sub.name or "",
+        "tier": sub.tier,
+        "status": "active",
+        "stripe_session_id": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.subscribers.insert_one(subscriber)
+    subscriber.pop("_id", None)
+
+    return {
+        "status": "created",
+        "subscriber": subscriber,
+        "discord_invite": DISCORD_INVITES.get(sub.tier, ""),
+    }
+
+
+@api_router.get("/subscribers/count")
+async def get_subscriber_count():
+    """Get total subscriber count (public metric)"""
+    total = await db.subscribers.count_documents({})
+    pro = await db.subscribers.count_documents({"tier": "pro"})
+    elite = await db.subscribers.count_documents({"tier": "elite"})
+    return {"total": total, "free": total - pro - elite, "pro": pro, "elite": elite}
+
+
+@api_router.get("/subscribers/tiers")
+async def get_tiers():
+    """Get available subscription tiers"""
+    tiers = []
+    for key, tier in SUBSCRIPTION_TIERS.items():
+        tiers.append({
+            "id": key,
+            "name": tier["name"],
+            "price": tier["price"],
+            "features": {
+                "free": ["Basic signals (delayed)", "Public performance dashboard", "Discord community access"],
+                "pro": ["Real-time signals", "Discord Pro channel", "AI trade analysis", "Daily market briefing"],
+                "elite": ["Everything in Pro", "Discord Elite channel", "1-on-1 trade review", "Priority signal delivery", "Custom alert setup"],
+            }.get(key, []),
+        })
+    return tiers
+
+
+@api_router.post("/checkout/create")
+async def create_checkout(request: CheckoutRequest, http_request: Request):
+    """Create Stripe checkout session for paid tiers"""
+    tier = request.tier
+    if tier not in ("pro", "elite"):
+        raise HTTPException(status_code=400, detail="Invalid tier. Choose 'pro' or 'elite'")
+
+    amount = SUBSCRIPTION_TIERS[tier]["price"]
+    origin = request.origin_url.rstrip("/")
+    success_url = f"{origin}/performance?session_id={{CHECKOUT_SESSION_ID}}&tier={tier}"
+    cancel_url = f"{origin}/performance"
+
+    host_url = str(http_request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+
+    checkout_req = CheckoutSessionRequest(
+        amount=amount,
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={"tier": tier, "product": f"MNQ Stack Signals - {tier.title()}"},
+    )
+
+    session = await stripe_checkout.create_checkout_session(checkout_req)
+
+    # Create payment transaction record
+    await db.payment_transactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "session_id": session.session_id,
+        "tier": tier,
+        "amount": amount,
+        "currency": "usd",
+        "payment_status": "pending",
+        "metadata": {"tier": tier},
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    return {"url": session.url, "session_id": session.session_id}
+
+
+@api_router.get("/checkout/status/{session_id}")
+async def get_checkout_status(session_id: str, http_request: Request):
+    """Check payment status and activate subscription"""
+    host_url = str(http_request.base_url)
+    webhook_url = f"{host_url}api/webhook/stripe"
+    stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+
+    status = await stripe_checkout.get_checkout_status(session_id)
+
+    # Update payment transaction
+    tx = await db.payment_transactions.find_one({"session_id": session_id}, {"_id": 0})
+    if tx and tx.get("payment_status") != "paid":
+        await db.payment_transactions.update_one(
+            {"session_id": session_id},
+            {"$set": {
+                "payment_status": status.payment_status,
+                "status": status.status,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }}
+        )
+
+    return {
+        "status": status.status,
+        "payment_status": status.payment_status,
+        "amount_total": status.amount_total,
+        "currency": status.currency,
+        "metadata": status.metadata,
+    }
+
+
+@api_router.post("/webhook/stripe")
+async def stripe_webhook(request: Request):
+    """Handle Stripe webhook events"""
+    body = await request.body()
+    signature = request.headers.get("Stripe-Signature", "")
+
+    try:
+        host_url = str(request.base_url)
+        webhook_url = f"{host_url}api/webhook/stripe"
+        stripe_checkout = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=webhook_url)
+        event = await stripe_checkout.handle_webhook(body, signature)
+
+        if event.payment_status == "paid":
+            # Update transaction
+            await db.payment_transactions.update_one(
+                {"session_id": event.session_id},
+                {"$set": {
+                    "payment_status": "paid",
+                    "event_type": event.event_type,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }}
+            )
+            # Upgrade subscriber if metadata has tier
+            tier = event.metadata.get("tier", "pro") if event.metadata else "pro"
+            email = event.metadata.get("email", "") if event.metadata else ""
+            if email:
+                await db.subscribers.update_one(
+                    {"email": email},
+                    {"$set": {"tier": tier, "stripe_session_id": event.session_id}}
+                )
+
+        return {"status": "ok"}
+    except Exception as e:
+        logger.error(f"Stripe webhook error: {e}")
+        return {"status": "error", "detail": str(e)}
 
 # Include the router in the main app
 app.include_router(api_router)
