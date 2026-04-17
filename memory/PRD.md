@@ -1,78 +1,77 @@
 # Trading Command Center - PRD
 
 ## Original Problem Statement
-Build a trading dashboard for MNQ (Micro Nasdaq futures) scalping + $1-$20 stocks with high upside. Dual-engine system:
-1. **Income Engine**: MNQ intraday scalping
-2. **Growth Engine**: Stocks between $1-$20 for 2x-5x runners
+Build a trading dashboard for MNQ (Micro Nasdaq futures) scalping + $1-$20 stocks with high upside. Dual-engine system with Signal Engine brain.
 
-## User Persona
-- Active trader with limited time
-- Focus on 9:30-10:30 AM or 3:00-4:00 PM trading sessions
-- Max 2-3 trades per day
-- Risk model: $20-$40 max per trade
-
-## Core Requirements
-- Real-time MNQ futures tracking with technical indicators
-- Stock scanner for breakouts/unusual volume
-- Watchlist management
-- Trade journal with P&L tracking
-- Daily trading checklist
-- AI-powered trade analysis
-- Alerts system
-
-## Tech Stack
-- **Frontend**: React 19, Tailwind CSS, Recharts, Lucide Icons
-- **Backend**: FastAPI, MongoDB, Motor
+## Architecture
+- **Frontend**: React 19, Tailwind CSS, Sonner toasts, Lucide Icons
+- **Backend**: FastAPI, MongoDB (Motor), httpx
 - **AI**: OpenAI GPT-4o via Emergent LLM Key
 - **Data**: Alpha Vantage API (demo/free tier with mock fallback)
+- **Signals**: TradingView webhook → Backend → Discord + Dashboard
 
-## What's Been Implemented (Jan 2026)
+## What's Been Implemented
 
-### Backend APIs
-- ✅ `/api/futures/mnq` - MNQ data with VWAP, EMA9, EMA21, RSI
-- ✅ `/api/watchlist` - CRUD operations
-- ✅ `/api/stocks/quote/{symbol}` - Real-time quotes
-- ✅ `/api/stocks/scanner` - Breakout detection
-- ✅ `/api/trades` - Trade journal CRUD with P&L calculation
-- ✅ `/api/trades/stats` - Win rate, avg win/loss
-- ✅ `/api/checklist` - Daily checklist management
-- ✅ `/api/alerts` - Price alerts
-- ✅ `/api/ai/analyze` - GPT-4o powered analysis
+### Phase 1 - MVP Dashboard (Jan 2026)
+- MNQ Futures Tracker (VWAP, EMA9, EMA21, RSI, Bullish/Bearish signal)
+- Stock Watchlist (SOFI, NIO, RKLB, PLUG, SNAP)
+- Stock Scanner (breakout/breakdown detection)
+- Trade Journal with P&L calculation
+- Daily Checklist (pre-market, rules, post-market)
+- AI Analysis (GPT-4o powered)
+- Alerts System
+- Position Sizing Calculator (stocks + MNQ)
 
-### Frontend Components
-- ✅ MNQ Futures Panel - Live indicators, bullish/bearish signal
-- ✅ Watchlist - 5 stocks (SOFI, NIO, RKLB, PLUG, SNAP)
-- ✅ Stock Scanner - Find breakouts
-- ✅ Trade Journal - Log trades, close with P&L
-- ✅ Daily Checklist - Pre-market, rules, post-market items
-- ✅ AI Analysis - Entry/exit signals, sentiment
-- ✅ Alerts Panel - Price target alerts
+### Phase 2 - Signal Engine (Jan 2026)
+- TradingView Webhook Receiver (`/api/webhook/tradingview`)
+- MNQ Stack Confluence Scoring (key levels + rejection + momentum + trend)
+- Signal History with win/loss tracking
+- Discord webhook delivery (placeholder URL, user to configure)
+- Kill Switch (manual + auto at >5% error rate)
+- System Health monitoring
+- Test Signal Generator
+- Pine Script reference + TradingView setup instructions
+- Signal performance metrics (win rate, avg R:R, frequency)
 
-### Design
-- Dark "Control Room" theme
-- JetBrains Mono for data
-- Neon glow effects for price changes
-- Dense data layout
+## Mocked/Placeholder Items
+- **Discord Webhook**: Placeholder URL in `.env` — user needs to replace with real URL
+- **Alpha Vantage**: Demo key with mock fallback when rate limited
+- **Test Signals**: Randomized, not from real market data
+
+## API Endpoints
+- `/api/futures/mnq` - MNQ data
+- `/api/stocks/quote/{symbol}` - Stock quotes
+- `/api/stocks/scanner` - Breakout scanner
+- `/api/watchlist` - Watchlist CRUD
+- `/api/trades` - Trade journal CRUD
+- `/api/trades/stats` - Trade statistics
+- `/api/checklist` - Daily checklist
+- `/api/alerts` - Alerts CRUD
+- `/api/ai/analyze` - AI trade analysis
+- `/api/calculator/position-size` - Position calculator
+- `/api/calculator/mnq-position` - MNQ position calculator
+- `/api/webhook/tradingview` - TradingView webhook receiver
+- `/api/signals` - Signal history
+- `/api/signals/stats` - Signal performance
+- `/api/signals/health` - System health
+- `/api/signals/kill-switch` - Kill switch
+- `/api/signals/test` - Test signal generator
+- `/api/signals/pinescript` - Pine Script code
 
 ## Prioritized Backlog
 
-### P0 (Next Session)
-- [ ] Persist user preferences (dark/light mode)
-- [ ] Real-time WebSocket for price updates
+### P0
+- [ ] User configures real Discord webhook URL
+- [ ] Connect TradingView with Pine Script indicator
 
 ### P1
-- [ ] TradingView chart integration
-- [ ] Mobile responsive improvements
-- [ ] Historical P&L charts
-- [ ] Export trade journal to CSV
+- [ ] WebSocket for real-time signal push
+- [ ] Historical P&L charts (Recharts)
+- [ ] Multi-user auth + tier routing (beta/pro/elite)
+- [ ] Signal duplication window tuning
 
 ### P2
-- [ ] Multi-user authentication
-- [ ] Push notifications for alerts
-- [ ] Backtesting module
-- [ ] Integration with brokerage APIs
-
-## Notes
-- Alpha Vantage demo key has limited requests (25/day)
-- Mock data activates when API limits reached
-- MNQ uses QQQ as proxy scaled by 45x
+- [ ] Referral/affiliate system
+- [ ] Public performance dashboard
+- [ ] Broker integration (Tradovate)
+- [ ] Mobile responsive optimization
