@@ -1,7 +1,7 @@
 # Trading Command Center - PRD
 
 ## Original Problem Statement
-Build a trading dashboard for MNQ futures scalping + $1-$20 stocks. Signal Engine brain with public performance dashboard and subscriber monetization via Stripe.
+Build a trading dashboard for MNQ futures scalping + $1-$20 stocks. Signal Engine v2 with Session VWAP + Structure logic, public performance dashboard, and subscriber monetization via Stripe.
 
 ## Architecture
 - **Frontend**: React 19, Tailwind CSS, Recharts, React Router, Sonner
@@ -15,64 +15,31 @@ Build a trading dashboard for MNQ futures scalping + $1-$20 stocks. Signal Engin
 ## What's Been Implemented
 
 ### Phase 1 - MVP Dashboard
-- MNQ Futures Tracker (VWAP, EMA9, EMA21, RSI, setup signal)
-- Stock Watchlist (SOFI, NIO, RKLB, PLUG, SNAP)
-- Stock Scanner (breakout/breakdown detection)
-- Trade Journal with P&L calculation
-- Daily Checklist (pre-market, rules, post-market)
-- AI Analysis (GPT-4o powered)
-- Alerts System
-- Position Sizing Calculator (stocks + MNQ)
+- MNQ Futures Tracker, Stock Watchlist, Scanner, Trade Journal, Daily Checklist, AI Analysis, Alerts, Position Calculator
 
-### Phase 2 - Signal Engine
-- TradingView Webhook Receiver
-- MNQ Stack Confluence Scoring
-- Signal History with win/loss tracking
-- Discord webhook delivery
-- Kill Switch (manual + auto at >5% error rate)
-- System Health monitoring
-- Test Signal Generator
-- Pine Script reference + TradingView setup
+### Phase 2 - Signal Engine v1
+- Webhook receiver, kill switch, health monitoring, test generator
 
 ### Phase 3 - Public Performance Dashboard
-- `/performance` route - shareable public page
-- Hero Stats (win rate, P&L, R:R, best streak)
-- Equity Curve chart (Recharts)
-- Win/Loss distribution bar
-- Recent signals feed
+- Equity curve chart, hero stats, win/loss distribution, recent signals
 
 ### Phase 4 - Subscriber System + Stripe
-- Pricing tiers: Free ($0), Pro ($49/mo), Elite ($149/mo)
-- Email signup form with tier selector
-- Stripe Checkout integration for paid tiers
-- Payment transaction tracking in MongoDB
-- Discord invite links after signup (placeholder)
-- Subscriber count display
-- Post-payment success panel
-- Idempotent email handling
+- Pricing tiers (Free/$0, Pro/$49, Elite/$149), email signup, Stripe checkout
+
+### Phase 5 - Signal Engine v2 Upgrade
+- **Pine Script**: Full v2 strategy — Session VWAP + Structure (higher-low / lower-high pivots)
+- **Backend Confluence**: VWAP filter + RSI momentum + Structure confirmation (3-component scoring)
+- **TP/SL**: Pivot-based (confirmed swing highs/lows, variable 6-15pt distances)
+- **Test Signals**: v2 components (vwap_filter, rsi_momentum, structure)
+- **Backward compatible**: Old v1 signals still visible in history
 
 ## Mocked/Placeholder Items
-- **Discord Webhook**: Placeholder in `.env`
-- **Discord Invites**: Placeholder URLs for each tier
-- **Alpha Vantage**: Demo key with mock fallback
-- **Stripe**: Test key (sk_test_emergent)
-- **Demo Signals**: 63+ pre-seeded signals
+- Discord Webhook/Invites: Placeholders
+- Alpha Vantage: Demo key
+- Stripe: Test key
+- Demo Signals: 63+ seeded
 
 ## Prioritized Backlog
-
-### P0
-- [ ] Configure real Discord webhook + invite URLs
-- [ ] Connect TradingView with Pine Script
-- [ ] 48-hour stress test
-
-### P1
-- [ ] WebSocket for real-time signal push
-- [ ] Email welcome sequences (SendGrid)
-- [ ] Stripe subscription management (cancel/upgrade)
-- [ ] User tier routing (beta/pro/elite signal filtering)
-
-### P2
-- [ ] Referral/affiliate system
-- [ ] Broker integration (Tradovate)
-- [ ] Mobile responsive optimization
-- [ ] Backtesting module
+### P0: Configure Discord + connect TradingView + 48hr stress test
+### P1: WebSocket push, email sequences, Stripe subscription management, tier routing
+### P2: Referral system, broker integration, mobile optimization, backtesting
