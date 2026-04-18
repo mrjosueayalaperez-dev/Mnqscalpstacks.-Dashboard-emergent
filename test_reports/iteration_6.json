@@ -1,0 +1,72 @@
+{
+  "summary": "Completed testing of Backtest Results feature. All 17 backend API tests passed. Frontend BacktestManager widget on dashboard and BacktestDisplay component on performance page both working correctly with full CRUD operations.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "GET /api/backtests - returns backtest list",
+    "POST /api/backtests - creates backtest with win_rate auto-calculated (70 winners / 100 trades = 70.0%)",
+    "POST /api/backtests - creates backtest with minimal payload using defaults",
+    "DELETE /api/backtests/{id} - deletes backtest successfully",
+    "DELETE /api/backtests/{id} - returns 404 for nonexistent backtest",
+    "POST then GET - verify backtest persists in database",
+    "GET /api/public/backtests - returns latest backtests (max 5)",
+    "GET /api/public/backtests - returns backtests sorted by created_at desc",
+    "POST /api/backtests/seed-demo - seeds demo backtest (idempotent)",
+    "POST /api/backtests/seed-demo - demo backtest has realistic v2 strategy data (312 trades, 69.9% WR, 2.14 PF)",
+    "Win rate calculation handles edge cases (0 trades = 0% win rate)",
+    "Backtest response excludes MongoDB _id",
+    "GET /api/signals - still works",
+    "GET /api/watchlist - still works",
+    "GET /api/trades - still works",
+    "GET /api/public/performance - still works",
+    "GET /api/futures/mnq - still works",
+    "Frontend: BacktestManager widget visible on dashboard",
+    "Frontend: Add backtest button toggles form visibility",
+    "Frontend: Form fields (strategy, symbol, timeframe, trades, profit factor, etc.) work correctly",
+    "Frontend: Form submission creates new backtest with success toast",
+    "Frontend: Delete button removes backtest from list",
+    "Frontend: BacktestDisplay component shows on performance page",
+    "Frontend: BacktestDisplay shows all metrics (Win Rate, Profit Factor, Net Profit, Sharpe, Max DD, Total Trades)",
+    "Frontend: BacktestDisplay shows detail grid (Avg Trade, Avg Win/Loss, Largest Win/Loss, Consecutive stats, Period)",
+    "Frontend: Navigation between Dashboard and Performance page works"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_backtest_feature.py",
+    "/app/test_reports/pytest/backtest_feature_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backtest CRUD implementation is solid with proper win_rate auto-calculation",
+    "Public endpoint correctly limits to 5 results sorted by created_at desc",
+    "Demo seeder is idempotent - checks for existing data before seeding",
+    "MongoDB _id properly excluded from responses",
+    "MOCKED: Demo backtest with realistic v2 strategy data pre-seeded",
+    "MOCKED: Alpha Vantage demo key with mock fallback",
+    "MOCKED: Stripe test key (sk_test_emergent)",
+    "MOCKED: Discord webhook placeholder"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_backtest_feature.py"
+  ],
+  "success_rate": {
+    "backend": "100% (17/17 tests passed)",
+    "frontend": "100% (all UI components working)"
+  },
+  "seed_data_creation": "Demo backtest seeded with realistic v2 strategy data (312 trades, 69.9% WR, 2.14 PF, $4,280 net profit)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backtest feature fully tested. Key endpoints: GET/POST/DELETE /api/backtests for CRUD, GET /api/public/backtests for public display (max 5), POST /api/backtests/seed-demo for demo data. Frontend has BacktestManager widget on dashboard (form toggle, CRUD) and BacktestDisplay component on performance page (metrics display). Demo backtest is verified with realistic v2 strategy data. All existing features (signals, watchlist, trades, checklist, alerts, calculator, performance page, subscriber signup) remain functional.",
+  "mocked_apis": {
+    "demo_backtest": "Pre-seeded with realistic v2 strategy data (312 trades, 69.9% WR, 2.14 PF, $4,280 net profit)",
+    "alpha_vantage": "Demo key with mock fallback when rate limited",
+    "stripe": "Test key (sk_test_emergent)",
+    "discord_webhook": "Placeholder URL (REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL)"
+  }
+}

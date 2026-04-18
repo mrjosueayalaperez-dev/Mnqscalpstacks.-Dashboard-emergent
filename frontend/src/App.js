@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import SignalDashboard from "@/components/SignalDashboard";
 import PerformancePage from "@/components/PerformancePage";
+import BacktestManager from "@/components/BacktestManager";
 import {
   TrendingUp,
   TrendingDown,
@@ -1441,6 +1442,9 @@ function App() {
 
           {/* Position Calculator */}
           <PositionCalculator />
+
+          {/* Backtest Results */}
+          <BacktestManager />
         </div>
       </main>
     </div>

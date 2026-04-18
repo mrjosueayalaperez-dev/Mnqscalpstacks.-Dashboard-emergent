@@ -199,6 +199,57 @@ class CheckoutRequest(BaseModel):
     tier: str  # pro, elite
     origin_url: str
 
+class BacktestResult(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    strategy_name: str = "MNQ Scalp Stack v2"
+    timeframe: str = "1m"
+    symbol: str = "MNQ"
+    period_start: str = ""
+    period_end: str = ""
+    total_trades: int = 0
+    winning_trades: int = 0
+    losing_trades: int = 0
+    win_rate: float = 0.0
+    profit_factor: float = 0.0
+    net_profit: float = 0.0
+    max_drawdown: float = 0.0
+    max_drawdown_pct: float = 0.0
+    sharpe_ratio: float = 0.0
+    avg_trade: float = 0.0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0
+    largest_win: float = 0.0
+    largest_loss: float = 0.0
+    max_consecutive_wins: int = 0
+    max_consecutive_losses: int = 0
+    notes: Optional[str] = None
+    is_verified: bool = False
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class BacktestCreate(BaseModel):
+    strategy_name: str = "MNQ Scalp Stack v2"
+    timeframe: str = "1m"
+    symbol: str = "MNQ"
+    period_start: str = ""
+    period_end: str = ""
+    total_trades: int = 0
+    winning_trades: int = 0
+    losing_trades: int = 0
+    profit_factor: float = 0.0
+    net_profit: float = 0.0
+    max_drawdown: float = 0.0
+    max_drawdown_pct: float = 0.0
+    sharpe_ratio: float = 0.0
+    avg_trade: float = 0.0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0
+    largest_win: float = 0.0
+    largest_loss: float = 0.0
+    max_consecutive_wins: int = 0
+    max_consecutive_losses: int = 0
+    notes: Optional[str] = None
+
 # ============== Signal Engine Functions ==============
 
 async def send_discord_signal(signal: dict):
@@ -1226,6 +1277,80 @@ alertcondition(shortSignal, title="Short Signal", message='{"type":"sell","symbo
         "webhook_instructions": webhook_instructions,
         "webhook_url": f"/api/webhook/tradingview"
     }
+
+# ============== Backtest Routes ==============
+
+@api_router.get("/backtests")
+async def get_backtests():
+    """Get all backtest results"""
+    results = await db.backtests.find({}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    return results
+
+@api_router.post("/backtests")
+async def create_backtest(bt: BacktestCreate):
+    """Submit a backtest result"""
+    win_rate = round(bt.winning_trades / bt.total_trades * 100, 1) if bt.total_trades > 0 else 0
+    backtest = BacktestResult(
+        **bt.model_dump(),
+        win_rate=win_rate,
+    )
+    doc = backtest.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.backtests.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+@api_router.delete("/backtests/{backtest_id}")
+async def delete_backtest(backtest_id: str):
+    """Delete a backtest result"""
+    result = await db.backtests.delete_one({"id": backtest_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Backtest not found")
+    return {"message": "Deleted"}
+
+@api_router.get("/public/backtests")
+async def get_public_backtests():
+    """Public endpoint: Get latest backtest results for performance page"""
+    results = await db.backtests.find({}, {"_id": 0}).sort("created_at", -1).to_list(5)
+    return results
+
+@api_router.post("/backtests/seed-demo")
+async def seed_demo_backtest():
+    """Seed a demo backtest for display"""
+    existing = await db.backtests.count_documents({})
+    if existing > 0:
+        return {"message": "Backtest data already exists"}
+
+    demo = BacktestResult(
+        strategy_name="MNQ Scalp Stack v2",
+        timeframe="1m",
+        symbol="MNQ",
+        period_start="2025-10-01",
+        period_end="2026-01-15",
+        total_trades=312,
+        winning_trades=218,
+        losing_trades=94,
+        win_rate=69.9,
+        profit_factor=2.14,
+        net_profit=4280.00,
+        max_drawdown=-620.00,
+        max_drawdown_pct=6.2,
+        sharpe_ratio=1.87,
+        avg_trade=13.72,
+        avg_win=28.50,
+        avg_loss=-14.20,
+        largest_win=142.00,
+        largest_loss=-48.00,
+        max_consecutive_wins=11,
+        max_consecutive_losses=4,
+        notes="3.5 months | MNQ 1m | Session VWAP + Structure | $10K initial capital",
+        is_verified=True,
+    )
+    doc = demo.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.backtests.insert_one(doc)
+    doc.pop("_id", None)
+    return {"message": "Demo backtest seeded", "backtest": doc}
 
 # Seed default data
 @api_router.post("/seed")

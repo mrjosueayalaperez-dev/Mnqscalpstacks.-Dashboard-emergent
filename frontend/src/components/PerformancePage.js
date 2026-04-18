@@ -266,6 +266,83 @@ const RecentSignals = ({ signals }) => (
   </div>
 );
 
+// ===================== Backtest Display (Public) =====================
+const BacktestDisplay = ({ backtests }) => {
+  if (!backtests || backtests.length === 0) return null;
+
+  const bt = backtests[0]; // Show latest backtest
+
+  const metrics = [
+    { label: "Win Rate", value: `${bt.win_rate}%`, color: bt.win_rate >= 60 ? "text-[#34C759]" : "text-[#FFCC00]" },
+    { label: "Profit Factor", value: bt.profit_factor.toFixed(2), color: bt.profit_factor >= 1.5 ? "text-[#34C759]" : "text-white" },
+    { label: "Net Profit", value: `$${bt.net_profit?.toLocaleString()}`, color: bt.net_profit >= 0 ? "text-[#34C759]" : "text-[#FF3B30]" },
+    { label: "Sharpe Ratio", value: bt.sharpe_ratio.toFixed(2), color: bt.sharpe_ratio >= 1.5 ? "text-[#007AFF]" : "text-white" },
+    { label: "Max Drawdown", value: `${bt.max_drawdown_pct}%`, color: bt.max_drawdown_pct <= 10 ? "text-[#FFCC00]" : "text-[#FF3B30]" },
+    { label: "Total Trades", value: bt.total_trades, color: "text-white" },
+  ];
+
+  const details = [
+    ["Avg Trade", `$${bt.avg_trade?.toFixed(2)}`],
+    ["Avg Win", `$${bt.avg_win?.toFixed(2)}`],
+    ["Avg Loss", `$${bt.avg_loss?.toFixed(2)}`],
+    ["Largest Win", `$${bt.largest_win?.toFixed(2)}`],
+    ["Largest Loss", `$${bt.largest_loss?.toFixed(2)}`],
+    ["Max Consec. Wins", bt.max_consecutive_wins],
+    ["Max Consec. Losses", bt.max_consecutive_losses],
+    ["Period", `${bt.period_start} to ${bt.period_end}`],
+  ];
+
+  return (
+    <div className="bg-[#121212] border border-white/10 rounded-sm overflow-hidden" data-testid="backtest-display">
+      <div className="p-4 border-b border-white/10 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-5 h-5 text-[#007AFF]" />
+          <h3 className="text-sm font-bold text-white uppercase tracking-wider">
+            Verified Backtest
+          </h3>
+          {bt.is_verified && (
+            <span className="text-[0.6rem] px-2 py-0.5 bg-[#34C759]/20 text-[#34C759] rounded font-bold uppercase">
+              Verified
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-zinc-500">
+          {bt.strategy_name} | {bt.symbol} {bt.timeframe}
+        </span>
+      </div>
+
+      {/* Hero Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-white/5">
+        {metrics.map((m, i) => (
+          <div key={i} className="p-4 text-center">
+            <span className="text-[0.6rem] font-bold uppercase tracking-[0.15em] text-zinc-500 block mb-1">
+              {m.label}
+            </span>
+            <span className={`text-xl md:text-2xl font-mono font-bold ${m.color}`}>
+              {m.value}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Detail Grid */}
+      <div className="border-t border-white/5 p-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {details.map(([label, value], i) => (
+            <div key={i} className="flex justify-between text-xs">
+              <span className="text-zinc-500">{label}</span>
+              <span className="font-mono text-white">{value}</span>
+            </div>
+          ))}
+        </div>
+        {bt.notes && (
+          <p className="text-[0.65rem] text-zinc-500 mt-3 pt-3 border-t border-white/5">{bt.notes}</p>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // ===================== Pricing Section =====================
 const PricingSection = ({ subscriberCount }) => {
   const [tiers, setTiers] = useState([]);
@@ -499,6 +576,7 @@ const PerformancePage = () => {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [paymentTier, setPaymentTier] = useState(null);
   const [subscriberCount, setSubscriberCount] = useState(null);
+  const [backtests, setBacktests] = useState([]);
 
   // Check for returning from Stripe
   useEffect(() => {
@@ -534,12 +612,15 @@ const PerformancePage = () => {
     const fetchPerformance = async () => {
       try {
         await axios.post(`${API}/public/seed-demo`);
-        const [perfRes, countRes] = await Promise.all([
+        await axios.post(`${API}/backtests/seed-demo`);
+        const [perfRes, countRes, btRes] = await Promise.all([
           axios.get(`${API}/public/performance`),
           axios.get(`${API}/subscribers/count`),
+          axios.get(`${API}/public/backtests`),
         ]);
         setData(perfRes.data);
         setSubscriberCount(countRes.data);
+        setBacktests(btRes.data);
       } catch (e) {
         console.error("Error fetching performance:", e);
       }
@@ -685,6 +766,9 @@ const PerformancePage = () => {
 
         {/* Recent Signals */}
         <RecentSignals signals={data.recent_signals} />
+
+        {/* Verified Backtest */}
+        <BacktestDisplay backtests={backtests} />
 
         {/* Pricing Section */}
         <PricingSection subscriberCount={subscriberCount} />
