@@ -11,15 +11,16 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
 import asyncio
+import random
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
+db = client[os.environ.get('DB_NAME', 'test_database')]
 
 # API Keys
 ALPHA_VANTAGE_KEY = os.environ.get('ALPHA_VANTAGE_KEY', 'demo')
@@ -1081,7 +1082,6 @@ async def get_system_health():
 @api_router.post("/signals/test")
 async def generate_test_signal(background_tasks: BackgroundTasks):
     """Generate a test signal matching v2 logic (Session VWAP + Structure)"""
-    import random
     global signal_engine_state
 
     if signal_engine_state["kill_switch"]:
@@ -1275,7 +1275,7 @@ alertcondition(shortSignal, title="Short Signal", message='{"type":"sell","symbo
     return {
         "pine_script": pine,
         "webhook_instructions": webhook_instructions,
-        "webhook_url": f"/api/webhook/tradingview"
+        "webhook_url": "/api/webhook/tradingview"
     }
 
 # ============== Backtest Routes ==============
@@ -1484,7 +1484,6 @@ async def get_public_performance():
 @api_router.post("/public/seed-demo")
 async def seed_demo_performance():
     """Seed demo performance data for the public dashboard"""
-    import random
 
     existing = await db.signals.count_documents({"source": "demo"})
     if existing > 0:
