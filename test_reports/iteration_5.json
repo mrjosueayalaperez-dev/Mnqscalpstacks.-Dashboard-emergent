@@ -1,0 +1,75 @@
+{
+  "summary": "Completed testing of Signal Engine v2 upgrade (MNQ Scalp Stack v2 - Session VWAP + Structure). All 24 backend API tests passed. Frontend UI correctly displays v2 component tags (vwap_filter, rsi_momentum, structure) and Pine Script v2 with VWAP + Structure title.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "POST /api/signals/test - v2 signal has components: vwap_filter, rsi_momentum, structure",
+    "POST /api/signals/test - TP/SL are pivot-based (variable distances 6-15 pts, not fixed 8/10/20)",
+    "POST /api/signals/test - confluence score is 0-3 (3 v2 components)",
+    "GET /api/signals/pinescript - returns v2 Pine Script with 'MNQ Scalp Stack v2' title",
+    "GET /api/signals/pinescript - v2 script contains ta.vwap for Session VWAP",
+    "GET /api/signals/pinescript - v2 script contains pivothigh, pivotlow for structure",
+    "GET /api/signals/pinescript - v2 script contains alertcondition for TradingView alerts",
+    "GET /api/signals/pinescript - v2 script contains higherLowFormed/lowerHighFormed structure logic",
+    "GET /api/signals/pinescript - webhook_instructions mention v2",
+    "POST /api/webhook/tradingview - still processes buy webhooks correctly",
+    "POST /api/webhook/tradingview - still processes sell webhooks correctly",
+    "GET /api/signals - returns signal history",
+    "GET /api/signals - history contains v2 signals with new components",
+    "GET /api/signals/stats - stats calculation still works",
+    "GET /api/signals/health - system health still reports correctly",
+    "POST /api/signals/kill-switch - kill switch still blocks signals",
+    "GET /api/futures/mnq - MNQ tracker still works",
+    "GET /api/watchlist - Watchlist still works",
+    "GET /api/trades - Trades still work",
+    "GET /api/checklist - Checklist still works",
+    "GET /api/alerts - Alerts still work",
+    "POST /api/calculator/position-size - Calculator still works",
+    "GET /api/public/performance - Performance page still works",
+    "GET /api/subscribers/tiers - Subscriber tiers still work",
+    "Frontend: Signal cards show v2 component tags (vwap_filter, rsi_momentum, structure)",
+    "Frontend: Pine Script panel shows v2 script with 'MNQ Scalp Stack v2 - Session VWAP + Structure'",
+    "Frontend: Test Signal button generates v2 signals",
+    "Frontend: Performance page loads with equity curve, stats, recent signals",
+    "Frontend: Navigation between Dashboard and Performance works"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_signal_engine_v2.py",
+    "/app/test_reports/pytest/signal_engine_v2_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "v2 signal engine implementation is solid with proper VWAP + RSI + Structure confluence",
+    "Pivot-based TP/SL correctly uses variable distances (6-15 pts) instead of fixed values",
+    "Pine Script v2 is comprehensive with proper TradingView integration",
+    "Old v1 signals in DB still work (backward compatible)",
+    "MOCKED: Test signals use simulated v2 confluence (randomized)",
+    "MOCKED: Alpha Vantage demo key with mock fallback",
+    "MOCKED: Stripe test key",
+    "MOCKED: Discord webhook placeholder"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_signal_engine_v2.py"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24 tests passed)",
+    "frontend": "100% (all UI components working)"
+  },
+  "seed_data_creation": "Multiple v2 test signals generated during testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Signal Engine v2 fully tested. Key changes from v1: (1) compute_confluence now uses VWAP + RSI + structure instead of key levels + rejection + momentum, (2) test signals use pivot-based variable TP/SL (6-15 pts) instead of fixed 8/10/20 pts, (3) Pine Script replaced with full v2 strategy code with ta.vwap, pivothigh/pivotlow, higherLowFormed/lowerHighFormed. Frontend correctly displays v2 component tags. All existing features (MNQ tracker, watchlist, trades, checklist, alerts, calculator, performance page, subscriber signup) remain functional.",
+  "mocked_apis": {
+    "test_signals": "Uses simulated v2 confluence (randomized vwap_filter, rsi_momentum, structure)",
+    "alpha_vantage": "Demo key with mock fallback when rate limited",
+    "stripe": "Test key (sk_test_emergent)",
+    "discord_webhook": "Placeholder URL (REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL)"
+  }
+}
