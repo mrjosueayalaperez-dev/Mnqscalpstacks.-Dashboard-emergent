@@ -254,34 +254,65 @@ class BacktestCreate(BaseModel):
 # ============== Signal Engine Functions ==============
 
 async def send_discord_signal(signal: dict):
-    """Send signal to Discord webhook"""
+    """Send branded signal to Discord webhook — MNQ SCALP STACKS BOT"""
     if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL":
         logger.info("Discord webhook not configured, skipping delivery")
         return False
 
-    side_emoji = "🟢" if signal["side"] == "long" else "🔴"
-    side_label = "LONG" if signal["side"] == "long" else "SHORT"
+    is_long = signal["side"] == "long"
+    side_label = "LONG" if is_long else "SHORT"
+    side_emoji = "🟢" if is_long else "🔴"
+    signal_color = 5763719 if is_long else 15548997  # Green / Red
 
-    embed = {
+    # Confluence components display
+    components = signal.get("components", {})
+    pillars = []
+    if components.get("vwap_filter"):
+        pillars.append("VWAP")
+    if components.get("rsi_momentum"):
+        pillars.append("RSI")
+    if components.get("structure"):
+        pillars.append("Structure")
+    # Fallback for legacy/webhook signals
+    if not pillars:
+        pillars = ["Price", "Flow", "NQ"]
+
+    pillar_status = ", ".join(pillars) + " Confirmed"
+    score = signal.get("confluence_score", 0)
+
+    # Risk-reward calculation
+    entry = signal.get("entry_price", 0)
+    stop = signal.get("stop_loss", 0)
+    tp1 = signal.get("tp1", 0)
+    risk = abs(entry - stop)
+    reward = abs(tp1 - entry)
+    rr_ratio = f"{reward / risk:.1f}:1" if risk > 0 else "N/A"
+
+    payload = {
+        "username": "MNQ SCALP STACKS BOT",
+        "avatar_url": "https://i.imgur.com/4S7S5vj.png",
         "embeds": [{
-            "title": f"{side_emoji} {side_label} Signal — {signal['symbol']}",
-            "color": 0x34C759 if signal["side"] == "long" else 0xFF3B30,
+            "title": f"{side_emoji} NEW SCALP STACK SIGNAL — {side_label}",
+            "color": signal_color,
             "fields": [
-                {"name": "Entry", "value": f"${signal['entry_price']:.2f}", "inline": True},
-                {"name": "Stop Loss", "value": f"${signal['stop_loss']:.2f}", "inline": True},
-                {"name": "TP1", "value": f"${signal['tp1']:.2f}", "inline": True},
-                {"name": "TP2", "value": f"${signal['tp2']:.2f}", "inline": True},
-                {"name": "Confluence", "value": f"{signal['confluence_score']}/3", "inline": True},
-                {"name": "Trend", "value": signal["trend_direction"].upper(), "inline": True},
+                {"name": "Asset", "value": f"{signal.get('symbol', 'MNQ')} (Micro Nasdaq)", "inline": True},
+                {"name": "Strategy", "value": f"3-Pillar Setup ({score}/3)", "inline": True},
+                {"name": "Status", "value": f"{'✅' if score >= 2 else '⚠️'} {pillar_status}", "inline": False},
+                {"name": "Entry", "value": f"```${entry:.2f}```", "inline": True},
+                {"name": "Stop Loss", "value": f"```${stop:.2f}```", "inline": True},
+                {"name": "R:R", "value": f"```{rr_ratio}```", "inline": True},
+                {"name": "TP1", "value": f"```${tp1:.2f}```", "inline": True},
+                {"name": "TP2", "value": f"```${signal.get('tp2', 0):.2f}```", "inline": True},
+                {"name": "Trend", "value": f"```{signal.get('trend_direction', 'neutral').upper()}```", "inline": True},
             ],
-            "footer": {"text": f"MNQ Scalp Stack v2 | {signal.get('source', 'engine')}"},
+            "footer": {"text": "MNQ SCALP STACKS SaaS | Emergent.sh"},
             "timestamp": signal.get("created_at", datetime.now(timezone.utc).isoformat()),
         }]
     }
 
     try:
         async with httpx.AsyncClient() as http_client:
-            resp = await http_client.post(DISCORD_WEBHOOK_URL, json=embed, timeout=5.0)
+            resp = await http_client.post(DISCORD_WEBHOOK_URL, json=payload, timeout=5.0)
             return resp.status_code in (200, 204)
     except Exception as e:
         logger.error(f"Discord send failed: {e}")
