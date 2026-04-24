@@ -1,39 +1,24 @@
-# Trading Command Center - Final PRD
-
-## System Overview
-MNQ SCALP STACKS SaaS — Full trading signal platform with conversion funnel, signal engine, dashboard, and monetization.
+# MNQ SCALP STACKS — Final PRD
 
 ## Routes
-- `/` — Landing page (ad funnel conversion)
-- `/dashboard` — Trading command center (all widgets)
-- `/performance` — Public performance page (shareable, subscriber conversion)
+- `/` — Landing page (conversion funnel with referral + welcome onboarding)
+- `/dashboard` — Trading command center
+- `/performance` — Public performance page
 
-## Tech Stack
-- React 19, Tailwind CSS, Recharts, React Router, Sonner, Lucide
-- FastAPI, MongoDB (Motor), httpx
-- OpenAI GPT-4o (Emergent LLM Key), Alpha Vantage, Stripe, Discord
-
-## All Features
-1. Landing Page (hero, problem, solution, before/after, how it works, stats, pricing, CTA)
-2. MNQ Futures Tracker (VWAP, EMA, RSI, setup signals)
-3. Signal Engine v2 (Session VWAP + Structure, webhook, kill switch, Discord delivery)
-4. Stock Watchlist + Scanner
-5. Trade Journal with P&L
-6. Daily Checklist
-7. AI Analysis (GPT-4o)
-8. Position Calculator
-9. Alerts System
-10. Backtest Results (manual + API + display)
-11. Performance Dashboard (equity curve, stats, recent signals)
-12. Subscriber System (Free/Pro/Elite + Stripe checkout)
-13. Discord Branded Bot ("MNQ SCALP STACKS BOT" with 3-Pillar Setup)
+## All Features (Complete)
+1. Landing Page (7-section funnel: hero, problem, solution, before/after, how it works, stats, pricing)
+2. Referral System (unique codes per subscriber, referral tracking, credit rewards, share links)
+3. Welcome Sequence (5-step onboarding: welcome, discord, tradingview setup, first signal, share & earn)
+4. Mobile Optimized (all pages responsive on 390px+)
+5. MNQ Futures Tracker + Signal Engine v2 + Stock Watchlist + Scanner
+6. Trade Journal + Daily Checklist + AI Analysis + Position Calculator + Alerts
+7. Backtest Results (manual + API + display)
+8. Performance Dashboard (equity curve, stats, recent signals, backtest proof)
+9. Subscriber System (Free/Pro/Elite + Stripe checkout)
+10. Discord Bot (branded MNQ SCALP STACKS BOT + 3-Pillar format)
+11. Pine Script v2 (Session VWAP + Structure)
 
 ## Configured
-- Discord Webhook: LIVE (connected)
-- Stripe: Test key (sk_test_emergent)
+- Discord Webhook: LIVE
+- Stripe: Test key
 - Discord Invites: Placeholders (update in .env)
-
-## Backlog
-- P0: Connect TradingView, configure Discord invites, 48hr stress test
-- P1: WebSocket, email sequences, Stripe subscription management, tier routing
-- P2: Referral system, broker integration, mobile optimization

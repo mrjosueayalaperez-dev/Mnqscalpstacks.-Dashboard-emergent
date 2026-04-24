@@ -195,6 +195,7 @@ class SubscriberCreate(BaseModel):
     email: str
     name: Optional[str] = None
     tier: str = "free"  # free, pro, elite
+    referral_code: Optional[str] = None  # Code used during signup
 
 class CheckoutRequest(BaseModel):
     tier: str  # pro, elite
@@ -1590,7 +1591,7 @@ from starlette.requests import Request
 
 @api_router.post("/subscribers")
 async def create_subscriber(sub: SubscriberCreate):
-    """Register a new subscriber (free tier)"""
+    """Register a new subscriber with referral + welcome sequence"""
     # Check if email already exists
     existing = await db.subscribers.find_one({"email": sub.email}, {"_id": 0})
     if existing:
@@ -1600,6 +1601,10 @@ async def create_subscriber(sub: SubscriberCreate):
             "discord_invite": DISCORD_INVITES.get(existing.get("tier", "free"), ""),
         }
 
+    # Generate unique referral code
+    import hashlib
+    ref_code = hashlib.md5(sub.email.encode()).hexdigest()[:8].upper()
+
     subscriber = {
         "id": str(uuid.uuid4()),
         "email": sub.email,
@@ -1607,15 +1612,53 @@ async def create_subscriber(sub: SubscriberCreate):
         "tier": sub.tier,
         "status": "active",
         "stripe_session_id": None,
+        "referral_code": ref_code,
+        "referred_by": None,
+        "referral_count": 0,
+        "referral_credits": 0,
+        "welcome_step": 0,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+
+    # Process referral if code provided
+    if sub.referral_code:
+        referrer = await db.subscribers.find_one({"referral_code": sub.referral_code}, {"_id": 0})
+        if referrer:
+            subscriber["referred_by"] = referrer["id"]
+            # Credit the referrer
+            await db.subscribers.update_one(
+                {"id": referrer["id"]},
+                {"$inc": {"referral_count": 1, "referral_credits": 1}}
+            )
+
     await db.subscribers.insert_one(subscriber)
     subscriber.pop("_id", None)
+
+    # Create welcome sequence
+    welcome_steps = [
+        {"step": 1, "title": "Welcome to MNQ SCALP STACKS", "message": f"Hey {sub.name or 'Trader'}! Your account is active. Here's what's next.", "type": "welcome", "delay_hours": 0},
+        {"step": 2, "title": "Join the Discord", "message": "Connect with other traders in our Discord community. Signals are delivered here in real-time.", "type": "action", "delay_hours": 0},
+        {"step": 3, "title": "Set Up TradingView", "message": "Load the MNQ Scalp Stack v2 Pine Script on your chart. Check the dashboard for the full script.", "type": "setup", "delay_hours": 1},
+        {"step": 4, "title": "Your First Signal", "message": "Signals fire when VWAP + RSI + Structure align. Watch for your first alert!", "type": "education", "delay_hours": 24},
+        {"step": 5, "title": "Share & Earn", "message": f"Your referral code: {ref_code}. Each friend you bring = 1 month free credit!", "type": "referral", "delay_hours": 72},
+    ]
+
+    for ws in welcome_steps:
+        await db.welcome_sequence.insert_one({
+            "id": str(uuid.uuid4()),
+            "subscriber_id": subscriber["id"],
+            "email": sub.email,
+            **ws,
+            "completed": ws["delay_hours"] == 0,
+            "sent_at": datetime.now(timezone.utc).isoformat() if ws["delay_hours"] == 0 else None,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        })
 
     return {
         "status": "created",
         "subscriber": subscriber,
         "discord_invite": DISCORD_INVITES.get(sub.tier, ""),
+        "referral_code": ref_code,
     }
 
 
@@ -1626,6 +1669,53 @@ async def get_subscriber_count():
     pro = await db.subscribers.count_documents({"tier": "pro"})
     elite = await db.subscribers.count_documents({"tier": "elite"})
     return {"total": total, "free": total - pro - elite, "pro": pro, "elite": elite}
+
+
+@api_router.get("/referral/{code}")
+async def get_referral_info(code: str):
+    """Get referral info by code"""
+    referrer = await db.subscribers.find_one({"referral_code": code}, {"_id": 0})
+    if not referrer:
+        raise HTTPException(status_code=404, detail="Referral code not found")
+    return {
+        "valid": True,
+        "referrer_name": referrer.get("name", "A trader"),
+        "code": code,
+    }
+
+
+@api_router.get("/referral/stats/{subscriber_id}")
+async def get_referral_stats(subscriber_id: str):
+    """Get referral stats for a subscriber"""
+    sub = await db.subscribers.find_one({"id": subscriber_id}, {"_id": 0})
+    if not sub:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+    referrals = await db.subscribers.find({"referred_by": subscriber_id}, {"_id": 0}).to_list(100)
+    return {
+        "referral_code": sub.get("referral_code", ""),
+        "referral_count": sub.get("referral_count", 0),
+        "referral_credits": sub.get("referral_credits", 0),
+        "referrals": [{"name": r.get("name", ""), "email": r.get("email", "")[:3] + "***", "tier": r.get("tier"), "date": r.get("created_at")} for r in referrals],
+    }
+
+
+@api_router.get("/welcome/{subscriber_id}")
+async def get_welcome_sequence(subscriber_id: str):
+    """Get welcome sequence steps for a subscriber"""
+    steps = await db.welcome_sequence.find({"subscriber_id": subscriber_id}, {"_id": 0}).sort("step", 1).to_list(10)
+    return steps
+
+
+@api_router.patch("/welcome/{step_id}/complete")
+async def complete_welcome_step(step_id: str):
+    """Mark a welcome step as completed"""
+    result = await db.welcome_sequence.update_one(
+        {"id": step_id},
+        {"$set": {"completed": True, "sent_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Step not found")
+    return {"message": "Completed"}
 
 
 @api_router.get("/subscribers/tiers")
