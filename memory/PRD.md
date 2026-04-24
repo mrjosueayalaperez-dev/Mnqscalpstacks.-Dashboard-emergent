@@ -1,59 +1,39 @@
 # Trading Command Center - Final PRD
 
 ## System Overview
-Full-stack MNQ futures scalping + $1-$20 stock trading system with Signal Engine v2, public performance dashboard, subscriber monetization, and backtesting.
+MNQ SCALP STACKS SaaS — Full trading signal platform with conversion funnel, signal engine, dashboard, and monetization.
+
+## Routes
+- `/` — Landing page (ad funnel conversion)
+- `/dashboard` — Trading command center (all widgets)
+- `/performance` — Public performance page (shareable, subscriber conversion)
 
 ## Tech Stack
-- **Frontend**: React 19, Tailwind CSS, Recharts, React Router, Sonner, Lucide
-- **Backend**: FastAPI, MongoDB (Motor), httpx
-- **AI**: OpenAI GPT-4o (Emergent LLM Key)
-- **Data**: Alpha Vantage (demo key + mock fallback)
-- **Signals**: TradingView webhook -> Backend -> Discord + Dashboard
-- **Payments**: Stripe Checkout (test mode)
+- React 19, Tailwind CSS, Recharts, React Router, Sonner, Lucide
+- FastAPI, MongoDB (Motor), httpx
+- OpenAI GPT-4o (Emergent LLM Key), Alpha Vantage, Stripe, Discord
 
-## Pages
-- `/` — Main Trading Dashboard (all widgets)
-- `/performance` — Public Performance Page (shareable, subscriber conversion)
+## All Features
+1. Landing Page (hero, problem, solution, before/after, how it works, stats, pricing, CTA)
+2. MNQ Futures Tracker (VWAP, EMA, RSI, setup signals)
+3. Signal Engine v2 (Session VWAP + Structure, webhook, kill switch, Discord delivery)
+4. Stock Watchlist + Scanner
+5. Trade Journal with P&L
+6. Daily Checklist
+7. AI Analysis (GPT-4o)
+8. Position Calculator
+9. Alerts System
+10. Backtest Results (manual + API + display)
+11. Performance Dashboard (equity curve, stats, recent signals)
+12. Subscriber System (Free/Pro/Elite + Stripe checkout)
+13. Discord Branded Bot ("MNQ SCALP STACKS BOT" with 3-Pillar Setup)
 
-## All Features Implemented
-
-### Dashboard Widgets
-1. MNQ Futures Tracker (VWAP, EMA9, EMA21, RSI, setup signal)
-2. Signal Engine v2 (VWAP + RSI + Structure confluence, test generator, kill switch, health)
-3. Watchlist (SOFI, NIO, RKLB, PLUG, SNAP with live quotes)
-4. Stock Scanner (breakout/breakdown detection)
-5. Trade Journal (CRUD, P&L calculation, win rate stats)
-6. Daily Checklist (pre-market, rules, post-market)
-7. AI Analysis (GPT-4o trade analysis, entry/exit signals)
-8. Alerts (price targets, VWAP crosses)
-9. Position Calculator (stocks + MNQ futures)
-10. Backtest Manager (manual input form, CRUD, display)
-
-### Signal Engine v2
-- Pine Script: Session VWAP + Structure (pivots, higher-low/lower-high)
-- Webhook: `/api/webhook/tradingview`
-- Confluence: VWAP filter + RSI momentum + Structure (3-score)
-- TP/SL: Pivot-based (variable swing distances)
-- Kill Switch (manual + auto >5% error rate)
-- Discord delivery, health monitoring, duplicate detection
-
-### Performance Page
-- Hero Stats (win rate, P&L, R:R, best streak)
-- Equity Curve chart (30-day Recharts)
-- Win/Loss distribution bar
-- Recent Signals feed
-- Verified Backtest display (profit factor, Sharpe, max DD, net profit)
-- Pricing tiers (Free/$0, Pro/$49, Elite/$149)
-- Email signup + Stripe checkout
-- Post-payment Discord invite
-
-## Placeholders to Configure
-- `DISCORD_WEBHOOK_URL` — real webhook
-- `DISCORD_INVITE_FREE/PRO/ELITE` — real invite links
-- `STRIPE_API_KEY` — live key when ready
-- `ALPHA_VANTAGE_KEY` — paid key for more API calls
+## Configured
+- Discord Webhook: LIVE (connected)
+- Stripe: Test key (sk_test_emergent)
+- Discord Invites: Placeholders (update in .env)
 
 ## Backlog
-- P0: Connect TradingView, configure Discord, 48hr stress test
-- P1: WebSocket push, email sequences, Stripe subscription management
-- P2: Referral system, broker integration (Tradovate), mobile optimization
+- P0: Connect TradingView, configure Discord invites, 48hr stress test
+- P1: WebSocket, email sequences, Stripe subscription management, tier routing
+- P2: Referral system, broker integration, mobile optimization

@@ -6,6 +6,7 @@ import { Toaster, toast } from "sonner";
 import SignalDashboard from "@/components/SignalDashboard";
 import PerformancePage from "@/components/PerformancePage";
 import BacktestManager from "@/components/BacktestManager";
+import LandingPage from "@/components/LandingPage";
 import {
   TrendingUp,
   TrendingDown,
@@ -1455,7 +1456,8 @@ function AppRouter() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/dashboard" element={<App />} />
         <Route path="/performance" element={<PerformancePage />} />
       </Routes>
     </BrowserRouter>
