@@ -32,6 +32,7 @@ import {
   Loader2,
   ArrowRight,
 } from "lucide-react";
+import Leaderboard from "@/components/Leaderboard";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
@@ -769,6 +770,9 @@ const PerformancePage = () => {
 
         {/* Verified Backtest */}
         <BacktestDisplay backtests={backtests} />
+
+        {/* Community Leaderboard */}
+        <Leaderboard />
 
         {/* Pricing Section */}
         <PricingSection subscriberCount={subscriberCount} />

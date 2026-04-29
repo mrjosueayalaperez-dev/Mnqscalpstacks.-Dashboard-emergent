@@ -1844,6 +1844,168 @@ async def stripe_webhook(request: Request):
         logger.error(f"Stripe webhook error: {e}")
         return {"status": "error", "detail": str(e)}
 
+
+# ============== Auto-Trade Logging ==============
+
+@api_router.post("/signals/{signal_id}/auto-log")
+async def auto_log_trade(signal_id: str, outcome: str, pnl_points: Optional[float] = None):
+    """Auto-log a trade from signal outcome (TP1/TP2/Stopped)"""
+    signal = await db.signals.find_one({"id": signal_id}, {"_id": 0})
+    if not signal:
+        raise HTTPException(status_code=404, detail="Signal not found")
+
+    # Update signal status
+    update_data = {"status": outcome}
+    if outcome in ("hit_tp1", "hit_tp2"):
+        update_data["outcome"] = "win"
+        if outcome == "hit_tp1":
+            pnl_points = pnl_points or abs(signal["tp1"] - signal["entry_price"])
+        else:
+            pnl_points = pnl_points or abs(signal["tp2"] - signal["entry_price"])
+    elif outcome == "stopped":
+        update_data["outcome"] = "loss"
+        pnl_points = pnl_points or -abs(signal["stop_loss"] - signal["entry_price"])
+
+    update_data["pnl_points"] = round(pnl_points, 2) if pnl_points else 0
+    await db.signals.update_one({"id": signal_id}, {"$set": update_data})
+
+    # Auto-create trade journal entry
+    entry_price = signal["entry_price"]
+    if outcome == "hit_tp1":
+        exit_price = signal["tp1"]
+    elif outcome == "hit_tp2":
+        exit_price = signal["tp2"]
+    else:
+        exit_price = signal["stop_loss"]
+
+    side = signal.get("side", "long")
+    if side == "long":
+        pnl_dollar = (exit_price - entry_price) * 2  # MNQ = $2/point
+    else:
+        pnl_dollar = (entry_price - exit_price) * 2
+
+    trade_doc = {
+        "id": str(uuid.uuid4()),
+        "symbol": signal.get("symbol", "MNQ"),
+        "entry_price": entry_price,
+        "exit_price": exit_price,
+        "quantity": 1,
+        "side": side,
+        "status": "closed",
+        "entry_date": signal.get("created_at", datetime.now(timezone.utc).isoformat()),
+        "exit_date": datetime.now(timezone.utc).isoformat(),
+        "pnl": round(pnl_dollar, 2),
+        "notes": f"Auto-logged from signal {signal_id[:8]} | {outcome}",
+    }
+    await db.trades.insert_one(trade_doc)
+    trade_doc.pop("_id", None)
+
+    return {"status": "logged", "signal_outcome": outcome, "trade": trade_doc}
+
+
+# ============== Admin Panel Routes ==============
+
+@api_router.get("/admin/overview")
+async def admin_overview():
+    """Admin dashboard overview"""
+    total_subs = await db.subscribers.count_documents({})
+    pro_subs = await db.subscribers.count_documents({"tier": "pro"})
+    elite_subs = await db.subscribers.count_documents({"tier": "elite"})
+    total_signals = await db.signals.count_documents({})
+    active_signals = await db.signals.count_documents({"status": "active"})
+    total_trades = await db.trades.count_documents({})
+    total_payments = await db.payment_transactions.count_documents({"payment_status": "paid"})
+
+    # Revenue calculation
+    revenue = (pro_subs * 49) + (elite_subs * 149)
+
+    # Recent activity
+    recent_subs = await db.subscribers.find({}, {"_id": 0}).sort("created_at", -1).to_list(5)
+    recent_signals = await db.signals.find({}, {"_id": 0}).sort("created_at", -1).to_list(5)
+
+    return {
+        "subscribers": {"total": total_subs, "free": total_subs - pro_subs - elite_subs, "pro": pro_subs, "elite": elite_subs},
+        "signals": {"total": total_signals, "active": active_signals},
+        "trades": {"total": total_trades},
+        "revenue": {"mrr": revenue, "total_payments": total_payments},
+        "recent_subscribers": recent_subs,
+        "recent_signals": recent_signals,
+    }
+
+
+@api_router.get("/admin/subscribers")
+async def admin_get_subscribers(limit: int = 50):
+    """Get all subscribers for admin"""
+    subs = await db.subscribers.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    return subs
+
+
+@api_router.patch("/admin/subscribers/{sub_id}/tier")
+async def admin_update_tier(sub_id: str, tier: str):
+    """Admin: update subscriber tier"""
+    if tier not in ("free", "pro", "elite"):
+        raise HTTPException(status_code=400, detail="Invalid tier")
+    result = await db.subscribers.update_one({"id": sub_id}, {"$set": {"tier": tier}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+    return {"message": f"Tier updated to {tier}"}
+
+
+@api_router.delete("/admin/subscribers/{sub_id}")
+async def admin_delete_subscriber(sub_id: str):
+    """Admin: remove subscriber"""
+    result = await db.subscribers.delete_one({"id": sub_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Subscriber not found")
+    return {"message": "Deleted"}
+
+
+# ============== Public Leaderboard ==============
+
+@api_router.get("/public/leaderboard")
+async def get_leaderboard():
+    """Public leaderboard: top referrers + top signals"""
+    # Top referrers
+    all_subs = await db.subscribers.find({"referral_count": {"$gt": 0}}, {"_id": 0}).sort("referral_count", -1).to_list(10)
+    top_referrers = [
+        {"name": s.get("name") or s.get("email", "")[:3] + "***", "referrals": s.get("referral_count", 0), "tier": s.get("tier", "free")}
+        for s in all_subs
+    ]
+
+    # Top signal streaks (best consecutive wins)
+    closed_signals = await db.signals.find({"outcome": {"$in": ["win", "loss"]}}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    current_streak = 0
+    best_streak = 0
+    streak_history = []
+    for sig in closed_signals:
+        if sig.get("outcome") == "win":
+            current_streak += 1
+            best_streak = max(best_streak, current_streak)
+        else:
+            if current_streak >= 3:
+                streak_history.append(current_streak)
+            current_streak = 0
+
+    # Monthly stats
+    now = datetime.now(timezone.utc)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    month_signals = await db.signals.find({"created_at": {"$gte": month_start}, "outcome": {"$in": ["win", "loss"]}}, {"_id": 0}).to_list(500)
+    month_wins = len([s for s in month_signals if s.get("outcome") == "win"])
+    month_total = len(month_signals)
+    month_pnl = sum(s.get("pnl_points", 0) for s in month_signals)
+
+    return {
+        "top_referrers": top_referrers,
+        "best_win_streak": best_streak,
+        "month_stats": {
+            "signals": month_total,
+            "wins": month_wins,
+            "win_rate": round(month_wins / month_total * 100, 1) if month_total > 0 else 0,
+            "pnl_points": round(month_pnl, 1),
+        },
+        "total_subscribers": await db.subscribers.count_documents({}),
+    }
+
 # Include the router in the main app
 app.include_router(api_router)
 

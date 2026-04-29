@@ -7,6 +7,7 @@ import SignalDashboard from "@/components/SignalDashboard";
 import PerformancePage from "@/components/PerformancePage";
 import BacktestManager from "@/components/BacktestManager";
 import LandingPage from "@/components/LandingPage";
+import AdminPanel from "@/components/AdminPanel";
 import {
   TrendingUp,
   TrendingDown,
@@ -1459,6 +1460,7 @@ function AppRouter() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/dashboard" element={<App />} />
         <Route path="/performance" element={<PerformancePage />} />
+        <Route path="/admin" element={<AdminPanel />} />
       </Routes>
     </BrowserRouter>
   );
