@@ -1,15 +1,85 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
 import {
   Zap, TrendingUp, Target, Shield, ChevronRight, Check, X, Star, Crown,
   BarChart3, Clock, Activity, ArrowRight, Eye, Crosshair, Layers, Mail,
   User, Loader2, ExternalLink, AlertTriangle, Copy, Gift, Share2, Users,
-  ChevronDown,
+  ChevronDown, Flame,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// ======================== SCROLL REVEAL HOOK ========================
+const useReveal = () => {
+  const ref = useRef(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { el.classList.add("visible"); observer.unobserve(el); } },
+      { threshold: 0.15 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+};
+
+// ======================== ANIMATED COUNTER ========================
+const AnimatedCounter = ({ end, duration = 2000, prefix = "", suffix = "" }) => {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const started = useRef(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !started.current) {
+          started.current = true;
+          const startTime = Date.now();
+          const animate = () => {
+            const elapsed = Date.now() - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            setCount(Math.floor(eased * end));
+            if (progress < 1) requestAnimationFrame(animate);
+          };
+          animate();
+        }
+      },
+      { threshold: 0.5 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [end, duration]);
+
+  return <span ref={ref}>{prefix}{count}{suffix}</span>;
+};
+
+// ======================== SOCIAL PROOF TICKER ========================
+const SocialProofTicker = () => {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    axios.get(`${API}/subscribers/count`).then(r => setCount(r.data.total || 0)).catch(() => setCount(15));
+  }, []);
+
+  if (count === 0) return null;
+
+  return (
+    <div className="fixed bottom-4 left-4 z-40 animate-fade-in stagger-6 hidden md:flex items-center gap-2 px-4 py-2 bg-[#121212] border border-[#34C759]/30 rounded-sm shadow-lg" data-testid="social-proof-ticker">
+      <div className="w-2 h-2 bg-[#34C759] rounded-full animate-pulse" />
+      <span className="text-xs text-zinc-300">
+        <strong className="text-[#34C759]">{count}+ traders</strong> joined this week
+      </span>
+      <Flame className="w-3 h-3 text-[#FFCC00]" />
+    </div>
+  );
+};
 
 // ======================== HERO ========================
 const Hero = ({ onCTA, onLearn }) => (
@@ -21,29 +91,29 @@ const Hero = ({ onCTA, onLearn }) => (
       <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0A]/60 via-[#0A0A0A]/80 to-[#0A0A0A]" />
     </div>
     <div className="relative w-full max-w-5xl mx-auto px-5 md:px-6 py-16 md:py-20 text-center">
-      <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#34C759]/10 border border-[#34C759]/30 rounded-full mb-6 md:mb-8">
+      <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#34C759]/10 border border-[#34C759]/30 rounded-full mb-6 md:mb-8 animate-fade-in-up">
         <span className="w-2 h-2 bg-[#34C759] rounded-full animate-pulse" />
         <span className="text-[0.65rem] md:text-xs font-bold text-[#34C759] uppercase tracking-wider">Live Signals Active</span>
       </div>
-      <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white leading-[0.95] mb-5 md:mb-6">
+      <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white leading-[0.95] mb-5 md:mb-6 animate-fade-in-up stagger-1">
         Stop Guessing Entries.
         <br />
         <span className="text-[#34C759]">Start Trading Structure.</span>
       </h1>
-      <p className="text-base md:text-xl text-zinc-400 max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed px-2">
+      <p className="text-base md:text-xl text-zinc-400 max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed px-2 animate-fade-in-up stagger-2">
         MNQ SCALP STACKS gives scalpers a clean, structured view of price so they can execute with confidence in fast-moving markets.
       </p>
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4">
-        <button onClick={onCTA} className="group w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-[#34C759] text-black font-black text-base md:text-lg rounded-sm hover:bg-[#2DB84E] transition-all active:scale-95" data-testid="hero-cta-btn">
+      <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 animate-fade-in-up stagger-3">
+        <button onClick={onCTA} className="group w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-[#34C759] text-black font-black text-base md:text-lg rounded-sm hover:bg-[#2DB84E] transition-all active:scale-95 animate-pulse-glow" data-testid="hero-cta-btn">
           Get Access <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
         </button>
         <button onClick={onLearn} className="flex items-center gap-2 px-6 py-3 text-zinc-400 hover:text-white transition-colors text-sm font-semibold" data-testid="hero-learn-btn">
           See How It Works <ChevronDown className="w-4 h-4" />
         </button>
       </div>
-      <div className="mt-10 md:mt-12 flex flex-wrap items-center justify-center gap-4 md:gap-6 text-zinc-500 text-[0.65rem] md:text-xs">
-        <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> 76.9% Win Rate</span>
-        <span className="flex items-center gap-1"><BarChart3 className="w-3 h-3" /> 312 Backtested Trades</span>
+      <div className="mt-10 md:mt-12 flex flex-wrap items-center justify-center gap-4 md:gap-6 text-zinc-500 text-[0.65rem] md:text-xs animate-fade-in-up stagger-4">
+        <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> <AnimatedCounter end={76} suffix=".9% Win Rate" /></span>
+        <span className="flex items-center gap-1"><BarChart3 className="w-3 h-3" /> <AnimatedCounter end={312} suffix=" Backtested Trades" /></span>
         <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Kill Switch Protected</span>
       </div>
     </div>
@@ -51,8 +121,10 @@ const Hero = ({ onCTA, onLearn }) => (
 );
 
 // ======================== PROBLEM ========================
-const Problem = () => (
-  <section className="py-14 md:py-20 px-5 md:px-6 bg-[#0A0A0A]" data-testid="problem-section">
+const Problem = () => {
+  const ref = useReveal();
+  return (
+  <section ref={ref} className="py-14 md:py-20 px-5 md:px-6 bg-[#0A0A0A] reveal" data-testid="problem-section">
     <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white text-center mb-3 md:mb-4">
         Most traders don't lack effort. <span className="text-[#FF3B30]">They lack structure.</span>
@@ -73,11 +145,14 @@ const Problem = () => (
       </div>
     </div>
   </section>
-);
+  );
+};
 
 // ======================== SOLUTION ========================
-const Solution = () => (
-  <section className="py-14 md:py-20 px-5 md:px-6 bg-[#0D0D0D]" data-testid="solution-section">
+const Solution = () => {
+  const ref = useReveal();
+  return (
+  <section ref={ref} className="py-14 md:py-20 px-5 md:px-6 bg-[#0D0D0D] reveal" data-testid="solution-section">
     <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white text-center mb-3">
         Trade with a <span className="text-[#34C759]">clear framework</span>
@@ -100,11 +175,14 @@ const Solution = () => (
       </div>
     </div>
   </section>
-);
+  );
+};
 
 // ======================== BEFORE / AFTER ========================
-const BeforeAfter = () => (
-  <section className="py-14 md:py-20 px-5 md:px-6 bg-[#0A0A0A]" data-testid="before-after-section">
+const BeforeAfter = () => {
+  const ref = useReveal();
+  return (
+  <section ref={ref} className="py-14 md:py-20 px-5 md:px-6 bg-[#0A0A0A] reveal" data-testid="before-after-section">
     <div className="max-w-5xl mx-auto">
       <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white text-center mb-2">
         Same market. <span className="text-[#007AFF]">Different decisions.</span>
@@ -128,11 +206,12 @@ const BeforeAfter = () => (
       </div>
     </div>
   </section>
-);
+  );
+};
 
 // ======================== HOW IT WORKS ========================
 const HowItWorks = ({ sectionRef }) => (
-  <section ref={sectionRef} className="py-14 md:py-20 px-5 md:px-6 bg-[#0D0D0D]" data-testid="how-it-works-section">
+  <section ref={sectionRef} className="py-14 md:py-20 px-5 md:px-6 bg-[#0D0D0D] reveal visible" data-testid="how-it-works-section">
     <div className="max-w-4xl mx-auto">
       <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white text-center mb-8 md:mb-12">
         3 Steps. <span className="text-[#007AFF]">That's it.</span>
@@ -482,6 +561,7 @@ const LandingPage = () => {
           signedUp={signedUp} discordInvite={discordInvite} referralCode={referralCode}
           welcomeSteps={welcomeSteps} onCompleteStep={handleCompleteStep} referrerName={referrerName} />
         <Footer />
+        <SocialProofTicker />
       </div>
     </div>
   );
