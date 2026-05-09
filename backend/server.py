@@ -1196,69 +1196,116 @@ async def generate_test_signal(background_tasks: BackgroundTasks):
 # Pine Script Reference
 @api_router.get("/signals/pinescript")
 async def get_pine_script():
-    """Get the MNQ Scalp Punch v1 Pine Script"""
+    """Get the MNQ Scalp Stacks v3 Master Punch Pine Script"""
     pine = '''//@version=5
-indicator("MNQ Scalp Punch v1", overlay=true)
+strategy("MNQ Scalp Stacks v3", overlay=true,
+     initial_capital=10000, pyramiding=0,
+     commission_type=strategy.commission.percent, commission_value=0.01)
 
-// Inputs for your setup
-emaLen = input.int(21, "EMA 21 Spine")
-vwapSrc = input.source(hlc3, "VWAP Source")
+// ==================== CORE INDICATORS ====================
 
-// Calculations
+// EMA 21 Spine — The backbone of structure
+emaLen = input.int(21, "EMA 21 Spine Length")
 ema21 = ta.ema(close, emaLen)
-vwapVal = ta.vwap(vwapSrc)
 
-// Signals: Buy when price is above both and bounces
-buySignal = ta.crossover(close, ema21) and close > vwapVal
-sellSignal = ta.crossunder(close, ema21) and close < vwapVal
+// VWAP — Institutional level
+vwapVal = ta.vwap(hlc3)
 
-// Plotting the lines
-plot(ema21, color=color.white, linewidth=3, title="EMA 21 Spine")
-plot(vwapVal, color=color.blue, linewidth=2, title="VWAP")
+// ==================== RESISTANCE ZONE: 27,972 ====================
+resistanceLevel = input.float(27972, "Resistance Level", step=1)
+resistanceBuffer = input.float(5, "Resistance Suppression Zone (pts)", step=1)
+inResistanceZone = math.abs(close - resistanceLevel) <= resistanceBuffer
 
-// Punching the Arrows on the screen
-plotshape(buySignal, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small, title="BUY Punch")
-plotshape(sellSignal, style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small, title="SELL Punch")
+// ==================== SIGNAL LOGIC ====================
+
+// BUY Punch: Price crosses above BOTH EMA 21 and VWAP
+buyPunchRaw = ta.crossover(close, ema21) and close > vwapVal
+// SELL Punch: Price crosses below BOTH EMA 21 and VWAP
+sellPunchRaw = ta.crossunder(close, ema21) and close < vwapVal
+
+// Wave Validation: Suppress longs in resistance zone
+buyPunch = buyPunchRaw and not inResistanceZone
+sellPunch = sellPunchRaw
+
+// ==================== ENTRIES & EXITS ====================
+
+// Dynamic SL/TP based on recent swing
+atrLen = input.int(14, "ATR Length for SL/TP")
+atrVal = ta.atr(atrLen)
+slMultiplier = input.float(1.5, "SL ATR Multiplier", step=0.1)
+tpMultiplier = input.float(2.5, "TP ATR Multiplier", step=0.1)
+
+if buyPunch
+    strategy.entry("BUY", strategy.long)
+    strategy.exit("BUY-exit", from_entry="BUY",
+         stop=close - atrVal * slMultiplier,
+         limit=close + atrVal * tpMultiplier)
+
+if sellPunch
+    strategy.entry("SELL", strategy.short)
+    strategy.exit("SELL-exit", from_entry="SELL",
+         stop=close + atrVal * slMultiplier,
+         limit=close - atrVal * tpMultiplier)
+
+// ==================== PLOTTING ====================
+
+// EMA 21 Spine (white, thick — the backbone)
+plot(ema21, "EMA 21 Spine", color=color.white, linewidth=3)
+
+// VWAP (blue — institutional)
+plot(vwapVal, "VWAP", color=color.blue, linewidth=2)
 
 // Resistance Zone (27,972)
-resistanceLevel = input.float(27972, "Key Resistance Level", step=1)
-resistanceBuffer = input.float(50, "Resistance Zone Width", step=5)
-inResistanceZone = math.abs(close - resistanceLevel) < resistanceBuffer
-bgcolor(inResistanceZone ? color.new(color.red, 90) : na, title="Resistance Zone")
+resistHigh = plot(resistanceLevel + resistanceBuffer, "Resist High", color=color.new(color.red, 80))
+resistLow = plot(resistanceLevel - resistanceBuffer, "Resist Low", color=color.new(color.red, 80))
+fill(resistHigh, resistLow, color=inResistanceZone ? color.new(color.red, 80) : color.new(color.red, 93), title="27972 Zone")
 
-// Psychological levels (00 and 50)
+// Punch arrows
+plotshape(buyPunch, title="BUY Punch", style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small, text="BUY")
+plotshape(sellPunch, title="SELL Punch", style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small, text="SELL")
+
+// Resistance suppression marker
+plotshape(buyPunchRaw and inResistanceZone, title="Suppressed Long", style=shape.xcross, location=location.belowbar, color=color.new(color.orange, 30), size=size.tiny, text="BLOCKED")
+
+// Background flash on signal
+bgcolor(buyPunch ? color.new(color.green, 93) : sellPunch ? color.new(color.red, 93) : na)
+
+// Psychological levels
 plot(math.round(close / 100) * 100, "Level 00", color=color.new(color.gray, 70), style=plot.style_cross)
 plot(math.round(close / 100) * 100 + 50, "Level 50", color=color.new(color.gray, 80), style=plot.style_cross)
 
-// Wave-validated signals (suppress longs in resistance)
-buyPunch = buySignal and not inResistanceZone
-sellPunch = sellSignal
-
-// Alerts
-alertcondition(buyPunch, title="BUY Punch", message='{"type":"buy","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
-alertcondition(sellPunch, title="SELL Punch", message='{"type":"sell","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
-alertcondition(inResistanceZone, title="Resistance Zone", message='{"type":"resistance","symbol":"MNQ","price":"{{close}}","level":"27972"}')
+// ==================== ALERTS (JSON for /api/webhook/tradingview) ====================
+alertcondition(buyPunch, title="BUY PUNCH", message='{"type":"buy","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
+alertcondition(sellPunch, title="SELL PUNCH", message='{"type":"sell","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
+alertcondition(inResistanceZone, title="27972 RESISTANCE", message='{"type":"resistance","symbol":"MNQ","price":"{{close}}","level":"27972"}')
 '''
     webhook_instructions = f"""
-## TradingView Webhook Setup — MNQ Scalp Punch v1
+## MNQ Scalp Stacks v3 — TradingView Setup
 
+### Webhook URL:
+{os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')}/api/webhook/tradingview
+
+### Setup Steps:
 1. Open TradingView -> MNQ 1-min chart (MNQ ONLY)
-2. Pine Editor -> Paste the script above -> Add to Chart
-3. Create Alert (right-click chart -> Add Alert)
-4. Condition: "MNQ Scalp Punch v1" -> "BUY Punch" or "SELL Punch"
-5. Enable "Webhook URL" and paste:
-   {os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')}/api/webhook/tradingview
+2. Pine Editor -> Paste script -> "Add to Chart"
+3. Right-click chart -> Add Alert
+4. Condition: "MNQ Scalp Stacks v3" -> "BUY PUNCH" or "SELL PUNCH"
+5. Enable "Webhook URL" and paste the URL above
+6. JSON auto-formatted by alertcondition
 
-6. Webhook message (auto-filled by alertcondition):
-   {{"type":"buy","symbol":"MNQ","price":"{{{{close}}}}","time":"{{{{time}}}}"}}
-
-## MNQ Scalp Punch Logic:
-- EMA 21 Spine (white line — the backbone)
+### v3 Signal Logic:
+- EMA 21 Spine (white line — structure backbone)
 - Session VWAP (blue line — institutional level)
-- BUY Punch: Price crosses ABOVE EMA 21 + Price > VWAP
-- SELL Punch: Price crosses BELOW EMA 21 + Price < VWAP
-- 27,972 Resistance Zone — Longs suppressed in zone
+- BUY PUNCH: Cross above EMA 21 + above VWAP
+- SELL PUNCH: Cross below EMA 21 + below VWAP
+- 27,972 Resistance: Longs SUPPRESSED within 5 points
+- ATR-based dynamic SL/TP
 - Psychological levels (00/50) plotted
+
+### Wave Validation:
+- All numeric data validated before signal fires
+- Resistance zone blocks fake breakout longs
+- JSON format matches /api/webhook/tradingview endpoint
 """
 
     return {

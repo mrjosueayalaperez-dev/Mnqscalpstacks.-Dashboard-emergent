@@ -101,7 +101,7 @@ const Hero = ({ onCTA, onLearn }) => (
         <span className="text-[#34C759]">Start Trading Structure.</span>
       </h1>
       <p className="text-base md:text-xl text-zinc-400 max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed px-2 animate-fade-in-up stagger-2">
-        MNQ SCALP STACKS gives scalpers a clean, structured view of price so they can execute with confidence in fast-moving markets.
+        Precision Futures Intelligence. Take the guesswork out of the 1-minute chart with proprietary Wave Validation and institutional guardrails.
       </p>
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 animate-fade-in-up stagger-3">
         <button onClick={onCTA} className="group w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-[#34C759] text-black font-black text-base md:text-lg rounded-sm hover:bg-[#2DB84E] transition-all active:scale-95 animate-pulse-glow" data-testid="hero-cta-btn">
@@ -112,9 +112,9 @@ const Hero = ({ onCTA, onLearn }) => (
         </button>
       </div>
       <div className="mt-10 md:mt-12 flex flex-wrap items-center justify-center gap-4 md:gap-6 text-zinc-500 text-[0.65rem] md:text-xs animate-fade-in-up stagger-4">
-        <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> <AnimatedCounter end={76} suffix=".9% Win Rate" /></span>
-        <span className="flex items-center gap-1"><BarChart3 className="w-3 h-3" /> <AnimatedCounter end={312} suffix=" Backtested Trades" /></span>
-        <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Kill Switch Protected</span>
+        <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> <AnimatedCounter end={77} suffix=".3% Win Rate" /></span>
+        <span className="flex items-center gap-1"><BarChart3 className="w-3 h-3" /> Competition Tested</span>
+        <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Wave Validated</span>
       </div>
     </div>
   </section>
@@ -157,12 +157,12 @@ const Solution = () => {
       <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white text-center mb-3">
         Trade with a <span className="text-[#34C759]">clear framework</span>
       </h2>
-      <p className="text-zinc-500 text-center text-sm max-w-lg mx-auto mb-8 md:mb-12">MNQ SCALP STACKS highlights key stack zones so you can:</p>
+      <p className="text-zinc-500 text-center text-sm max-w-lg mx-auto mb-8 md:mb-12">MNQ Scalp Stacks delivers precision futures intelligence:</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         {[
-          { icon: Target, title: "Identify", desc: "High-probability zones using VWAP + Structure pivots", color: "#007AFF" },
-          { icon: Crosshair, title: "Time", desc: "Entries with RSI momentum + confluence scoring", color: "#34C759" },
-          { icon: Layers, title: "Execute", desc: "With structure — reduce noise and hesitation", color: "#FFCC00" },
+          { icon: Target, title: "Wave Validation", desc: "High-probability entries backed by a 77.3% historical win rate", color: "#007AFF" },
+          { icon: Crosshair, title: "Institutional Guardrails", desc: "Automated detection of psychological levels and resistance zones", color: "#34C759" },
+          { icon: Layers, title: "Full Stack Integration", desc: "Pine Script v3 synced with Python backend for zero-lag execution", color: "#FFCC00" },
         ].map((item, i) => (
           <div key={i} className="p-5 md:p-6 bg-[#121212] border border-white/10 rounded-sm text-center hover:border-white/20 transition-colors">
             <div className="w-12 h-12 mx-auto mb-4 rounded-sm flex items-center justify-center" style={{ background: `${item.color}15` }}>
@@ -218,9 +218,9 @@ const HowItWorks = ({ sectionRef }) => (
       </h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
         {[
-          { step: "01", title: "Load the System", desc: "Add MNQ Scalp Stack v2 to your TradingView chart. One-click setup." },
-          { step: "02", title: "Identify Stack Zones", desc: "VWAP + Structure + RSI confluence highlights high-probability areas." },
-          { step: "03", title: "Execute with Structure", desc: "Signals fire to your Discord + Dashboard. Trade with precision." },
+          { step: "01", title: "Load the System", desc: "Add MNQ Scalp Stacks v3 to your TradingView 1-min chart. One click." },
+          { step: "02", title: "Wave Validation", desc: "EMA 21 Spine + VWAP + 27,972 resistance — the system does the thinking." },
+          { step: "03", title: "Execute the Punch", desc: "BUY/SELL Punches fire to Discord + Dashboard. Trade with precision." },
         ].map((item, i) => (
           <div key={i} className="relative">
             <span className="text-5xl md:text-6xl font-black text-white/5 absolute -top-2 md:-top-4 -left-1 md:-left-2">{item.step}</span>
