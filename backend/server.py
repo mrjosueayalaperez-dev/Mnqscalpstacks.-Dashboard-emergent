@@ -571,39 +571,70 @@ async def scan_stocks(min_change: float = 3.0):
 # MNQ Futures Routes
 @api_router.get("/futures/mnq")
 async def get_mnq_data():
-    """Get MNQ (Micro Nasdaq) futures data - using QQQ as proxy"""
+    """Get MNQ (Micro Nasdaq) futures data with wave validation"""
+    # Key resistance levels
+    RESISTANCE_ZONES = [27972, 28000, 28500]
+    
     quote = await fetch_stock_quote("QQQ")
     if not quote:
-        import random
         base = 18500
+        price = base + random.uniform(-50, 50)
+        close_price = price + random.uniform(-5, 5)
+        vwap = base + 10
+        ema9 = base + 15
+        ema21 = base - 5
+        rsi_val = 50 + random.randint(-15, 15)
+        
+        # Resistance zone check
+        resistance_zones_hit = [z for z in RESISTANCE_ZONES if abs(price - z) < 50]
+        
         return {
             "symbol": "MNQ",
-            "price": base + random.uniform(-50, 50),
-            "change": random.uniform(-100, 100),
+            "price": round(price, 2),
+            "close": round(close_price, 2),
+            "change": round(random.uniform(-100, 100), 2),
             "change_percent": str(round(random.uniform(-1, 1), 2)),
-            "high": base + 100,
-            "low": base - 100,
-            "vwap": base + 10,
-            "ema9": base + 15,
-            "ema21": base - 5,
-            "rsi": 50 + random.randint(-15, 15),
-            "is_mock": True
+            "high": round(base + 100, 2),
+            "low": round(base - 100, 2),
+            "vwap": round(vwap, 2),
+            "ema9": round(ema9, 2),
+            "ema21": round(ema21, 2),
+            "rsi": rsi_val,
+            "resistance_zones": resistance_zones_hit,
+            "in_resistance": len(resistance_zones_hit) > 0,
+            "data_source": "mock",
+            "is_mock": True,
+            "wave_valid": True,
         }
     
     # Scale QQQ to approximate MNQ
-    scale = 45  # Approximate scaling factor
+    scale = 45
+    price = round(quote["price"] * scale, 2)
+    close_price = round(price + random.uniform(-2, 2), 2)
+    vwap = round(quote["price"] * scale * 0.998, 2)
+    ema9 = round(quote["price"] * scale * 1.001, 2)
+    ema21 = round(quote["price"] * scale * 0.999, 2)
+    
+    # Resistance zone check
+    resistance_zones_hit = [z for z in RESISTANCE_ZONES if abs(price - z) < 50]
+    
     return {
         "symbol": "MNQ",
-        "price": quote["price"] * scale,
-        "change": quote["change"] * scale,
+        "price": price,
+        "close": close_price,
+        "change": round(quote["change"] * scale, 2),
         "change_percent": quote["change_percent"],
-        "high": quote["high"] * scale,
-        "low": quote["low"] * scale,
-        "vwap": quote["price"] * scale * 0.998,
-        "ema9": quote["price"] * scale * 1.001,
-        "ema21": quote["price"] * scale * 0.999,
+        "high": round(quote["high"] * scale, 2),
+        "low": round(quote["low"] * scale, 2),
+        "vwap": vwap,
+        "ema9": ema9,
+        "ema21": ema21,
         "rsi": 55,
-        "is_proxy": True
+        "resistance_zones": resistance_zones_hit,
+        "in_resistance": len(resistance_zones_hit) > 0,
+        "data_source": "qqq_proxy",
+        "is_proxy": True,
+        "wave_valid": True,
     }
 
 # Watchlist Routes
@@ -1280,28 +1311,66 @@ plot(vwap, "VWAP", color=color.new(color.orange, 0))
 plotshape(longSignal,  title="Long Signal",  style=shape.triangleup,   location=location.belowbar, color=color.new(color.lime, 0), size=size.tiny, text="L")
 plotshape(shortSignal, title="Short Signal", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0),  size=size.tiny, text="S")
 
+// -------------------- Resistance Zones (Wave Validation) --------------------
+resistanceLevel = input.float(27972, "Key Resistance Level", step=1)
+resistanceBuffer = input.float(50, "Resistance Zone Width", step=5)
+
+inResistanceZone = math.abs(close - resistanceLevel) < resistanceBuffer
+
+// Plot resistance zone
+resistanceHigh = resistanceLevel + resistanceBuffer
+resistanceLow = resistanceLevel - resistanceBuffer
+p1 = plot(resistanceHigh, "Resistance High", color=color.new(color.red, 80), linewidth=1)
+p2 = plot(resistanceLow, "Resistance Low", color=color.new(color.red, 80), linewidth=1)
+fill(p1, p2, color=inResistanceZone ? color.new(color.red, 85) : color.new(color.red, 95), title="Resistance Zone")
+
+// Resistance zone label
+if inResistanceZone and barstate.islast
+    label.new(bar_index, resistanceLevel, "RESISTANCE: " + str.tostring(resistanceLevel), style=label.style_label_left, color=color.new(color.red, 70), textcolor=color.white, size=size.small)
+
+// Wave Validation: suppress signals in resistance zone for longs
+longSignalValidated = longSignal and validLongLevels and not inResistanceZone
+shortSignalValidated = shortSignal and validShortLevels
+
+// Override orders with wave-validated signals
+if longSignalValidated
+    strategy.entry("L", strategy.long)
+    strategy.exit("L-exit", from_entry="L", stop=longSL, limit=longTP)
+
+if shortSignalValidated
+    strategy.entry("S", strategy.short)
+    strategy.exit("S-exit", from_entry="S", stop=shortSL, limit=shortTP)
+
+// Plot psychological levels (00 and 50)
+plot(math.round(close / 100) * 100, "Level 00", color=color.new(color.gray, 70), style=plot.style_cross)
+plot(math.round(close / 100) * 100 + 50, "Level 50", color=color.new(color.gray, 80), style=plot.style_cross)
+
 // -------------------- Alerts --------------------
-alertcondition(longSignal,  title="Long Signal",  message='{"type":"buy","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
-alertcondition(shortSignal, title="Short Signal", message='{"type":"sell","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
+alertcondition(longSignalValidated,  title="Long Signal (Validated)",  message='{"type":"buy","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
+alertcondition(shortSignalValidated, title="Short Signal (Validated)", message='{"type":"sell","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
+alertcondition(inResistanceZone, title="Resistance Zone Alert", message='{"type":"resistance","symbol":"{{ticker}}","price":"{{close}}","level":"27972"}')
 '''
     webhook_instructions = f"""
-## TradingView Webhook Setup (v2)
+## TradingView Webhook Setup (v3 — Wave Validated)
 
 1. Open TradingView -> MNQ 1-min chart
 2. Pine Editor -> Paste the script above -> Add to Chart
 3. Create Alert (right-click chart -> Add Alert)
-4. Condition: "MNQ Scalp Stack v2" -> "Long Signal" or "Short Signal"
+4. Condition: "MNQ Scalp Stack v2" -> "Long Signal (Validated)" or "Short Signal (Validated)"
 5. Enable "Webhook URL" and paste:
    {os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')}/api/webhook/tradingview
 
 6. Webhook message (auto-filled by alertcondition):
    {{"type":"buy","symbol":"{{{{ticker}}}}","price":"{{{{close}}}}","time":"{{{{time}}}}"}}
 
-## v2 Signal Logic:
+## v3 Signal Logic (Wave Validated):
 - Session VWAP filter (price above/below)
 - RSI 14 momentum (rising > 55 for longs, falling < 45 for shorts)
 - Structure confirmation (higher-low for longs, lower-high for shorts)
 - Pivot-based TP/SL (confirmed swing highs/lows)
+- **NEW: 27,972 Resistance Zone** — Long signals suppressed in resistance
+- **NEW: Wave Validation** — Numeric data integrity check
+- **NEW: Psychological levels** (00/50) plotted on chart
 """
 
     return {

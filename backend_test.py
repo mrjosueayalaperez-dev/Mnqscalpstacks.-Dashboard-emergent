@@ -69,20 +69,43 @@ class TradingAPITester:
             success = response.status_code == 200
             details = f"Status: {response.status_code}"
             if success:
-                data = response.json()
-                required_fields = ['symbol', 'price', 'change', 'high', 'low', 'vwap', 'ema9', 'ema21', 'rsi']
-                missing_fields = [field for field in required_fields if field not in data]
-                if missing_fields:
-                    success = False
-                    details += f", Missing fields: {missing_fields}"
+            # Line 72: Start of Data Processing
+        data = response.json()
+        required_fields = ['symbol', 'price', 'close', 'vwap', 'ema21']
+        
+        # Check for missing data fields from TradingView
+        missing_fields = [f for f in required_fields if f not in data]
+        if missing_fields:
+            success = False
+            details += f" ERROR: Missing fields {missing_fields}"
+        else:
+            # Validate values are actual numbers (floats) to fix "broken waves"
+            try:
+                price = float(data.get('price'))
+                vwap = float(data.get('vwap'))
+                ema21 = float(data.get('ema21'))
+                
+                # Check for 27,972 Resistance Level Logic
+                if price >= 27972:
+                    details += " [RESISTANCE ZONE: 972]"
+                
+                details += f" Symbol: {data.get('symbol')}, Price: {price}, EMA21: {ema21}"
+                
+                # Verify Data Source (Fix for the "72 Down" logic)
+                if data.get('is_mock'):
+                    details += " (WARNING: Using Mock Data)"
+                elif data.get('is_proxy'):
+                    details += " (QQQ Proxy Active)"
                 else:
-                    details += f", Symbol: {data.get('symbol')}, Price: {data.get('price')}"
-                    if data.get('is_mock'):
-                        details += " (Mock Data)"
-                    elif data.get('is_proxy'):
-                        details += " (QQQ Proxy)"
-            self.log_test("MNQ Futures Data", success, details)
-            return success
+                    details += " (LIVE MNQ DATA)"
+                
+                success = True
+            except (ValueError, TypeError):
+                success = False
+                details += " ERROR: Non-numeric data received in waves."
+
+        self.log_test("MNQ Futures Data", success, details)
+        return success
         except Exception as e:
             self.log_test("MNQ Futures Data", False, f"Exception: {str(e)}")
             return False

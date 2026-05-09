@@ -171,24 +171,43 @@ const MNQTracker = ({ data, loading }) => {
         )}
         {/* Signal Indicator */}
         {data && (
-          <div className="mt-4 p-3 bg-white/5 rounded-sm border border-white/10">
-            <div className="flex items-center justify-between">
-              <span className="text-xs uppercase tracking-wider text-zinc-500">
-                Setup Signal
+          <div className="mt-4 space-y-2">
+            {/* Resistance Zone Warning */}
+            {data?.in_resistance && (
+              <div className="p-2 bg-[#FF3B30]/10 border border-[#FF3B30]/30 rounded-sm flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-[#FF3B30]" />
+                <span className="text-xs text-[#FF3B30] font-bold">RESISTANCE ZONE: {data?.resistance_zones?.[0] || 27972}</span>
+              </div>
+            )}
+            <div className="p-3 bg-white/5 rounded-sm border border-white/10">
+              <div className="flex items-center justify-between">
+                <span className="text-xs uppercase tracking-wider text-zinc-500">
+                  Setup Signal
+                </span>
+                {data?.ema9 > data?.ema21 && data?.rsi > 50 ? (
+                  <span className="flex items-center gap-2 text-[#34C759] text-sm font-bold">
+                    <TrendingUp className="w-4 h-4" /> BULLISH SETUP
+                  </span>
+                ) : data?.ema9 < data?.ema21 && data?.rsi < 50 ? (
+                  <span className="flex items-center gap-2 text-[#FF3B30] text-sm font-bold">
+                    <TrendingDown className="w-4 h-4" /> BEARISH SETUP
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-2 text-[#FFCC00] text-sm font-bold">
+                    <AlertTriangle className="w-4 h-4" /> NO CLEAR SETUP
+                  </span>
+                )}
+              </div>
+            </div>
+            {/* Data Source */}
+            <div className="flex items-center justify-between text-[0.6rem] text-zinc-600 px-1">
+              <span>
+                {data?.data_source === "mock" ? "MOCK DATA" :
+                 data?.data_source === "qqq_proxy" ? "QQQ PROXY" : "LIVE MNQ"}
               </span>
-              {data?.ema9 > data?.ema21 && data?.rsi > 50 ? (
-                <span className="flex items-center gap-2 text-[#34C759] text-sm font-bold">
-                  <TrendingUp className="w-4 h-4" /> BULLISH SETUP
-                </span>
-              ) : data?.ema9 < data?.ema21 && data?.rsi < 50 ? (
-                <span className="flex items-center gap-2 text-[#FF3B30] text-sm font-bold">
-                  <TrendingDown className="w-4 h-4" /> BEARISH SETUP
-                </span>
-              ) : (
-                <span className="flex items-center gap-2 text-[#FFCC00] text-sm font-bold">
-                  <AlertTriangle className="w-4 h-4" /> NO CLEAR SETUP
-                </span>
-              )}
+              <span className={data?.wave_valid ? "text-[#34C759]" : "text-[#FF3B30]"}>
+                Wave: {data?.wave_valid ? "VALID" : "INVALID"}
+              </span>
             </div>
           </div>
         )}
