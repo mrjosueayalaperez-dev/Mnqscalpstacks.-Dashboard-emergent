@@ -522,10 +522,21 @@ const LandingPage = () => {
     const params = new URLSearchParams(window.location.search);
     const refCode = params.get("ref") || null;
     try {
+      // Create or get subscriber (idempotent)
       await axios.post(`${API}/subscribers`, { email, name, tier, referral_code: refCode });
+      // Always create checkout for paid tiers
       const res = await axios.post(`${API}/checkout/create`, { tier, origin_url: window.location.origin });
-      if (res.data.url) window.location.href = res.data.url;
-    } catch (e) { toast.error("Checkout failed"); setLoading(false); }
+      if (res.data.url) {
+        window.location.href = res.data.url;
+      } else {
+        toast.error("No checkout URL returned");
+        setLoading(false);
+      }
+    } catch (e) {
+      console.error("Checkout error:", e);
+      toast.error("Checkout failed: " + (e.response?.data?.detail || e.message || "Unknown error"));
+      setLoading(false);
+    }
   };
 
   const handleCompleteStep = async (stepId) => {

@@ -653,18 +653,20 @@ const PerformancePage = () => {
   const handleCheckout = async (email, name, tier) => {
     setSignupLoading(true);
     try {
-      // First create subscriber record
       await axios.post(`${API}/subscribers`, { email, name, tier });
-      // Then create checkout
       const res = await axios.post(`${API}/checkout/create`, {
         tier,
         origin_url: window.location.origin,
       });
       if (res.data.url) {
         window.location.href = res.data.url;
+      } else {
+        toast.error("No checkout URL returned");
+        setSignupLoading(false);
       }
     } catch (e) {
-      toast.error("Checkout failed. Please try again.");
+      console.error("Checkout error:", e);
+      toast.error("Checkout failed: " + (e.response?.data?.detail || e.message || "Unknown error"));
       setSignupLoading(false);
     }
   };
