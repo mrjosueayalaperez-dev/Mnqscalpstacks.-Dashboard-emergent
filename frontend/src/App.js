@@ -94,9 +94,9 @@ const MNQTracker = ({ data, loading }) => {
       <div className="widget-header">
         <h3 className="flex items-center gap-2">
           <BarChart3 className="w-4 h-4 text-[#007AFF]" />
-          MNQ FUTURES
+          MNQ SCALP PUNCH
         </h3>
-        <span className="text-xs text-zinc-500">Micro E-mini Nasdaq-100</span>
+        <span className="text-xs text-zinc-500">MNQ Only</span>
       </div>
       <div className="widget-content">
         {loading ? (
@@ -148,12 +148,12 @@ const MNQTracker = ({ data, loading }) => {
               </span>
             </div>
             <div className="stat-box">
-              <span className="stat-label">EMA 9</span>
-              <span className="stat-value text-lg">{formatPrice(data?.ema9)}</span>
+              <span className="stat-label">EMA 21 Spine</span>
+              <span className="stat-value text-lg text-white">{formatPrice(data?.ema21)}</span>
             </div>
             <div className="stat-box">
-              <span className="stat-label">EMA 21</span>
-              <span className="stat-value text-lg">{formatPrice(data?.ema21)}</span>
+              <span className="stat-label">Close</span>
+              <span className="stat-value text-lg">{formatPrice(data?.close)}</span>
             </div>
             <div className="stat-box">
               <span className="stat-label">High</span>
@@ -182,19 +182,19 @@ const MNQTracker = ({ data, loading }) => {
             <div className="p-3 bg-white/5 rounded-sm border border-white/10">
               <div className="flex items-center justify-between">
                 <span className="text-xs uppercase tracking-wider text-zinc-500">
-                  Setup Signal
+                  Scalp Punch Signal
                 </span>
-                {data?.ema9 > data?.ema21 && data?.rsi > 50 ? (
+                {data?.close > data?.ema21 && data?.close > data?.vwap ? (
                   <span className="flex items-center gap-2 text-[#34C759] text-sm font-bold">
-                    <TrendingUp className="w-4 h-4" /> BULLISH SETUP
+                    <TrendingUp className="w-4 h-4" /> BUY PUNCH
                   </span>
-                ) : data?.ema9 < data?.ema21 && data?.rsi < 50 ? (
+                ) : data?.close < data?.ema21 && data?.close < data?.vwap ? (
                   <span className="flex items-center gap-2 text-[#FF3B30] text-sm font-bold">
-                    <TrendingDown className="w-4 h-4" /> BEARISH SETUP
+                    <TrendingDown className="w-4 h-4" /> SELL PUNCH
                   </span>
                 ) : (
                   <span className="flex items-center gap-2 text-[#FFCC00] text-sm font-bold">
-                    <AlertTriangle className="w-4 h-4" /> NO CLEAR SETUP
+                    <AlertTriangle className="w-4 h-4" /> NO PUNCH — WAIT
                   </span>
                 )}
               </div>

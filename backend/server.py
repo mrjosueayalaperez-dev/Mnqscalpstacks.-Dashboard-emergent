@@ -268,17 +268,14 @@ async def send_discord_signal(signal: dict):
     # Confluence components display
     components = signal.get("components", {})
     pillars = []
+    if components.get("ema21_cross"):
+        pillars.append("EMA21 Cross")
     if components.get("vwap_filter"):
         pillars.append("VWAP")
-    if components.get("rsi_momentum"):
-        pillars.append("RSI")
-    if components.get("structure"):
-        pillars.append("Structure")
-    # Fallback for legacy/webhook signals
     if not pillars:
-        pillars = ["Price", "Flow", "NQ"]
+        pillars = ["EMA21", "VWAP"]
 
-    pillar_status = ", ".join(pillars) + " Confirmed"
+    pillar_status = " + ".join(pillars) + " Confirmed"
     score = signal.get("confluence_score", 0)
 
     # Risk-reward calculation
@@ -293,11 +290,11 @@ async def send_discord_signal(signal: dict):
         "username": "MNQ SCALP STACKS BOT",
         "avatar_url": "https://i.imgur.com/4S7S5vj.png",
         "embeds": [{
-            "title": f"{side_emoji} NEW SCALP STACK SIGNAL — {side_label}",
+            "title": f"{side_emoji} SCALP PUNCH — {side_label}",
             "color": signal_color,
             "fields": [
-                {"name": "Asset", "value": f"{signal.get('symbol', 'MNQ')} (Micro Nasdaq)", "inline": True},
-                {"name": "Strategy", "value": f"3-Pillar Setup ({score}/3)", "inline": True},
+                {"name": "Asset", "value": "MNQ (Micro Nasdaq)", "inline": True},
+                {"name": "Strategy", "value": f"Scalp Punch ({score}/2)", "inline": True},
                 {"name": "Status", "value": f"{'✅' if score >= 2 else '⚠️'} {pillar_status}", "inline": False},
                 {"name": "Entry", "value": f"```${entry:.2f}```", "inline": True},
                 {"name": "Stop Loss", "value": f"```${stop:.2f}```", "inline": True},
@@ -336,43 +333,38 @@ def compute_confluence(price: float, prev_high: float, prev_low: float,
                        open_price: float, close_price: float,
                        high_price: float, low_price: float,
                        ema20: float, ema50: float) -> dict:
-    """Compute the MNQ Stack v2 confluence score
-    Matches Pine Script: Session VWAP + Structure (higher-low / lower-high)
+    """Compute MNQ Scalp Punch confluence
+    BUY Punch: Price crosses above EMA21 + Price > VWAP
+    SELL Punch: Price crosses below EMA21 + Price < VWAP
     """
-    vwap = ema20  # Proxy: in live use, session VWAP is passed in
+    ema21 = ema20  # Using ema20 as proxy for EMA21
+    vwap = ema50   # Using ema50 as proxy for VWAP
 
-    # 1. VWAP filter
+    # EMA21 crossover detection
+    ema21_cross_above = close_price > ema21 and open_price <= ema21
+    ema21_cross_below = close_price < ema21 and open_price >= ema21
+
+    # VWAP filter
     above_vwap = close_price > vwap
     below_vwap = close_price < vwap
 
-    # 2. RSI momentum (simulated with price action)
-    rsi_rising = close_price > open_price  # Bullish candle = proxy for RSI rising
-    rsi_falling = close_price < open_price  # Bearish candle = proxy for RSI falling
+    # Scalp Punch signals
+    buy_punch = ema21_cross_above and above_vwap
+    sell_punch = ema21_cross_below and below_vwap
 
-    # 3. Structure: Higher-Low / Lower-High (pivot-based)
-    # Higher-low: current low above previous low
-    higher_low = low_price > prev_low
-    # Lower-high: current high below previous high
-    lower_high = high_price < prev_high
-
-    # 4. Confluence scores (v2: VWAP + RSI + Structure)
-    long_score = int(above_vwap) + int(rsi_rising) + int(higher_low)
-    short_score = int(below_vwap) + int(rsi_falling) + int(lower_high)
-
-    long_signal = long_score >= 3  # All 3 conditions met
-    short_signal = short_score >= 3
+    # Score: EMA21 cross + VWAP confirmation
+    long_score = int(ema21_cross_above) + int(above_vwap)
+    short_score = int(ema21_cross_below) + int(below_vwap)
 
     return {
+        "ema21_cross_above": ema21_cross_above,
+        "ema21_cross_below": ema21_cross_below,
         "above_vwap": above_vwap,
         "below_vwap": below_vwap,
-        "rsi_rising": rsi_rising,
-        "rsi_falling": rsi_falling,
-        "higher_low": higher_low,
-        "lower_high": lower_high,
         "long_score": long_score,
         "short_score": short_score,
-        "long_signal": long_signal,
-        "short_signal": short_signal,
+        "long_signal": buy_punch,
+        "short_signal": sell_punch,
         "trend_direction": "bullish" if above_vwap else ("bearish" if below_vwap else "neutral"),
     }
 
@@ -1144,7 +1136,7 @@ async def get_system_health():
 # Test Signal Generator
 @api_router.post("/signals/test")
 async def generate_test_signal(background_tasks: BackgroundTasks):
-    """Generate a test signal matching v2 logic (Session VWAP + Structure)"""
+    """Generate a test signal matching Scalp Punch logic (EMA21 cross + VWAP)"""
     global signal_engine_state
 
     if signal_engine_state["kill_switch"]:
@@ -1154,26 +1146,23 @@ async def generate_test_signal(background_tasks: BackgroundTasks):
     base_price = 18500 + random.uniform(-100, 100)
     entry = round(base_price, 2)
 
-    # v2: Pivot-based SL/TP (structure highs/lows)
-    # SL = last pivot low (long) or last pivot high (short) + buffer
-    # TP = last pivot high (long) or last pivot low (short)
-    swing_range = random.uniform(6, 15)  # Realistic pivot distance
-    sl_buffer = 0.25  # 1 tick buffer
+    # Scalp Punch: EMA21 as spine, VWAP as institutional level
+    swing_range = random.uniform(8, 18)
+    sl_buffer = 0.25
 
     if side == "long":
-        stop = round(entry - swing_range - sl_buffer, 2)  # Below last pivot low
-        tp1 = round(entry + swing_range * 1.2, 2)  # Last pivot high
-        tp2 = round(entry + swing_range * 2.0, 2)  # Extended target
+        stop = round(entry - swing_range - sl_buffer, 2)
+        tp1 = round(entry + swing_range * 1.2, 2)
+        tp2 = round(entry + swing_range * 2.0, 2)
     else:
-        stop = round(entry + swing_range + sl_buffer, 2)  # Above last pivot high
-        tp1 = round(entry - swing_range * 1.2, 2)  # Last pivot low
-        tp2 = round(entry - swing_range * 2.0, 2)  # Extended target
+        stop = round(entry + swing_range + sl_buffer, 2)
+        tp1 = round(entry - swing_range * 1.2, 2)
+        tp2 = round(entry - swing_range * 2.0, 2)
 
-    # v2 confluence: VWAP + RSI momentum + Structure
-    above_vwap = side == "long"
-    rsi_confirm = random.choice([True, True, True, False])  # 75% hit rate
-    structure = random.choice([True, True, False])  # Higher-low or lower-high
-    score = int(above_vwap) + int(rsi_confirm) + int(structure)
+    # Scalp Punch confluence: EMA21 crossover + VWAP filter
+    ema21_cross = random.choice([True, True, True, False])
+    vwap_confirm = side == "long"  # Above VWAP for longs
+    score = int(ema21_cross) + int(vwap_confirm)
 
     signal_obj = Signal(
         symbol="MNQ",
@@ -1184,9 +1173,8 @@ async def generate_test_signal(background_tasks: BackgroundTasks):
         tp2=tp2,
         confluence_score=score,
         components={
-            "vwap_filter": above_vwap,
-            "rsi_momentum": rsi_confirm,
-            "structure": structure,
+            "ema21_cross": ema21_cross,
+            "vwap_filter": vwap_confirm,
         },
         trend_direction="bullish" if side == "long" else "bearish",
         source="test",
@@ -1208,169 +1196,69 @@ async def generate_test_signal(background_tasks: BackgroundTasks):
 # Pine Script Reference
 @api_router.get("/signals/pinescript")
 async def get_pine_script():
-    """Get the Pine Script v2 for TradingView"""
+    """Get the MNQ Scalp Punch v1 Pine Script"""
     pine = '''//@version=5
-strategy("MNQ Scalp Stack v2 (1m) - Session VWAP + Structure", overlay=true,
-     initial_capital=10000, pyramiding=0,
-     commission_type=strategy.commission.percent, commission_value=0.01)
+indicator("MNQ Scalp Punch v1", overlay=true)
 
-// -------------------- Inputs --------------------
-useSessionVWAP  = input.bool(true, "Use Session VWAP (recommended)")
-rsiLen          = input.int(14, "RSI Length", minval=2)
-rsiLongMin      = input.float(55, "RSI Long Min", step=0.5)
-rsiShortMax     = input.float(45, "RSI Short Max", step=0.5)
+// Inputs for your setup
+emaLen = input.int(21, "EMA 21 Spine")
+vwapSrc = input.source(hlc3, "VWAP Source")
 
-structureBars   = input.int(5, "Structure window (candles)", minval=3)
-tpLookbackBars  = input.int(20, "TP lookback window (candles)", minval=5)
+// Calculations
+ema21 = ta.ema(close, emaLen)
+vwapVal = ta.vwap(vwapSrc)
 
-slBufferTicks   = input.int(1, "SL buffer (ticks)", minval=0, maxval=5)
-pivotLen        = input.int(2, "Pivot len (left/right)", minval=1, maxval=5)
+// Signals: Buy when price is above both and bounces
+buySignal = ta.crossover(close, ema21) and close > vwapVal
+sellSignal = ta.crossunder(close, ema21) and close < vwapVal
 
-// -------------------- Indicators --------------------
-vwap = useSessionVWAP ? ta.vwap(close) : ta.sma(close, 20)
-rsi  = ta.rsi(close, rsiLen)
+// Plotting the lines
+plot(ema21, color=color.white, linewidth=3, title="EMA 21 Spine")
+plot(vwapVal, color=color.blue, linewidth=2, title="VWAP")
 
-rsiRising  = rsi > rsi[1]
-rsiFalling = rsi < rsi[1]
+// Punching the Arrows on the screen
+plotshape(buySignal, style=shape.triangleup, location=location.belowbar, color=color.green, size=size.small, title="BUY Punch")
+plotshape(sellSignal, style=shape.triangledown, location=location.abovebar, color=color.red, size=size.small, title="SELL Punch")
 
-// -------------------- Pivots (confirmed) --------------------
-tickSize = syminfo.mintick
-
-ph = ta.pivothigh(high, pivotLen, pivotLen)
-pl = ta.pivotlow(low, pivotLen, pivotLen)
-
-var float lastPL = na
-var float prevPL = na
-var int   lastPLBar = na
-var int   prevPLBar = na
-
-if not na(pl)
-    prevPL := lastPL
-    prevPLBar := lastPLBar
-    lastPL := pl
-    lastPLBar := bar_index
-
-var float lastPH = na
-var float prevPH = na
-var int   lastPHBar = na
-var int   prevPHBar = na
-
-if not na(ph)
-    prevPH := lastPH
-    prevPHBar := lastPHBar
-    lastPH := ph
-    lastPHBar := bar_index
-
-// -------------------- Structure: higher-low / lower-high --------------------
-higherLowFormed =
-     not na(lastPL) and not na(prevPL) and
-     (bar_index - lastPLBar) <= structureBars and
-     (lastPL > prevPL + tickSize * slBufferTicks)
-
-lowerHighFormed =
-     not na(lastPH) and not na(prevPH) and
-     (bar_index - lastPHBar) <= structureBars and
-     (lastPH < prevPH - tickSize * slBufferTicks)
-
-// -------------------- Entry conditions (bar close) --------------------
-longSignal =
-     close > vwap and
-     rsi > rsiLongMin and rsiRising and
-     higherLowFormed
-
-shortSignal =
-     close < vwap and
-     rsi < rsiShortMax and rsiFalling and
-     lowerHighFormed
-
-// -------------------- TP/SL (latest confirmed swing within lookback) --------------------
-tpHighOk = not na(lastPH) and (bar_index - lastPHBar) <= tpLookbackBars
-tpLowOk  = not na(lastPL) and (bar_index - lastPLBar) <= tpLookbackBars
-
-longSL  = not na(lastPL) ? (lastPL - tickSize * slBufferTicks) : na
-longTP  = tpHighOk ? lastPH : na
-
-shortSL = not na(lastPH) ? (lastPH + tickSize * slBufferTicks) : na
-shortTP = tpLowOk ? lastPL : na
-
-validLongLevels  = not na(longSL) and not na(longTP) and longTP > close
-validShortLevels = not na(shortSL) and not na(shortTP) and shortTP < close
-
-// -------------------- Orders --------------------
-if longSignal and validLongLevels
-    strategy.entry("L", strategy.long)
-    strategy.exit("L-exit", from_entry="L", stop=longSL, limit=longTP)
-
-if shortSignal and validShortLevels
-    strategy.entry("S", strategy.short)
-    strategy.exit("S-exit", from_entry="S", stop=shortSL, limit=shortTP)
-
-// -------------------- Plotting --------------------
-plot(vwap, "VWAP", color=color.new(color.orange, 0))
-
-plotshape(longSignal,  title="Long Signal",  style=shape.triangleup,   location=location.belowbar, color=color.new(color.lime, 0), size=size.tiny, text="L")
-plotshape(shortSignal, title="Short Signal", style=shape.triangledown, location=location.abovebar, color=color.new(color.red, 0),  size=size.tiny, text="S")
-
-// -------------------- Resistance Zones (Wave Validation) --------------------
+// Resistance Zone (27,972)
 resistanceLevel = input.float(27972, "Key Resistance Level", step=1)
 resistanceBuffer = input.float(50, "Resistance Zone Width", step=5)
-
 inResistanceZone = math.abs(close - resistanceLevel) < resistanceBuffer
+bgcolor(inResistanceZone ? color.new(color.red, 90) : na, title="Resistance Zone")
 
-// Plot resistance zone
-resistanceHigh = resistanceLevel + resistanceBuffer
-resistanceLow = resistanceLevel - resistanceBuffer
-p1 = plot(resistanceHigh, "Resistance High", color=color.new(color.red, 80), linewidth=1)
-p2 = plot(resistanceLow, "Resistance Low", color=color.new(color.red, 80), linewidth=1)
-fill(p1, p2, color=inResistanceZone ? color.new(color.red, 85) : color.new(color.red, 95), title="Resistance Zone")
-
-// Resistance zone label
-if inResistanceZone and barstate.islast
-    label.new(bar_index, resistanceLevel, "RESISTANCE: " + str.tostring(resistanceLevel), style=label.style_label_left, color=color.new(color.red, 70), textcolor=color.white, size=size.small)
-
-// Wave Validation: suppress signals in resistance zone for longs
-longSignalValidated = longSignal and validLongLevels and not inResistanceZone
-shortSignalValidated = shortSignal and validShortLevels
-
-// Override orders with wave-validated signals
-if longSignalValidated
-    strategy.entry("L", strategy.long)
-    strategy.exit("L-exit", from_entry="L", stop=longSL, limit=longTP)
-
-if shortSignalValidated
-    strategy.entry("S", strategy.short)
-    strategy.exit("S-exit", from_entry="S", stop=shortSL, limit=shortTP)
-
-// Plot psychological levels (00 and 50)
+// Psychological levels (00 and 50)
 plot(math.round(close / 100) * 100, "Level 00", color=color.new(color.gray, 70), style=plot.style_cross)
 plot(math.round(close / 100) * 100 + 50, "Level 50", color=color.new(color.gray, 80), style=plot.style_cross)
 
-// -------------------- Alerts --------------------
-alertcondition(longSignalValidated,  title="Long Signal (Validated)",  message='{"type":"buy","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
-alertcondition(shortSignalValidated, title="Short Signal (Validated)", message='{"type":"sell","symbol":"{{ticker}}","price":"{{close}}","time":"{{time}}"}')
-alertcondition(inResistanceZone, title="Resistance Zone Alert", message='{"type":"resistance","symbol":"{{ticker}}","price":"{{close}}","level":"27972"}')
+// Wave-validated signals (suppress longs in resistance)
+buyPunch = buySignal and not inResistanceZone
+sellPunch = sellSignal
+
+// Alerts
+alertcondition(buyPunch, title="BUY Punch", message='{"type":"buy","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
+alertcondition(sellPunch, title="SELL Punch", message='{"type":"sell","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
+alertcondition(inResistanceZone, title="Resistance Zone", message='{"type":"resistance","symbol":"MNQ","price":"{{close}}","level":"27972"}')
 '''
     webhook_instructions = f"""
-## TradingView Webhook Setup (v3 — Wave Validated)
+## TradingView Webhook Setup — MNQ Scalp Punch v1
 
-1. Open TradingView -> MNQ 1-min chart
+1. Open TradingView -> MNQ 1-min chart (MNQ ONLY)
 2. Pine Editor -> Paste the script above -> Add to Chart
 3. Create Alert (right-click chart -> Add Alert)
-4. Condition: "MNQ Scalp Stack v2" -> "Long Signal (Validated)" or "Short Signal (Validated)"
+4. Condition: "MNQ Scalp Punch v1" -> "BUY Punch" or "SELL Punch"
 5. Enable "Webhook URL" and paste:
    {os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')}/api/webhook/tradingview
 
 6. Webhook message (auto-filled by alertcondition):
-   {{"type":"buy","symbol":"{{{{ticker}}}}","price":"{{{{close}}}}","time":"{{{{time}}}}"}}
+   {{"type":"buy","symbol":"MNQ","price":"{{{{close}}}}","time":"{{{{time}}}}"}}
 
-## v3 Signal Logic (Wave Validated):
-- Session VWAP filter (price above/below)
-- RSI 14 momentum (rising > 55 for longs, falling < 45 for shorts)
-- Structure confirmation (higher-low for longs, lower-high for shorts)
-- Pivot-based TP/SL (confirmed swing highs/lows)
-- **NEW: 27,972 Resistance Zone** — Long signals suppressed in resistance
-- **NEW: Wave Validation** — Numeric data integrity check
-- **NEW: Psychological levels** (00/50) plotted on chart
+## MNQ Scalp Punch Logic:
+- EMA 21 Spine (white line — the backbone)
+- Session VWAP (blue line — institutional level)
+- BUY Punch: Price crosses ABOVE EMA 21 + Price > VWAP
+- SELL Punch: Price crosses BELOW EMA 21 + Price < VWAP
+- 27,972 Resistance Zone — Longs suppressed in zone
+- Psychological levels (00/50) plotted
 """
 
     return {
