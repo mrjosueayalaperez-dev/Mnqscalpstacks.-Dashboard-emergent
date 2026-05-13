@@ -8,6 +8,8 @@ import PerformancePage from "@/components/PerformancePage";
 import BacktestManager from "@/components/BacktestManager";
 import LandingPage from "@/components/LandingPage";
 import AdminPanel from "@/components/AdminPanel";
+import SafetySentinel from "@/components/SafetySentinel";
+import HydroPilot from "@/components/HydroPilot";
 import {
   TrendingUp,
   TrendingDown,
@@ -59,7 +61,7 @@ const Header = ({ onRefresh, lastUpdate }) => (
     <div className="flex items-center gap-3">
       <Activity className="w-6 h-6 text-[#007AFF]" />
       <h1 className="text-lg font-black tracking-tight">
-        TRADING COMMAND CENTER
+        MNQ COMMAND CENTER
       </h1>
     </div>
     <div className="flex items-center gap-4">
@@ -1416,28 +1418,11 @@ function App() {
           {/* Signal Engine Dashboard */}
           <SignalDashboard />
 
-          {/* Watchlist */}
-          <Watchlist
-            items={watchlist}
-            quotes={quotes}
-            onRemove={handleRemoveWatchlist}
-            onAdd={handleAddWatchlist}
-          />
+          {/* SLOT 1: Safety Sentinel (replaces Trade Journal) */}
+          <SafetySentinel />
 
-          {/* Scanner */}
-          <StockScanner
-            results={scanResults}
-            onScan={handleScan}
-            loading={loading.scan}
-          />
-
-          {/* Trade Journal - Takes more space */}
-          <TradeJournal
-            trades={trades}
-            stats={tradeStats}
-            onAddTrade={handleAddTrade}
-            onCloseTrade={handleCloseTrade}
-          />
+          {/* SLOT 2: Hydro-Pilot (replaces Watchlist) */}
+          <HydroPilot />
 
           {/* Checklist */}
           <Checklist
