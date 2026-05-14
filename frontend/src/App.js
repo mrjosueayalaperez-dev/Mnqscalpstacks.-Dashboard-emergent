@@ -10,6 +10,10 @@ import LandingPage from "@/components/LandingPage";
 import AdminPanel from "@/components/AdminPanel";
 import SafetySentinel from "@/components/SafetySentinel";
 import HydroPilot from "@/components/HydroPilot";
+import DualGate from "@/components/DualGate";
+import SimulationTemple from "@/components/SimulationTemple";
+import PerformanceEngine from "@/components/PerformanceEngine";
+import KnowledgeVault from "@/components/KnowledgeVault";
 import {
   TrendingUp,
   TrendingDown,
@@ -1410,21 +1414,19 @@ function App() {
       />
       <Header onRefresh={handleRefreshAll} lastUpdate={lastUpdate} />
 
-      <main className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-4">
-          {/* MNQ Tracker - Full width on mobile, 4 cols on lg */}
+      <main className="p-3 md:p-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+          {/* ROW 1: MNQ Scalp Punch + Dual-Gate + Simulation Temple */}
           <MNQTracker data={mnqData} loading={loading.mnq} />
+          <DualGate />
+          <SimulationTemple />
 
-          {/* Signal Engine Dashboard */}
+          {/* ROW 2: Signal Engine (full width) */}
           <SignalDashboard />
 
-          {/* SLOT 1: Safety Sentinel (replaces Trade Journal) */}
+          {/* ROW 3: Safety Sentinel + Hydro-Pilot + Checklist */}
           <SafetySentinel />
-
-          {/* SLOT 2: Hydro-Pilot (replaces Watchlist) */}
           <HydroPilot />
-
-          {/* Checklist */}
           <Checklist
             items={checklist}
             onToggle={handleToggleChecklist}
@@ -1432,25 +1434,22 @@ function App() {
             onAdd={handleAddChecklist}
           />
 
-          {/* AI Analysis */}
+          {/* ROW 4: Performance Engine (wide) + Knowledge Vault */}
+          <PerformanceEngine />
+          <KnowledgeVault />
+
+          {/* ROW 5: AI + Alerts + Position Calculator */}
           <AIAnalysis
             onAnalyze={handleAIAnalyze}
             loading={loading.ai}
             result={aiResult}
           />
-
-          {/* Alerts */}
           <AlertsPanel
             alerts={alerts}
             onAdd={handleAddAlert}
             onDelete={handleDeleteAlert}
           />
-
-          {/* Position Calculator */}
           <PositionCalculator />
-
-          {/* Backtest Results */}
-          <BacktestManager />
         </div>
       </main>
     </div>
