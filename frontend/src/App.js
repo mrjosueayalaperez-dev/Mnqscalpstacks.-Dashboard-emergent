@@ -15,6 +15,8 @@ import SimulationTemple from "@/components/SimulationTemple";
 import PerformanceEngine from "@/components/PerformanceEngine";
 import KnowledgeVault from "@/components/KnowledgeVault";
 import ExecutionHub from "@/components/ExecutionHub";
+import AutoSignalEngine from "@/components/AutoSignalEngine";
+import { FreemiumGate, AdBanner } from "@/components/FreemiumGate";
 import {
   TrendingUp,
   TrendingDown,
@@ -1423,14 +1425,30 @@ function App() {
           <DualGate safeMode={safeMode} onToggleSafe={setSafeMode} />
           <SimulationTemple />
 
-          {/* ROW 2: EXECUTION HUB (BUY/SELL PUNCH) + Signal Engine */}
+          {/* ROW 2: EXECUTION HUB (BUY/SELL PUNCH) + Safety Sentinel */}
           <ExecutionHub mnqPrice={mnqData?.close || mnqData?.price} safeMode={safeMode} />
           <SafetySentinel />
 
-          {/* ROW 3: Signal Engine (full width) */}
+          {/* ROW 3: Auto Signal Engine + Freemium Plans */}
+          <AutoSignalEngine
+            mnqData={mnqData}
+            onAutoExecute={(side) => {
+              axios.post(`${API}/trades`, {
+                symbol: "MNQ",
+                entry_price: mnqData?.close || mnqData?.price || 18500,
+                quantity: 1,
+                side: side,
+                notes: `AUTO | ${side.toUpperCase()} | Signal Engine`,
+              }).then(() => toast.success(`AUTO ${side.toUpperCase()} executed`))
+                .catch(() => toast.error("Auto execution failed"));
+            }}
+          />
+          <FreemiumGate userPlan="free" />
+
+          {/* ROW 4: Signal Engine */}
           <SignalDashboard />
 
-          {/* ROW 4: Hydro-Pilot + Checklist + Knowledge Vault */}
+          {/* ROW 5: Hydro-Pilot + Checklist */}
           <HydroPilot />
           <Checklist
             items={checklist}
@@ -1439,11 +1457,11 @@ function App() {
             onAdd={handleAddChecklist}
           />
 
-          {/* ROW 4: Performance Engine (wide) + Knowledge Vault */}
+          {/* ROW 6: Performance Engine + Knowledge Vault */}
           <PerformanceEngine />
           <KnowledgeVault />
 
-          {/* ROW 5: AI + Alerts + Position Calculator */}
+          {/* ROW 7: AI + Alerts + Position Calculator */}
           <AIAnalysis
             onAnalyze={handleAIAnalyze}
             loading={loading.ai}
@@ -1455,6 +1473,9 @@ function App() {
             onDelete={handleDeleteAlert}
           />
           <PositionCalculator />
+
+          {/* Ad Placements (Free tier) */}
+          <AdBanner position="bottom" />
         </div>
       </main>
     </div>
