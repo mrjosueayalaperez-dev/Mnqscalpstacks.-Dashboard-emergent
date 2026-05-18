@@ -11,8 +11,12 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
 import asyncio
-import random
+import secrets
+import hashlib
 from emergentintegrations.llm.chat import LlmChat, UserMessage
+
+# Secure random generator
+_rng = secrets.SystemRandom()
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -492,18 +496,17 @@ async def get_intraday(symbol: str):
     data = await fetch_intraday_data(symbol.upper())
     if not data:
         # Generate mock intraday data
-        import random
         base_price = 150 + (hash(symbol) % 50)
         mock_data = []
         for i in range(50):
-            price = base_price + random.uniform(-5, 5)
+            price = base_price + _rng.uniform(-5, 5)
             mock_data.append({
                 "time": f"2024-01-15 {9 + i//12}:{(i*5) % 60:02d}:00",
                 "open": price,
-                "high": price + random.uniform(0, 2),
-                "low": price - random.uniform(0, 2),
-                "close": price + random.uniform(-1, 1),
-                "volume": random.randint(10000, 100000)
+                "high": price + _rng.uniform(0, 2),
+                "low": price - _rng.uniform(0, 2),
+                "close": price + _rng.uniform(-1, 1),
+                "volume": _rng.randint(10000, 100000)
             })
         return {"data": mock_data, "is_mock": True}
     return {"data": data}
@@ -545,15 +548,14 @@ async def scan_stocks(min_change: float = 3.0):
     
     # Add some mock results if no real results
     if not results:
-        import random
         for symbol in symbols[:3]:
-            change = random.uniform(3, 8) * (1 if random.random() > 0.5 else -1)
+            change = _rng.uniform(3, 8) * (1 if _rng.random() > 0.5 else -1)
             results.append({
                 "symbol": symbol,
                 "price": 10 + (hash(symbol) % 20),
                 "change": round(change * 0.1, 2),
                 "change_percent": str(round(change, 2)),
-                "volume": random.randint(500000, 5000000),
+                "volume": _rng.randint(500000, 5000000),
                 "alert_type": "breakout" if change > 0 else "breakdown",
                 "is_mock": True
             })
@@ -570,12 +572,12 @@ async def get_mnq_data():
     quote = await fetch_stock_quote("QQQ")
     if not quote:
         base = 18500
-        price = base + random.uniform(-50, 50)
-        close_price = price + random.uniform(-5, 5)
+        price = base + _rng.uniform(-50, 50)
+        close_price = price + _rng.uniform(-5, 5)
         vwap = base + 10
         ema9 = base + 15
         ema21 = base - 5
-        rsi_val = 50 + random.randint(-15, 15)
+        rsi_val = 50 + _rng.randint(-15, 15)
         
         # Resistance zone check
         resistance_zones_hit = [z for z in RESISTANCE_ZONES if abs(price - z) < 50]
@@ -584,8 +586,8 @@ async def get_mnq_data():
             "symbol": "MNQ",
             "price": round(price, 2),
             "close": round(close_price, 2),
-            "change": round(random.uniform(-100, 100), 2),
-            "change_percent": str(round(random.uniform(-1, 1), 2)),
+            "change": round(_rng.uniform(-100, 100), 2),
+            "change_percent": str(round(_rng.uniform(-1, 1), 2)),
             "high": round(base + 100, 2),
             "low": round(base - 100, 2),
             "vwap": round(vwap, 2),
@@ -602,7 +604,7 @@ async def get_mnq_data():
     # Scale QQQ to approximate MNQ
     scale = 45
     price = round(quote["price"] * scale, 2)
-    close_price = round(price + random.uniform(-2, 2), 2)
+    close_price = round(price + _rng.uniform(-2, 2), 2)
     vwap = round(quote["price"] * scale * 0.998, 2)
     ema9 = round(quote["price"] * scale * 1.001, 2)
     ema21 = round(quote["price"] * scale * 0.999, 2)
@@ -1142,12 +1144,12 @@ async def generate_test_signal(background_tasks: BackgroundTasks):
     if signal_engine_state["kill_switch"]:
         return {"status": "blocked", "reason": "Kill switch active"}
 
-    side = random.choice(["long", "short"])
-    base_price = 18500 + random.uniform(-100, 100)
+    side = _rng.choice(["long", "short"])
+    base_price = 18500 + _rng.uniform(-100, 100)
     entry = round(base_price, 2)
 
     # Scalp Punch: EMA21 as spine, VWAP as institutional level
-    swing_range = random.uniform(8, 18)
+    swing_range = _rng.uniform(8, 18)
     sl_buffer = 0.25
 
     if side == "long":
@@ -1160,7 +1162,7 @@ async def generate_test_signal(background_tasks: BackgroundTasks):
         tp2 = round(entry - swing_range * 2.0, 2)
 
     # Scalp Punch confluence: EMA21 crossover + VWAP filter
-    ema21_cross = random.choice([True, True, True, False])
+    ema21_cross = _rng.choice([True, True, True, False])
     vwap_confirm = side == "long"  # Above VWAP for longs
     score = int(ema21_cross) + int(vwap_confirm)
 
@@ -1538,12 +1540,12 @@ async def seed_demo_performance():
     for day_offset in range(30):
         day = base_time + timedelta(days=day_offset)
         # 1-3 signals per day
-        num_signals = random.randint(1, 3)
+        num_signals = _rng.randint(1, 3)
         for i in range(num_signals):
-            outcome_data = random.choice(outcomes)
+            outcome_data = _rng.choice(outcomes)
             outcome, pnl, status = outcome_data
-            side = random.choice(["long", "short"])
-            base_price = 18300 + random.uniform(-200, 200)
+            side = _rng.choice(["long", "short"])
+            base_price = 18300 + _rng.uniform(-200, 200)
             entry = round(base_price, 2)
 
             if side == "long":
@@ -1555,8 +1557,8 @@ async def seed_demo_performance():
                 tp1 = round(entry - 10, 2)
                 tp2 = round(entry - 20, 2)
 
-            score = random.randint(2, 3)
-            sig_time = day + timedelta(hours=random.choice([9, 10, 15, 16]), minutes=random.randint(0, 59))
+            score = _rng.randint(2, 3)
+            sig_time = day + timedelta(hours=_rng.choice([9, 10, 15, 16]), minutes=_rng.randint(0, 59))
 
             sig = {
                 "id": str(uuid.uuid4()),
@@ -1568,7 +1570,7 @@ async def seed_demo_performance():
                 "tp2": tp2,
                 "confluence_score": score,
                 "components": {
-                    "near_level": random.choice([True, False]),
+                    "near_level": _rng.choice([True, False]),
                     "rejection": True,
                     "momentum_break": score >= 2,
                 },
@@ -1606,8 +1608,7 @@ async def create_subscriber(sub: SubscriberCreate):
         }
 
     # Generate unique referral code
-    import hashlib
-    ref_code = hashlib.md5(sub.email.encode()).hexdigest()[:8].upper()
+    ref_code = hashlib.sha256(sub.email.encode()).hexdigest()[:8].upper()
 
     subscriber = {
         "id": str(uuid.uuid4()),

@@ -467,13 +467,13 @@ const LandingPage = () => {
     if (ref) {
       axios.get(`${API}/referral/${ref}`).then(r => {
         if (r.data.valid) setReferrerName(r.data.referrer_name);
-      }).catch(() => {});
+      }).catch((e) => console.error("Referral lookup error:", e));
     }
   }, []);
 
   useEffect(() => {
-    axios.post(`${API}/backtests/seed-demo`).catch(() => {});
-    axios.get(`${API}/public/backtests`).then(r => { if (r.data.length > 0) setBacktestStats(r.data[0]); }).catch(() => {});
+    axios.post(`${API}/backtests/seed-demo`).catch((e) => console.error("Seed error:", e));
+    axios.get(`${API}/public/backtests`).then(r => { if (r.data.length > 0) setBacktestStats(r.data[0]); }).catch((e) => console.error("Backtest fetch error:", e));
   }, []);
 
   // Check for payment return
@@ -487,7 +487,7 @@ const LandingPage = () => {
           const res = await axios.get(`${API}/checkout/status/${sessionId}`);
           if (res.data.payment_status === "paid") { setSignedUp(true); toast.success("Payment successful!"); }
           else if (res.data.status !== "expired") setTimeout(() => poll(attempts + 1), 2000);
-        } catch (e) {}
+        } catch (e) { console.error("Payment poll error:", e); }
       };
       poll();
       window.history.replaceState({}, "", "/");
@@ -543,7 +543,7 @@ const LandingPage = () => {
     try {
       await axios.patch(`${API}/welcome/${stepId}/complete`);
       setWelcomeSteps(prev => prev.map(s => s.id === stepId ? { ...s, completed: true } : s));
-    } catch (e) {}
+    } catch (e) { console.error("Welcome step error:", e); }
   };
 
   return (

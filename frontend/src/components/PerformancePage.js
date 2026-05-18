@@ -632,7 +632,7 @@ const PerformancePage = () => {
       try {
         const res = await axios.get(`${API}/public/performance`);
         setData(res.data);
-      } catch (e) { /* silent */ }
+      } catch (e) { console.error("Performance refresh error:", e); }
     }, 15000);
     return () => clearInterval(interval);
   }, []);
