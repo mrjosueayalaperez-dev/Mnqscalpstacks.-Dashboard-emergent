@@ -14,6 +14,7 @@ import DualGate from "@/components/DualGate";
 import SimulationTemple from "@/components/SimulationTemple";
 import PerformanceEngine from "@/components/PerformanceEngine";
 import KnowledgeVault from "@/components/KnowledgeVault";
+import ExecutionHub from "@/components/ExecutionHub";
 import {
   TrendingUp,
   TrendingDown,
@@ -1141,6 +1142,7 @@ function App() {
     scan: false,
     ai: false,
   });
+  const [safeMode, setSafeMode] = useState(true);
 
   // Fetch functions
   const fetchMNQData = useCallback(async () => {
@@ -1418,14 +1420,17 @@ function App() {
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
           {/* ROW 1: MNQ Scalp Punch + Dual-Gate + Simulation Temple */}
           <MNQTracker data={mnqData} loading={loading.mnq} />
-          <DualGate />
+          <DualGate safeMode={safeMode} onToggleSafe={setSafeMode} />
           <SimulationTemple />
 
-          {/* ROW 2: Signal Engine (full width) */}
+          {/* ROW 2: EXECUTION HUB (BUY/SELL PUNCH) + Signal Engine */}
+          <ExecutionHub mnqPrice={mnqData?.close || mnqData?.price} safeMode={safeMode} />
+          <SafetySentinel />
+
+          {/* ROW 3: Signal Engine (full width) */}
           <SignalDashboard />
 
-          {/* ROW 3: Safety Sentinel + Hydro-Pilot + Checklist */}
-          <SafetySentinel />
+          {/* ROW 4: Hydro-Pilot + Checklist + Knowledge Vault */}
           <HydroPilot />
           <Checklist
             items={checklist}

@@ -9,7 +9,8 @@ const SimulationTemple = () => {
   const launchSim = () => {
     setSimActive(true);
     setBalance(100000);
-    toast.success("100K Simulation LAUNCHED — MNQ Trinity loaded");
+    window.open("https://www.tradingview.com/chart/TZAT3lzi/", "_blank");
+    toast.success("100K Simulation LAUNCHED — TradingView opened");
   };
 
   return (
