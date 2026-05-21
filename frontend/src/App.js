@@ -1421,6 +1421,15 @@ function App() {
           <DualGate safeMode={safeMode} onToggleSafe={setSafeMode} />
           <SimulationTemple />
 
+          {/* MARKET SIDEBAR (Sentiment + Session) */}
+          <MarketSidebar mnqData={mnqData} />
+
+          {/* NINJATRADER AUTOMATION CENTER */}
+          <NinjaTraderPanel />
+
+          {/* TRADINGVIEW SIGNAL INTELLIGENCE */}
+          <TradingViewPanel />
+
           {/* ROW 2: EXECUTION HUB (BUY/SELL PUNCH) + Safety Sentinel */}
           <ExecutionHub mnqPrice={mnqData?.close || mnqData?.price} safeMode={safeMode} />
           <SafetySentinel />
@@ -1474,6 +1483,9 @@ function App() {
           <AdBanner position="bottom" />
         </div>
       </main>
+
+      {/* GPay Floating FAB */}
+      <GPayWidget />
     </div>
   );
 }
