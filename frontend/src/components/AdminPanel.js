@@ -4,6 +4,7 @@ import { toast, Toaster } from "sonner";
 import {
   Users, DollarSign, Zap, BarChart3, Crown, Star, Trash2,
   ChevronUp, ChevronDown, Shield, Activity, TrendingUp, RefreshCw,
+  MousePointerClick, ExternalLink,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -12,17 +13,20 @@ const API = `${BACKEND_URL}/api`;
 const AdminPanel = () => {
   const [overview, setOverview] = useState(null);
   const [subscribers, setSubscribers] = useState([]);
+  const [clicks, setClicks] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showSubs, setShowSubs] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
-      const [ovRes, subRes] = await Promise.all([
+      const [ovRes, subRes, clickRes] = await Promise.all([
         axios.get(`${API}/admin/overview`),
         axios.get(`${API}/admin/subscribers?limit=20`),
+        axios.get(`${API}/admin/clicks`),
       ]);
       setOverview(ovRes.data);
       setSubscribers(subRes.data);
+      setClicks(clickRes.data);
     } catch (e) { console.error(e); }
     setLoading(false);
   }, []);
@@ -150,6 +154,76 @@ const AdminPanel = () => {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Affiliate Revenue Tracker */}
+        <div className="bg-[#121212] border border-white/10 rounded-sm p-4" data-testid="affiliate-clicks-panel">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 flex items-center gap-2">
+              <MousePointerClick className="w-4 h-4 text-[#FFCC00]" /> Affiliate Click Revenue
+            </h3>
+            <span className="text-[0.6rem] font-bold text-[#FFCC00]" data-testid="affiliate-total-clicks">
+              {clicks?.total_clicks || 0} total clicks
+            </span>
+          </div>
+
+          {/* By partner totals */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+            {["ninjatrader", "tradingview", "gpay", "discord"].map((p) => {
+              const row = (clicks?.by_partner || []).find((r) => r.partner === p);
+              const count = row?.clicks || 0;
+              return (
+                <div key={p} className="bg-white/5 rounded-sm p-3" data-testid={`affiliate-partner-${p}`}>
+                  <span className="text-[0.55rem] font-bold uppercase tracking-wider text-zinc-500 block">{p}</span>
+                  <span className="text-xl font-mono font-bold text-[#FFCC00]">{count}</span>
+                  <span className="block text-[0.55rem] text-zinc-600 mt-0.5">clicks</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* By CTA source (top 8) */}
+          <div className="border-t border-white/5 pt-3">
+            <h4 className="text-[0.6rem] font-bold uppercase tracking-wider text-zinc-500 mb-2">Top CTAs</h4>
+            <div className="space-y-1.5 max-h-48 overflow-y-auto">
+              {(clicks?.by_partner_src || []).slice(0, 8).map((r, i) => (
+                <div key={i} className="flex justify-between items-center text-[0.65rem]" data-testid={`affiliate-cta-${i}`}>
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[0.5rem] ${
+                      r.partner === "ninjatrader" ? "bg-[#007AFF]/15 text-[#007AFF]" :
+                      r.partner === "tradingview" ? "bg-[#34C759]/15 text-[#34C759]" :
+                      r.partner === "gpay" ? "bg-[#FFCC00]/15 text-[#FFCC00]" :
+                      "bg-white/10 text-zinc-400"
+                    }`}>{r.partner}</span>
+                    <span className="text-zinc-300 truncate">{r.src}</span>
+                  </div>
+                  <span className="text-[#FFCC00] font-mono font-bold shrink-0">{r.clicks}</span>
+                </div>
+              ))}
+              {(!clicks?.by_partner_src || clicks.by_partner_src.length === 0) && (
+                <p className="text-[0.65rem] text-zinc-600 italic">No clicks logged yet. Once a user clicks a NinjaTrader / TradingView / GPay CTA, it shows up here.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Partner URLs config status */}
+          <div className="border-t border-white/5 pt-3 mt-3">
+            <h4 className="text-[0.6rem] font-bold uppercase tracking-wider text-zinc-500 mb-2">Partner URLs (set in backend/.env)</h4>
+            <div className="space-y-1">
+              {Object.entries(clicks?.partner_urls || {}).map(([k, v]) => {
+                const needsConfig = (v || "").includes("REPLACE_WITH");
+                return (
+                  <div key={k} className="flex items-center justify-between text-[0.6rem]" data-testid={`affiliate-url-${k}`}>
+                    <span className="text-zinc-400 uppercase font-bold">{k}</span>
+                    <a href={v} target="_blank" rel="noopener noreferrer" className={`truncate ml-2 inline-flex items-center gap-1 ${needsConfig ? "text-[#FF3B30]" : "text-zinc-500 hover:text-white"}`}>
+                      {needsConfig ? "⚠ NOT CONFIGURED" : v.slice(0, 50)} <ExternalLink className="w-2.5 h-2.5" />
+                    </a>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="text-[0.55rem] text-zinc-600 mt-2">Update AFFILIATE_URL_* in backend/.env with your real affiliate links to start earning.</p>
+          </div>
         </div>
 
         {/* Recent Activity */}

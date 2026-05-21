@@ -22,6 +22,11 @@
 13. Execution Hub (40t SL / 60t TP brackets, -$100 daily lockout)
 14. Auto Signal Engine + Freemium Gates
 15. **PromoModules** (NinjaTrader Panel, TradingView Panel, Market Sidebar, GPay FAB) — wired into dashboard (2026-02-21)
+16. **Affiliate Click Tracking & Revenue Surface** (2026-02-21):
+    - All NinjaTrader / TradingView / GPay CTAs route through `GET /api/r/{partner}?src={cta_id}` (302 redirect + click log)
+    - `GET /api/admin/clicks` returns total clicks, per-partner breakdown, top-CTA breakdown, partner URL config status
+    - Admin Panel "Affiliate Click Revenue" card shows live stats and flags unconfigured partner URLs in red
+    - 3 pytest regressions in `/app/backend/tests/test_affiliate_tracking.py`
 
 ## Configured
 - Discord Webhook: LIVE

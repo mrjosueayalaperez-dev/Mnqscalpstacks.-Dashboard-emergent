@@ -1,4 +1,5 @@
-from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request
+from fastapi.responses import RedirectResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -44,6 +45,14 @@ DISCORD_INVITES = {
     "free": os.environ.get("DISCORD_INVITE_FREE", ""),
     "pro": os.environ.get("DISCORD_INVITE_PRO", ""),
     "elite": os.environ.get("DISCORD_INVITE_ELITE", ""),
+}
+
+# Affiliate / partner outbound URLs (revenue tracking)
+AFFILIATE_URLS = {
+    "ninjatrader": os.environ.get("AFFILIATE_URL_NINJATRADER", "https://ninjatrader.com/"),
+    "tradingview": os.environ.get("AFFILIATE_URL_TRADINGVIEW", "https://www.tradingview.com/"),
+    "gpay": os.environ.get("AFFILIATE_URL_GPAY", "https://pay.google.com/"),
+    "discord": os.environ.get("AFFILIATE_URL_DISCORD", "https://discord.com/"),
 }
 
 # Signal Engine State (in-memory for fast access)
@@ -2010,6 +2019,75 @@ async def get_leaderboard():
         },
         "total_subscribers": await db.subscribers.count_documents({}),
     }
+
+
+# ============== AFFILIATE CLICK TRACKING (Revenue) ==============
+
+@api_router.get("/r/{partner}")
+async def affiliate_redirect(partner: str, request: Request, src: Optional[str] = None):
+    """Logs an outbound affiliate click then 302-redirects to the partner URL.
+
+    URL format: /api/r/{partner}?src={cta_id}
+    partner: ninjatrader | tradingview | gpay | discord
+    """
+    partner_key = partner.lower().strip()
+    target = AFFILIATE_URLS.get(partner_key)
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Unknown partner: {partner}")
+
+    try:
+        await db.affiliate_clicks.insert_one({
+            "id": str(uuid.uuid4()),
+            "partner": partner_key,
+            "src": (src or "unknown")[:64],
+            "referrer": (request.headers.get("referer") or "")[:256],
+            "ua": (request.headers.get("user-agent") or "")[:256],
+            "ip_hash": hashlib.sha256(
+                (request.client.host if request.client else "0.0.0.0").encode()
+            ).hexdigest()[:16],
+            "ts": datetime.now(timezone.utc).isoformat(),
+        })
+    except Exception as e:
+        logger.warning(f"affiliate_clicks insert failed: {e}")
+
+    return RedirectResponse(url=target, status_code=302)
+
+
+@api_router.get("/admin/clicks")
+async def affiliate_click_stats():
+    """Aggregated click stats per partner + src (for the admin revenue card)."""
+    pipeline = [
+        {"$group": {
+            "_id": {"partner": "$partner", "src": "$src"},
+            "clicks": {"$sum": 1},
+            "last_click": {"$max": "$ts"},
+        }},
+        {"$sort": {"clicks": -1}},
+        {"$limit": 100},
+    ]
+    rows = await db.affiliate_clicks.aggregate(pipeline).to_list(length=100)
+    totals_pipeline = [
+        {"$group": {"_id": "$partner", "clicks": {"$sum": 1}}},
+        {"$sort": {"clicks": -1}},
+    ]
+    totals = await db.affiliate_clicks.aggregate(totals_pipeline).to_list(length=50)
+    grand_total = await db.affiliate_clicks.count_documents({})
+
+    return {
+        "total_clicks": grand_total,
+        "by_partner": [{"partner": t["_id"], "clicks": t["clicks"]} for t in totals],
+        "by_partner_src": [
+            {
+                "partner": r["_id"]["partner"],
+                "src": r["_id"]["src"],
+                "clicks": r["clicks"],
+                "last_click": r["last_click"],
+            }
+            for r in rows
+        ],
+        "partner_urls": AFFILIATE_URLS,
+    }
+
 
 # Include the router in the main app
 app.include_router(api_router)
