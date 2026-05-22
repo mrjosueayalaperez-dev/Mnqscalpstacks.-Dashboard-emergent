@@ -37,10 +37,15 @@
     - Position info (side/qty/avg entry/ticks/unrealized PnL — MNQ $2/pt)
     - Risk gates (loss gauge, trades gauge, market/auto/CD/kill status pills)
     - Signal panel (bias + confluence + EMA21/VWAP/RSI)
-    - Journal (last 15 orders with timestamps & PnL)
+    - Journal (last 15 orders with timestamps & PnL & bracket lines)
     - Master controls (FLATTEN ALL red, PAUSE yellow, RESET blue, KILL purple)
     - Backend safety chain on every order: kill_switch → automation_paused → max_daily_loss → max_daily_trades → 1500ms cooldown → LIMIT-needs-price
     - 1500ms UI cooldown on every order button (disable + visual countdown)
+    - **Snipe Mode** (`S` to arm): bypasses UI cooldown, red ring overlay, persisted in localStorage
+    - **Web Audio confirmations** (`M` to mute): distinct tones per BUY/SELL/CLOSE/BREAK_EVEN/FLATTEN/KILL/REJECT
+    - **Keyboard hotkeys** (`B`/`N`/`L`/`;`/`C`/`E`/`F`/`P`/`K`/`R`/`S`/`M`/`?`/`1`/`2`/`3`/`7`/`8`/`9`/`0`/`Escape`) with typing-safe handler
+    - **HotkeyHelp modal** (`?`) with grouped keycap legend
+    - **R-Multiple Bracket Ladder** — 3 presets (Snipe 1R 40t/60t, Snipe 2R 40t/120t, Runner 40t/200t), `7`/`8`/`9` hotkeys, `0` to toggle attach. Active preset auto-attaches SL/TP to every BUY/SELL; backend computes & logs SL/TP prices.
     - PHASE 1 banner: orders logged server-side only, NO broker connection
     - 7 pytest regressions in `/app/backend/tests/test_operator_cockpit.py`
 

@@ -20,7 +20,7 @@ const Btn = ({ children, onClick, color, locked, testId }) => (
   </button>
 );
 
-export default function OrderPanel({ side, onOrder, disabled, snipeMode = false }) {
+export default function OrderPanel({ side, onOrder, disabled, snipeMode = false, bracketLabel = null }) {
   const isLong = side === "LONG";
   const color = isLong ? "#34C759" : "#FF3B30";
   const { locked, arm } = useOrderCooldown(snipeMode ? 0 : 1500);
@@ -44,6 +44,17 @@ export default function OrderPanel({ side, onOrder, disabled, snipeMode = false 
         </h3>
         <span className="text-[0.55rem] text-zinc-500 font-mono">QTY 1</span>
       </div>
+
+      {bracketLabel && (
+        <div className="flex items-center justify-between px-2 py-1 rounded-sm bg-white/[0.03] border border-white/5" data-testid={`bracket-label-${side.toLowerCase()}`}>
+          <span className="text-[0.5rem] font-black uppercase tracking-wider" style={{ color: bracketLabel.color }}>
+            ◆ {bracketLabel.label}
+          </span>
+          <span className="text-[0.5rem] font-mono text-zinc-400">
+            SL {bracketLabel.sl}t / TP {bracketLabel.tp}t
+          </span>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-2">
         <Btn

@@ -11,6 +11,7 @@ import SignalPanel from "./SignalPanel";
 import JournalPanel from "./JournalPanel";
 import MasterControls from "./MasterControls";
 import SnipeBar, { HotkeyHelp } from "./SnipeBar";
+import BracketPresets, { PRESETS, presetById } from "./BracketPresets";
 import useHotkeys from "./useHotkeys";
 import { sounds, unlockAudio } from "./useAudio";
 
@@ -19,6 +20,8 @@ const API = `${BACKEND_URL}/api`;
 
 const LS_SNIPE = "operator.snipe";
 const LS_SOUND = "operator.sound";
+const LS_PRESET = "operator.preset";
+const LS_BRACKETS = "operator.brackets";
 
 export default function OperatorCockpit() {
   const [state, setState] = useState(null);
@@ -27,7 +30,19 @@ export default function OperatorCockpit() {
 
   const [snipe, setSnipe] = useState(() => localStorage.getItem(LS_SNIPE) === "1");
   const [sound, setSound] = useState(() => localStorage.getItem(LS_SOUND) !== "0");
+  const [presetId, setPresetId] = useState(() => localStorage.getItem(LS_PRESET) || "SNIPE_2R");
+  const [brackets, setBrackets] = useState(() => localStorage.getItem(LS_BRACKETS) !== "0");
   const [showHelp, setShowHelp] = useState(false);
+
+  const activePreset = presetById(presetId) || PRESETS[1];
+
+  const selectPreset = useCallback((id, enable) => {
+    setPresetId(id);
+    setBrackets(enable);
+    localStorage.setItem(LS_PRESET, id);
+    localStorage.setItem(LS_BRACKETS, enable ? "1" : "0");
+    if (sound) sounds.click();
+  }, [sound]);
 
   const play = useCallback((name) => {
     if (sound && sounds[name]) sounds[name]();
@@ -65,6 +80,8 @@ export default function OperatorCockpit() {
   const submitOrder = useCallback(async ({ action, order_type }) => {
     // Pick a confirmation sound based on action
     const sndMap = { BUY: "buy", SELL: "sell", CLOSE_LONG: "close", CLOSE_SHORT: "close", BREAK_EVEN: "breakEven" };
+    // Attach brackets only on opening orders
+    const attach = brackets && (action === "BUY" || action === "SELL");
     try {
       const body = {
         action,
@@ -72,11 +89,19 @@ export default function OperatorCockpit() {
         qty: 1,
         order_type,
         limit_price: order_type === "LIMIT" ? (mnq?.close || 18500) : null,
+        sl_ticks: attach ? activePreset.sl : null,
+        tp_ticks: attach ? activePreset.tp : null,
+        preset: attach ? activePreset.id : null,
       };
       const { data } = await axios.post(`${API}/operator/order`, body);
       play(sndMap[action] || "click");
+      const bracketLine = data.order?.sl_price
+        ? ` • SL ${data.order.sl_price.toFixed(2)} / TP ${data.order.tp_price.toFixed(2)} (${activePreset.label})`
+        : "";
       toast.success(`${action} ${order_type} accepted`, {
-        description: data.order ? `Fill @ ${data.order.fill_price?.toFixed(2)} • PnL ${data.order.daily_pnl >= 0 ? "+" : ""}$${data.order.daily_pnl}` : undefined,
+        description: data.order
+          ? `Fill @ ${data.order.fill_price?.toFixed(2)}${bracketLine}`
+          : undefined,
       });
       refreshState();
       refreshJournal();
@@ -85,7 +110,7 @@ export default function OperatorCockpit() {
       const detail = e.response?.data?.detail || "Order rejected";
       toast.error(`${action} blocked`, { description: detail });
     }
-  }, [mnq, refreshState, refreshJournal, play]);
+  }, [mnq, refreshState, refreshJournal, play, brackets, activePreset]);
 
   const sendControl = useCallback(async (act) => {
     try {
@@ -147,6 +172,12 @@ export default function OperatorCockpit() {
     "?": () => setShowHelp((h) => !h),
     h: () => setShowHelp((h) => !h),
     escape: () => setShowHelp(false),
+
+    // Bracket presets
+    "7": () => selectPreset("SNIPE_1R", true),
+    "8": () => selectPreset("SNIPE_2R", true),
+    "9": () => selectPreset("RUNNER", true),
+    "0": () => selectPreset(presetId, !brackets),  // toggle attach on/off
   }, true);
 
   const lastPrice = mnq?.close || mnq?.price;
@@ -196,13 +227,14 @@ export default function OperatorCockpit() {
         </div>
 
         <div className="col-span-12 md:col-span-4">
-          <OrderPanel side="LONG" onOrder={submitOrder} disabled={orderDisabled} snipeMode={snipe} />
+          <OrderPanel side="LONG" onOrder={submitOrder} disabled={orderDisabled} snipeMode={snipe} bracketLabel={brackets ? activePreset : null} />
         </div>
-        <div className="col-span-12 md:col-span-4">
+        <div className="col-span-12 md:col-span-4 space-y-3">
           <MasterControls state={state} onControl={sendControl} />
+          <BracketPresets activeId={presetId} onSelect={selectPreset} brackets={brackets} />
         </div>
         <div className="col-span-12 md:col-span-4">
-          <OrderPanel side="SHORT" onOrder={submitOrder} disabled={orderDisabled} snipeMode={snipe} />
+          <OrderPanel side="SHORT" onOrder={submitOrder} disabled={orderDisabled} snipeMode={snipe} bracketLabel={brackets ? activePreset : null} />
         </div>
 
         <div className="col-span-12 md:col-span-5">

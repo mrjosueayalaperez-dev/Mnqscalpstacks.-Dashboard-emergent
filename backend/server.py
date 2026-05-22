@@ -2048,6 +2048,9 @@ class OperatorOrder(BaseModel):
     qty: int = 1
     order_type: str = "MARKET"  # MARKET | LIMIT
     limit_price: Optional[float] = None
+    sl_ticks: Optional[int] = None  # Stop-loss distance in ticks (attached bracket)
+    tp_ticks: Optional[int] = None  # Take-profit distance in ticks (attached bracket)
+    preset: Optional[str] = None    # Human label e.g. "SNIPE_2R"
 
 
 def _ny_session_open() -> bool:
@@ -2194,6 +2197,15 @@ async def operator_order(order: OperatorOrder):
         "order_type": order.order_type,
         "limit_price": order.limit_price,
         "fill_price": fill_price,
+        "sl_ticks": order.sl_ticks,
+        "tp_ticks": order.tp_ticks,
+        "preset": order.preset,
+        "sl_price": round(fill_price - (order.sl_ticks * 0.25), 2) if order.sl_ticks and order.action == "BUY" else (
+            round(fill_price + (order.sl_ticks * 0.25), 2) if order.sl_ticks and order.action == "SELL" else None
+        ),
+        "tp_price": round(fill_price + (order.tp_ticks * 0.25), 2) if order.tp_ticks and order.action == "BUY" else (
+            round(fill_price - (order.tp_ticks * 0.25), 2) if order.tp_ticks and order.action == "SELL" else None
+        ),
         "resulting_position": _operator_state["position"],
         "daily_pnl": _operator_state["daily_pnl"],
         "phase": "SIM_LOG_ONLY",

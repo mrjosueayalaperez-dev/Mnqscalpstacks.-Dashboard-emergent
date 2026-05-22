@@ -110,6 +110,12 @@ export const HotkeyHelp = ({ onClose }) => (
             ["S", "Toggle Snipe Mode"],
             ["M", "Mute / unmute audio"],
           ]},
+          { title: "Bracket Presets", rows: [
+            ["7", "Snipe 1R (40t SL / 60t TP)"],
+            ["8", "Snipe 2R (40t SL / 120t TP)"],
+            ["9", "Runner (40t SL / 200t TP)"],
+            ["0", "Toggle attach brackets on/off"],
+          ]},
           { title: "Chart", rows: [
             ["1", "1m timeframe"],
             ["2", "5m timeframe"],
