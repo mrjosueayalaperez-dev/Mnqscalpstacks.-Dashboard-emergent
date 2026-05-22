@@ -1602,7 +1602,6 @@ async def seed_demo_performance():
 # ============== Subscriber & Stripe Routes ==============
 
 from emergentintegrations.payments.stripe.checkout import StripeCheckout, CheckoutSessionRequest
-from starlette.requests import Request
 
 @api_router.post("/subscribers")
 async def create_subscriber(sub: SubscriberCreate):
@@ -2019,6 +2018,231 @@ async def get_leaderboard():
         },
         "total_subscribers": await db.subscribers.count_documents({}),
     }
+
+
+# ============== OPERATOR COCKPIT (Personal Trading Engine) ==============
+
+# In-memory operator state (single-operator personal cockpit)
+_operator_state = {
+    "connection": {"broker": "NinjaTrader", "status": "DISCONNECTED", "account": "Sim101"},
+    "balance": 100000.00,
+    "daily_pnl": 0.0,
+    "daily_trades": 0,
+    "max_daily_loss": -1000.00,
+    "max_daily_trades": 20,
+    "session_started_at": datetime.now(timezone.utc).isoformat(),
+    "automation_paused": False,
+    "kill_switch": False,
+    "last_order_at": 0.0,  # unix ts
+    "position": {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0},
+}
+
+# Order cooldown (server-side, ms)
+_ORDER_COOLDOWN_MS = 1500
+
+
+class OperatorOrder(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    action: str  # BUY | SELL | CLOSE_LONG | CLOSE_SHORT | BREAK_EVEN
+    symbol: str = "MNQ"
+    qty: int = 1
+    order_type: str = "MARKET"  # MARKET | LIMIT
+    limit_price: Optional[float] = None
+
+
+def _ny_session_open() -> bool:
+    """Rough NY equity-session check (Mon–Fri 09:30–16:00 ET, naive UTC offset)."""
+    now = datetime.now(timezone.utc)
+    if now.weekday() >= 5:
+        return False
+    ny_minutes = (now.hour - 5) % 24 * 60 + now.minute
+    return 9 * 60 + 30 <= ny_minutes <= 16 * 60
+
+
+@api_router.get("/operator/state")
+async def operator_state():
+    s = dict(_operator_state)
+    s["session_seconds"] = int(
+        (datetime.now(timezone.utc) - datetime.fromisoformat(s["session_started_at"])).total_seconds()
+    )
+    s["market_open"] = _ny_session_open()
+    s["cooldown_ms_remaining"] = max(
+        0, int(_ORDER_COOLDOWN_MS - (datetime.now(timezone.utc).timestamp() - s["last_order_at"]) * 1000)
+    )
+    return s
+
+
+@api_router.get("/operator/candles")
+async def operator_candles(timeframe: str = "1m", count: int = 120):
+    """Synthetic OHLCV candles for the cockpit chart. Deterministic walk around 18500."""
+    tf_seconds = {"1m": 60, "5m": 300, "15m": 900}.get(timeframe, 60)
+    now = int(datetime.now(timezone.utc).timestamp())
+    # Align to bar boundary
+    end = now - (now % tf_seconds)
+    candles = []
+    price = 18500.0
+    for i in range(count):
+        t = end - (count - 1 - i) * tf_seconds
+        # Deterministic-ish drift seeded by bar timestamp
+        seed = (t // tf_seconds) % 997
+        drift = (seed - 498) / 100.0
+        o = round(price, 2)
+        c = round(price + drift, 2)
+        h = round(max(o, c) + abs(drift) * 0.6 + 0.5, 2)
+        low = round(min(o, c) - abs(drift) * 0.6 - 0.5, 2)
+        v = int(2000 + (seed * 31) % 5000)
+        candles.append({"time": t, "open": o, "high": h, "low": low, "close": c, "volume": v})
+        price = c
+
+    # Indicators
+    closes = [k["close"] for k in candles]
+    def ema(period):
+        if len(closes) < period:
+            return []
+        k = 2 / (period + 1)
+        out = [None] * (period - 1)
+        seed = sum(closes[:period]) / period
+        out.append(round(seed, 2))
+        for i in range(period, len(closes)):
+            seed = closes[i] * k + seed * (1 - k)
+            out.append(round(seed, 2))
+        return out
+
+    # Session VWAP (cumulative across the window)
+    cum_pv, cum_v, vwap_line = 0.0, 0.0, []
+    for k in candles:
+        typ = (k["high"] + k["low"] + k["close"]) / 3
+        cum_pv += typ * k["volume"]
+        cum_v += k["volume"]
+        vwap_line.append(round(cum_pv / cum_v, 2) if cum_v else None)
+
+    return {
+        "symbol": "MNQ",
+        "timeframe": timeframe,
+        "candles": candles,
+        "ema9": [{"time": c["time"], "value": v} for c, v in zip(candles, ema(9)) if v is not None],
+        "ema21": [{"time": c["time"], "value": v} for c, v in zip(candles, ema(21)) if v is not None],
+        "vwap": [{"time": c["time"], "value": v} for c, v in zip(candles, vwap_line) if v is not None],
+        "last_close": candles[-1]["close"] if candles else None,
+    }
+
+
+@api_router.post("/operator/order")
+async def operator_order(order: OperatorOrder):
+    """Server-side validated order. PHASE 1: logs only, does NOT submit to a broker."""
+    now_ts = datetime.now(timezone.utc).timestamp()
+
+    # Validation chain — every failure rejects the order
+    if _operator_state["kill_switch"]:
+        raise HTTPException(status_code=423, detail="KILL_SWITCH active — orders blocked")
+    if _operator_state["automation_paused"] and order.action.startswith(("AUTO_",)):
+        raise HTTPException(status_code=423, detail="Automation paused")
+    if _operator_state["daily_pnl"] <= _operator_state["max_daily_loss"]:
+        raise HTTPException(status_code=423, detail="Max daily loss hit — locked out")
+    if _operator_state["daily_trades"] >= _operator_state["max_daily_trades"]:
+        raise HTTPException(status_code=423, detail="Max daily trades reached")
+    if (now_ts - _operator_state["last_order_at"]) * 1000 < _ORDER_COOLDOWN_MS:
+        wait_ms = int(_ORDER_COOLDOWN_MS - (now_ts - _operator_state["last_order_at"]) * 1000)
+        raise HTTPException(status_code=429, detail=f"Cooldown — wait {wait_ms}ms")
+    if order.order_type == "LIMIT" and order.limit_price is None:
+        raise HTTPException(status_code=400, detail="LIMIT order requires limit_price")
+
+    # Mutate state (simulated fill at current synthetic price)
+    _operator_state["last_order_at"] = now_ts
+    _operator_state["daily_trades"] += 1
+
+    pos = _operator_state["position"]
+    fill_price = order.limit_price if order.order_type == "LIMIT" and order.limit_price else 18500.0
+
+    if order.action == "BUY":
+        if pos["side"] == "SHORT":
+            # Close short
+            pnl = (pos["avg_entry"] - fill_price) * pos["qty"] * 2  # MNQ $2/point
+            _operator_state["daily_pnl"] += pnl
+            _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        else:
+            new_qty = pos["qty"] + order.qty
+            new_avg = ((pos["avg_entry"] * pos["qty"]) + (fill_price * order.qty)) / new_qty if new_qty else fill_price
+            _operator_state["position"] = {"side": "LONG", "qty": new_qty, "avg_entry": round(new_avg, 2), "unrealized_pnl": 0.0}
+    elif order.action == "SELL":
+        if pos["side"] == "LONG":
+            pnl = (fill_price - pos["avg_entry"]) * pos["qty"] * 2
+            _operator_state["daily_pnl"] += pnl
+            _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        else:
+            new_qty = pos["qty"] + order.qty
+            new_avg = ((pos["avg_entry"] * pos["qty"]) + (fill_price * order.qty)) / new_qty if new_qty else fill_price
+            _operator_state["position"] = {"side": "SHORT", "qty": new_qty, "avg_entry": round(new_avg, 2), "unrealized_pnl": 0.0}
+    elif order.action in ("CLOSE_LONG", "CLOSE_SHORT"):
+        if pos["side"]:
+            mult = 1 if pos["side"] == "LONG" else -1
+            pnl = (fill_price - pos["avg_entry"]) * pos["qty"] * 2 * mult
+            _operator_state["daily_pnl"] += pnl
+            _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+    elif order.action == "BREAK_EVEN":
+        # No PnL change — just acknowledged (SL→BE in a real engine)
+        pass
+
+    _operator_state["daily_pnl"] = round(_operator_state["daily_pnl"], 2)
+
+    log_entry = {
+        "id": str(uuid.uuid4()),
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "action": order.action,
+        "symbol": order.symbol,
+        "qty": order.qty,
+        "order_type": order.order_type,
+        "limit_price": order.limit_price,
+        "fill_price": fill_price,
+        "resulting_position": _operator_state["position"],
+        "daily_pnl": _operator_state["daily_pnl"],
+        "phase": "SIM_LOG_ONLY",
+    }
+    try:
+        await db.operator_orders.insert_one(dict(log_entry))
+    except Exception as e:
+        logger.warning(f"operator_orders insert failed: {e}")
+
+    return {"ok": True, "order": log_entry, "state": _operator_state["position"]}
+
+
+@api_router.post("/operator/control/{action}")
+async def operator_control(action: str):
+    """Master controls: flatten | pause | resume | kill | reset_session"""
+    action = action.lower()
+    if action == "flatten":
+        _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        await db.operator_orders.insert_one({
+            "id": str(uuid.uuid4()), "ts": datetime.now(timezone.utc).isoformat(),
+            "action": "FLATTEN_ALL", "phase": "SIM_LOG_ONLY",
+        })
+        return {"ok": True, "action": "FLATTEN", "position": _operator_state["position"]}
+    if action == "pause":
+        _operator_state["automation_paused"] = True
+        return {"ok": True, "automation_paused": True}
+    if action == "resume":
+        _operator_state["automation_paused"] = False
+        return {"ok": True, "automation_paused": False}
+    if action == "kill":
+        _operator_state["kill_switch"] = True
+        _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        return {"ok": True, "kill_switch": True}
+    if action == "unkill":
+        _operator_state["kill_switch"] = False
+        return {"ok": True, "kill_switch": False}
+    if action == "reset_session":
+        _operator_state["daily_pnl"] = 0.0
+        _operator_state["daily_trades"] = 0
+        _operator_state["session_started_at"] = datetime.now(timezone.utc).isoformat()
+        _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        return {"ok": True, "action": "RESET_SESSION"}
+    raise HTTPException(status_code=400, detail=f"Unknown control action: {action}")
+
+
+@api_router.get("/operator/journal")
+async def operator_journal(limit: int = 20):
+    rows = await db.operator_orders.find({}, {"_id": 0}).sort("ts", -1).to_list(length=limit)
+    return {"entries": rows}
 
 
 # ============== AFFILIATE CLICK TRACKING (Revenue) ==============

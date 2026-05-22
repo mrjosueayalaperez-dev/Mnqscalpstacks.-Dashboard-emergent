@@ -18,6 +18,7 @@ import ExecutionHub from "@/components/ExecutionHub";
 import AutoSignalEngine from "@/components/AutoSignalEngine";
 import { FreemiumGate, AdBanner } from "@/components/FreemiumGate";
 import { NinjaTraderPanel, TradingViewPanel, GPayWidget, MarketSidebar } from "@/components/PromoModules";
+import OperatorCockpit from "@/components/operator/OperatorCockpit";
 import {
   TrendingUp,
   TrendingDown,
@@ -1498,6 +1499,7 @@ function AppRouter() {
         <Route path="/dashboard" element={<App />} />
         <Route path="/performance" element={<PerformancePage />} />
         <Route path="/admin" element={<AdminPanel />} />
+        <Route path="/operator" element={<OperatorCockpit />} />
       </Routes>
     </BrowserRouter>
   );

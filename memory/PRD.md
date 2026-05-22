@@ -2,7 +2,8 @@
 
 ## Routes
 - `/` — Landing page (conversion funnel, referral, welcome onboarding)
-- `/dashboard` — Trading command center
+- `/dashboard` — Trading command center (SaaS preview)
+- `/operator` — **Personal Operator Cockpit (Phase 1 — primary build target)**
 - `/performance` — Public performance / leaderboard
 - `/admin` — Admin panel
 
@@ -27,6 +28,21 @@
     - `GET /api/admin/clicks` returns total clicks, per-partner breakdown, top-CTA breakdown, partner URL config status
     - Admin Panel "Affiliate Click Revenue" card shows live stats and flags unconfigured partner URLs in red
     - 3 pytest regressions in `/app/backend/tests/test_affiliate_tracking.py`
+
+17. **Operator Cockpit — Phase 1** (2026-02-21):
+    - Route: `/operator`
+    - Live MNQ chart via `lightweight-charts` (1m/5m/15m, EMA9/EMA21/VWAP overlays, volume histogram)
+    - Top status bar: animated logo, NinjaTrader connection indicator, balance, daily PnL, session timer, big red FLATTEN
+    - LONG panel (BUY MARKET/LIMIT, BREAK EVEN, CLOSE LONG) + mirrored SHORT panel
+    - Position info (side/qty/avg entry/ticks/unrealized PnL — MNQ $2/pt)
+    - Risk gates (loss gauge, trades gauge, market/auto/CD/kill status pills)
+    - Signal panel (bias + confluence + EMA21/VWAP/RSI)
+    - Journal (last 15 orders with timestamps & PnL)
+    - Master controls (FLATTEN ALL red, PAUSE yellow, RESET blue, KILL purple)
+    - Backend safety chain on every order: kill_switch → automation_paused → max_daily_loss → max_daily_trades → 1500ms cooldown → LIMIT-needs-price
+    - 1500ms UI cooldown on every order button (disable + visual countdown)
+    - PHASE 1 banner: orders logged server-side only, NO broker connection
+    - 7 pytest regressions in `/app/backend/tests/test_operator_cockpit.py`
 
 ## Configured
 - Discord Webhook: LIVE
