@@ -84,3 +84,39 @@ When you wire the ATI bridge:
 2. The OIF format we'll target: `PLACE;{account};{symbol};{side};{qty};MARKET;0;0;DAY;;{atm_template};{order_id};;;`
 3. Phase 3 watches `outgoing/` for fills and reconciles them against the cockpit's local position state.
 4. Until ATI is live, the cockpit's `position` field is the simulator's belief — broker truth wins when the bridge connects.
+
+## Optional: Pine Script for True Chart Drawings
+
+The Advanced Chart **embed widget** can't draw shapes via JS (no programmatic API — that's the paid Charting Library). But the widget itself has a Pine editor button. Paste the script below into it once and TradingView will save the indicator per-symbol so it persists for you across sessions:
+
+```pine
+//@version=5
+indicator("MNQ Scalp Stacks — Key Levels", overlay=true)
+
+// === Prior Day H/L/C (anchored to daily timeframe) ===
+pdh = request.security(syminfo.tickerid, "D", high[1])
+pdl = request.security(syminfo.tickerid, "D", low[1])
+pdc = request.security(syminfo.tickerid, "D", close[1])
+
+// === Today's session open ===
+sess_open = ta.valuewhen(ta.change(time("D")) != 0, open, 0)
+
+// === Plot dashed levels ===
+plot(pdh,       title="PDH",   color=color.new(color.red,    0), style=plot.style_linebr, linewidth=2)
+plot(pdl,       title="PDL",   color=color.new(color.green,  0), style=plot.style_linebr, linewidth=2)
+plot(pdc,       title="PDC",   color=color.new(color.gray,   0), style=plot.style_linebr, linewidth=1)
+plot(sess_open, title="OPEN",  color=color.new(color.yellow, 0), style=plot.style_linebr, linewidth=1)
+
+// === Labels (right-edge) ===
+if barstate.islast
+    label.new(bar_index + 2, pdh, "PDH " + str.tostring(pdh, "#.##"), style=label.style_label_left, color=color.new(color.red, 80),   textcolor=color.white, size=size.small)
+    label.new(bar_index + 2, pdl, "PDL " + str.tostring(pdl, "#.##"), style=label.style_label_left, color=color.new(color.green, 80), textcolor=color.white, size=size.small)
+    label.new(bar_index + 2, pdc, "PDC " + str.tostring(pdc, "#.##"), style=label.style_label_left, color=color.new(color.gray, 80),  textcolor=color.white, size=size.small)
+```
+
+How to add it once:
+1. Inside the cockpit chart, click the `{}` Pine Editor button at the top of the TradingView widget toolbar
+2. Paste the script above → Save → Add to chart
+3. TradingView persists it for `CME_MINI:MNQ1!` so it appears automatically every time you open the cockpit
+
+The cockpit's `KeyLevels` strip above the chart shows the same numbers regardless, with live tick-distances and traffic-light coloring (yellow = within 5 points, red = above current = resistance, green = below current = support).

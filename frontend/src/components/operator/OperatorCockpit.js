@@ -11,6 +11,7 @@ import SignalPanel from "./SignalPanel";
 import JournalPanel from "./JournalPanel";
 import MasterControls from "./MasterControls";
 import MarketContext from "./MarketContext";
+import KeyLevels from "./KeyLevels";
 import SnipeBar, { HotkeyHelp } from "./SnipeBar";
 import BracketPresets, { PRESETS, presetById } from "./BracketPresets";
 import useHotkeys from "./useHotkeys";
@@ -224,6 +225,11 @@ export default function OperatorCockpit() {
             onToggleSound={toggleSound}
             onToggleHelp={() => setShowHelp((h) => !h)}
           />
+        </div>
+
+        {/* KEY LEVELS STRIP */}
+        <div className="col-span-12">
+          <KeyLevels currentPrice={mnq?.price || mnq?.close} />
         </div>
 
         {/* LIVE CHART */}
