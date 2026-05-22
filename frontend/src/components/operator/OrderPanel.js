@@ -20,14 +20,14 @@ const Btn = ({ children, onClick, color, locked, testId }) => (
   </button>
 );
 
-export default function OrderPanel({ side, onOrder, disabled }) {
+export default function OrderPanel({ side, onOrder, disabled, snipeMode = false }) {
   const isLong = side === "LONG";
   const color = isLong ? "#34C759" : "#FF3B30";
-  const { locked, arm } = useOrderCooldown(1500);
+  const { locked, arm } = useOrderCooldown(snipeMode ? 0 : 1500);
 
   const send = async (action, type) => {
     if (locked || disabled) return;
-    arm();
+    if (!snipeMode) arm();
     await onOrder({ action, order_type: type });
   };
 
@@ -83,9 +83,14 @@ export default function OrderPanel({ side, onOrder, disabled }) {
         </Btn>
       </div>
 
-      {locked && (
+      {locked && !snipeMode && (
         <div className="text-center text-[0.55rem] text-[#FFCC00] font-bold tracking-wider animate-pulse">
           ⏱ COOLDOWN 1500ms
+        </div>
+      )}
+      {snipeMode && (
+        <div className="text-center text-[0.55rem] text-[#FF3B30] font-black tracking-wider">
+          ◉ SNIPE — INSTANT
         </div>
       )}
     </div>
