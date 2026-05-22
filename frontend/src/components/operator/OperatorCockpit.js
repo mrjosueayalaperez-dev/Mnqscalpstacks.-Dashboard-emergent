@@ -10,6 +10,7 @@ import RiskPanel from "./RiskPanel";
 import SignalPanel from "./SignalPanel";
 import JournalPanel from "./JournalPanel";
 import MasterControls from "./MasterControls";
+import MarketContext from "./MarketContext";
 import SnipeBar, { HotkeyHelp } from "./SnipeBar";
 import BracketPresets, { PRESETS, presetById } from "./BracketPresets";
 import useHotkeys from "./useHotkeys";
@@ -233,6 +234,7 @@ export default function OperatorCockpit() {
         <div className="col-span-12 lg:col-span-3 space-y-3">
           <PositionInfo state={state} lastPrice={lastPrice} />
           <SignalPanel mnqData={mnq} />
+          <MarketContext />
         </div>
 
         <div className="col-span-12 md:col-span-4">

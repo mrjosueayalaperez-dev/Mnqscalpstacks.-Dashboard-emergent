@@ -1,6 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse
 from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq
+from market_context import get_market_context
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -627,6 +628,15 @@ async def mnq_socket(ws: WebSocket):
         logger.warning(f"ws error: {e}")
     finally:
         tick_broker.unregister(ws)
+
+
+# Multi-day market context (PDH/PDL, ADR, range expansion, trend)
+@api_router.get("/market/context")
+async def market_context():
+    ctx = await get_market_context()
+    if not ctx:
+        raise HTTPException(status_code=503, detail="Market context unavailable")
+    return ctx
 
 
 # Legacy MNQ Futures Route (synthetic fallback) — kept for compatibility, but never the primary path
