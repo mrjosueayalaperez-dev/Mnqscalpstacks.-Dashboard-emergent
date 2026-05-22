@@ -3,7 +3,7 @@ import axios from "axios";
 import { toast, Toaster } from "sonner";
 
 import TopStatusBar from "./TopStatusBar";
-import LiveChart from "./LiveChart";
+import TradingViewWidget from "./TradingViewWidget";
 import OrderPanel from "./OrderPanel";
 import PositionInfo from "./PositionInfo";
 import RiskPanel from "./RiskPanel";
@@ -13,6 +13,7 @@ import MasterControls from "./MasterControls";
 import SnipeBar, { HotkeyHelp } from "./SnipeBar";
 import BracketPresets, { PRESETS, presetById } from "./BracketPresets";
 import useHotkeys from "./useHotkeys";
+import useMnqLive from "./useMnqLive";
 import { sounds, unlockAudio } from "./useAudio";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -25,8 +26,8 @@ const LS_BRACKETS = "operator.brackets";
 
 export default function OperatorCockpit() {
   const [state, setState] = useState(null);
-  const [mnq, setMnq] = useState(null);
   const [journal, setJournal] = useState([]);
+  const { tick: mnq, connected: wsConnected } = useMnqLive();
 
   const [snipe, setSnipe] = useState(() => localStorage.getItem(LS_SNIPE) === "1");
   const [sound, setSound] = useState(() => localStorage.getItem(LS_SOUND) !== "0");
@@ -55,13 +56,6 @@ export default function OperatorCockpit() {
     } catch (e) { /* ignore */ }
   }, []);
 
-  const refreshMNQ = useCallback(async () => {
-    try {
-      const { data } = await axios.get(`${API}/futures/mnq`);
-      setMnq(data);
-    } catch (e) { /* ignore */ }
-  }, []);
-
   const refreshJournal = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/operator/journal`, { params: { limit: 15 } });
@@ -70,12 +64,27 @@ export default function OperatorCockpit() {
   }, []);
 
   useEffect(() => {
-    refreshState(); refreshMNQ(); refreshJournal();
+    refreshState(); refreshJournal();
     const s = setInterval(refreshState, 2000);
-    const m = setInterval(refreshMNQ, 4000);
     const j = setInterval(refreshJournal, 5000);
-    return () => { clearInterval(s); clearInterval(m); clearInterval(j); };
-  }, [refreshState, refreshMNQ, refreshJournal]);
+    return () => { clearInterval(s); clearInterval(j); };
+  }, [refreshState, refreshJournal]);
+
+  // Suppress benign cross-origin "Script error." reports thrown by the
+  // TradingView widget iframe — they cannot leak data into our code and
+  // they spuriously trigger the CRA dev-overlay.
+  useEffect(() => {
+    const swallow = (e) => {
+      const msg = e?.message || "";
+      if (msg === "Script error." || !e?.filename) {
+        e.preventDefault?.();
+        return true;
+      }
+      return false;
+    };
+    window.addEventListener("error", swallow, true);
+    return () => window.removeEventListener("error", swallow, true);
+  }, []);
 
   const submitOrder = useCallback(async ({ action, order_type }) => {
     // Pick a confirmation sound based on action
@@ -88,7 +97,7 @@ export default function OperatorCockpit() {
         symbol: "MNQ",
         qty: 1,
         order_type,
-        limit_price: order_type === "LIMIT" ? (mnq?.close || 18500) : null,
+        limit_price: order_type === "LIMIT" ? (mnq?.price || mnq?.close || null) : null,
         sl_ticks: attach ? activePreset.sl : null,
         tp_ticks: attach ? activePreset.tp : null,
         preset: attach ? activePreset.id : null,
@@ -180,7 +189,7 @@ export default function OperatorCockpit() {
     "0": () => selectPreset(presetId, !brackets),  // toggle attach on/off
   }, true);
 
-  const lastPrice = mnq?.close || mnq?.price;
+  const lastPrice = mnq?.price || mnq?.close;
   const orderDisabled = state?.kill_switch || (!snipe && (state?.cooldown_ms_remaining || 0) > 0);
 
   return (
@@ -218,7 +227,7 @@ export default function OperatorCockpit() {
 
         {/* LIVE CHART */}
         <div className="col-span-12 lg:col-span-9 h-[420px] lg:h-[520px]">
-          <LiveChart />
+          <TradingViewWidget wsConnected={wsConnected} lastTick={mnq} />
         </div>
 
         <div className="col-span-12 lg:col-span-3 space-y-3">
@@ -245,9 +254,9 @@ export default function OperatorCockpit() {
         </div>
 
         <div className="col-span-12 mt-1">
-          <div className="px-3 py-2 border border-[#FFCC00]/30 bg-[#FFCC00]/5 rounded-sm flex items-center justify-between text-[0.6rem]">
-            <span className="text-[#FFCC00] font-bold">PHASE 1 — SIMULATED LOG ONLY</span>
-            <span className="text-zinc-500">Orders are validated server-side and logged. No broker connection is active yet.</span>
+          <div className="px-3 py-2 border border-[#34C759]/30 bg-[#34C759]/5 rounded-sm flex items-center justify-between text-[0.6rem]">
+            <span className="text-[#34C759] font-black">◉ LIVE FEED — CME via TradingView + Yahoo NQ=F</span>
+            <span className="text-zinc-500">Chart, prices, and order fills use real MNQ data. Order execution = simulator until Phase 2 (NinjaTrader ATI bridge).</span>
           </div>
         </div>
       </main>

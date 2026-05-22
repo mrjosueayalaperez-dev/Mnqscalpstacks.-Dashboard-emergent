@@ -49,6 +49,19 @@
     - PHASE 1 banner: orders logged server-side only, NO broker connection
     - 7 pytest regressions in `/app/backend/tests/test_operator_cockpit.py`
 
+18. **Live MNQ Feed — Phase 1.5** (2026-02-21):
+    - **Root cause fixed:** cockpit showed 18,500 vs TradingView 29,520 because backend used a hardcoded synthetic baseline
+    - Backend: new `market_feed.py` module fetches real CME data from **Yahoo `NQ=F`** (NQ and MNQ trade at the same price; MNQ is 1/10 contract size)
+    - Backend: WebSocket endpoint `/api/ws/mnq` streams ticks (~3s cadence, single fan-out broker pattern)
+    - Backend: `/api/futures/mnq` and `/api/operator/candles` now return real Yahoo data with computed EMA9/EMA21/VWAP/RSI
+    - Backend: order fills use the **live cached price** — if no live price available, fills return `503` rather than mis-filling
+    - Frontend: replaced lightweight-charts custom panel with the **official TradingView Advanced Chart widget** (`CME_MINI:MNQ1!`) — visual ground truth, auto-handles quarterly rollover
+    - Frontend: `useMnqLive` hook subscribes to WS with exponential reconnect + 8s REST fallback
+    - Frontend: index.js global error handler suppresses benign cross-origin "Script error." from TV iframe telemetry
+    - "LIVE FEED — CME via TradingView + Yahoo NQ=F" banner replaces the old "SIMULATED LOG ONLY" notice
+    - `/app/SYNC_NOTES.md` documents symbol mapping (TV `MNQ1!` ↔ NT `MNQ 03-26` ↔ Yahoo `NQ=F` ↔ backend `MNQ`) and the full live-feed architecture
+    - 4 new pytest regressions in `/app/backend/tests/test_live_feed.py` (REST snapshot, candles, order fills, WS stream)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

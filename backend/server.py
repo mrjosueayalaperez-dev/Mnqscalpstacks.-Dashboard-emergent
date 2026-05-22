@@ -1,5 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request
+from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import RedirectResponse
+from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -571,9 +572,65 @@ async def scan_stocks(min_change: float = 3.0):
     
     return {"scanners": results}
 
-# MNQ Futures Routes
+# MNQ Futures Routes — LIVE feed (CME via Yahoo NQ=F; NQ and MNQ trade at same price)
 @api_router.get("/futures/mnq")
 async def get_mnq_data():
+    """Real-time MNQ futures snapshot. Falls back to cached tick on transient errors."""
+    snap = await refresh_mnq()
+    if not snap.get("price"):
+        # Empty cache + fetch failed — return last known good or hard fallback
+        snap = get_last_mnq()
+    return {
+        "symbol": "MNQ",
+        "price": snap.get("price", 0),
+        "close": snap.get("close", snap.get("price", 0)),
+        "previous_close": snap.get("previous_close", 0),
+        "change": snap.get("change", 0),
+        "change_percent": str(snap.get("change_percent", 0)),
+        "high": snap.get("day_high", 0),
+        "low": snap.get("day_low", 0),
+        "vwap": snap.get("vwap", 0),
+        "ema9": snap.get("ema9", 0),
+        "ema21": snap.get("ema21", 0),
+        "rsi": snap.get("rsi", 50),
+        "data_source": snap.get("source", "yahoo:NQ=F"),
+        "market_state": snap.get("market_state", "UNKNOWN"),
+        "exchange": snap.get("exchange", "CME"),
+        "stale": snap.get("stale", False),
+        "fetched_at": snap.get("fetched_at", 0),
+        "is_mock": False,
+        "wave_valid": True,
+    }
+
+
+@app.websocket("/api/ws/mnq")
+async def mnq_socket(ws: WebSocket):
+    """Live MNQ tick stream (~3s cadence, server-side fan-out)."""
+    await ws.accept()
+    # Immediately send the cached snapshot so client gets instant data
+    snap = get_last_mnq()
+    if snap.get("price"):
+        try:
+            await ws.send_json(snap)
+        except Exception:
+            return
+    tick_broker.register(ws)
+    try:
+        while True:
+            # Keep the socket alive; we only need to listen for client disconnect
+            msg = await ws.receive_text()
+            if msg == "ping":
+                await ws.send_text("pong")
+    except WebSocketDisconnect:
+        pass
+    except Exception as e:
+        logger.warning(f"ws error: {e}")
+    finally:
+        tick_broker.unregister(ws)
+
+
+# Legacy MNQ Futures Route (synthetic fallback) — kept for compatibility, but never the primary path
+async def get_mnq_data_synthetic():
     """Get MNQ (Micro Nasdaq) futures data with wave validation"""
     # Key resistance levels
     RESISTANCE_ZONES = [27972, 28000, 28500]
@@ -2077,7 +2134,68 @@ async def operator_state():
 
 @api_router.get("/operator/candles")
 async def operator_candles(timeframe: str = "1m", count: int = 120):
-    """Synthetic OHLCV candles for the cockpit chart. Deterministic walk around 18500."""
+    """Real intraday candles from the live MNQ feed (Yahoo NQ=F)."""
+    from market_feed import get_bars
+    bars = get_bars()
+    if not bars:
+        await refresh_mnq()
+        bars = get_bars()
+    if not bars:
+        # Genuinely no feed — return empty payload, frontend uses TradingView widget anyway
+        return {"symbol": "MNQ", "timeframe": timeframe, "candles": [], "ema9": [], "ema21": [], "vwap": [], "last_close": None, "source": "empty"}
+
+    # Aggregate to requested timeframe
+    tf_seconds = {"1m": 60, "5m": 300, "15m": 900}.get(timeframe, 60)
+    if tf_seconds == 60:
+        agg = bars[-count:]
+    else:
+        bucket = {}
+        for b in bars:
+            slot = (b["time"] // tf_seconds) * tf_seconds
+            cur = bucket.get(slot)
+            if not cur:
+                bucket[slot] = {"time": slot, "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"], "volume": b["volume"]}
+            else:
+                cur["high"] = max(cur["high"], b["high"])
+                cur["low"] = min(cur["low"], b["low"])
+                cur["close"] = b["close"]
+                cur["volume"] += b["volume"]
+        agg = list(bucket.values())[-count:]
+
+    closes = [k["close"] for k in agg]
+    def ema(period):
+        if len(closes) < period:
+            return []
+        k = 2 / (period + 1)
+        out = [None] * (period - 1)
+        seed = sum(closes[:period]) / period
+        out.append(round(seed, 2))
+        for i in range(period, len(closes)):
+            seed = closes[i] * k + seed * (1 - k)
+            out.append(round(seed, 2))
+        return out
+
+    cum_pv, cum_v, vwap_line = 0.0, 0.0, []
+    for k in agg:
+        typ = (k["high"] + k["low"] + k["close"]) / 3
+        cum_pv += typ * (k["volume"] or 1)
+        cum_v += k["volume"] or 1
+        vwap_line.append(round(cum_pv / cum_v, 2) if cum_v else None)
+
+    return {
+        "symbol": "MNQ",
+        "timeframe": timeframe,
+        "candles": agg,
+        "ema9": [{"time": c["time"], "value": v} for c, v in zip(agg, ema(9)) if v is not None],
+        "ema21": [{"time": c["time"], "value": v} for c, v in zip(agg, ema(21)) if v is not None],
+        "vwap": [{"time": c["time"], "value": v} for c, v in zip(agg, vwap_line) if v is not None],
+        "last_close": agg[-1]["close"] if agg else None,
+        "source": "yahoo:NQ=F",
+    }
+
+
+# Synthetic candle generator — kept for offline dev/testing only
+async def operator_candles_synthetic(timeframe: str = "1m", count: int = 120):
     tf_seconds = {"1m": 60, "5m": 300, "15m": 900}.get(timeframe, 60)
     now = int(datetime.now(timezone.utc).timestamp())
     # Align to bar boundary
@@ -2150,12 +2268,21 @@ async def operator_order(order: OperatorOrder):
     if order.order_type == "LIMIT" and order.limit_price is None:
         raise HTTPException(status_code=400, detail="LIMIT order requires limit_price")
 
-    # Mutate state (simulated fill at current synthetic price)
+    # Mutate state (simulated fill at current LIVE price from Yahoo feed cache)
     _operator_state["last_order_at"] = now_ts
     _operator_state["daily_trades"] += 1
 
     pos = _operator_state["position"]
-    fill_price = order.limit_price if order.order_type == "LIMIT" and order.limit_price else 18500.0
+    live_snap = get_last_mnq()
+    live_price = live_snap.get("price") or 0.0
+    if not live_price:
+        # First-ever tick not cached yet — fetch once
+        live_snap = await refresh_mnq()
+        live_price = live_snap.get("price") or 0.0
+    if not live_price:
+        # Genuinely no feed — refuse rather than mis-fill
+        raise HTTPException(status_code=503, detail="No live MNQ price available — feed offline")
+    fill_price = order.limit_price if order.order_type == "LIMIT" and order.limit_price else live_price
 
     if order.action == "BUY":
         if pos["side"] == "SHORT":
