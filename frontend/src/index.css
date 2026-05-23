@@ -4,6 +4,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Suppress webpack-dev-server overlay (TradingView iframe throws cross-origin
+   "Script error." that the overlay catches; harmless and cannot affect prod). */
+#webpack-dev-server-client-overlay,
+#webpack-dev-server-client-overlay-div {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
 :root {
   --background: #0A0A0A;
   --surface: #121212;
