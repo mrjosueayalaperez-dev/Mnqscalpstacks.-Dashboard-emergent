@@ -92,11 +92,11 @@ const HeroStats = ({ overview }) => {
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-      {stats.map((stat, i) => {
+      {stats.map((stat) => {
         const Icon = stat.icon;
         return (
           <div
-            key={i}
+            key={stat.label}
             className="relative bg-[#121212] border border-white/10 rounded-sm p-5 flex flex-col items-center text-center overflow-hidden group hover:border-white/20 transition-colors"
             data-testid={`hero-stat-${stat.label.toLowerCase().replace(/\s/g, "-")}`}
           >
@@ -314,8 +314,8 @@ const BacktestDisplay = ({ backtests }) => {
 
       {/* Hero Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 divide-x divide-white/5">
-        {metrics.map((m, i) => (
-          <div key={i} className="p-4 text-center">
+        {metrics.map((m) => (
+          <div key={m.label} className="p-4 text-center">
             <span className="text-[0.6rem] font-bold uppercase tracking-[0.15em] text-zinc-500 block mb-1">
               {m.label}
             </span>
@@ -329,8 +329,8 @@ const BacktestDisplay = ({ backtests }) => {
       {/* Detail Grid */}
       <div className="border-t border-white/5 p-4">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {details.map(([label, value], i) => (
-            <div key={i} className="flex justify-between text-xs">
+          {details.map(([label, value]) => (
+            <div key={label} className="flex justify-between text-xs">
               <span className="text-zinc-500">{label}</span>
               <span className="font-mono text-white">{value}</span>
             </div>
@@ -400,8 +400,8 @@ const PricingSection = ({ subscriberCount }) => {
                 {tier.price > 0 && <span className="text-zinc-500 text-sm">/month</span>}
               </div>
               <ul className="space-y-2 flex-1 mb-4">
-                {tier.features.map((f, i) => (
-                  <li key={i} className="flex items-start gap-2 text-sm text-zinc-300">
+                {tier.features.map((f) => (
+                  <li key={f} className="flex items-start gap-2 text-sm text-zinc-300">
                     <Check className={`w-4 h-4 mt-0.5 shrink-0 ${colors.accent}`} />
                     {f}
                   </li>
@@ -756,8 +756,8 @@ const PerformancePage = () => {
                   ["Active", data.overview.active_signals],
                   ["Avg Win", `+${data.overview.avg_win_points} pts`],
                   ["Avg Loss", `-${data.overview.avg_loss_points} pts`],
-                ].map(([label, val], i) => (
-                  <div key={i} className="flex justify-between text-sm">
+                ].map(([label, val]) => (
+                  <div key={label} className="flex justify-between text-sm">
                     <span className="text-zinc-500">{label}</span>
                     <span className="font-mono text-white">{val}</span>
                   </div>

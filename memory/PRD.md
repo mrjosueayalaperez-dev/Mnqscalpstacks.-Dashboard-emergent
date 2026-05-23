@@ -55,6 +55,28 @@
     - Backend: WebSocket endpoint `/api/ws/mnq` streams ticks (~3s cadence, single fan-out broker pattern)
     - Backend: `/api/futures/mnq` and `/api/operator/candles` now return real Yahoo data with computed EMA9/EMA21/VWAP/RSI
     - Backend: order fills use the **live cached price** — if no live price available, fills return `503` rather than mis-filling
+    - Frontend: replaced lightweight-charts custom panel with the **official TradingView Advanced Chart widget** (`CME_MINI:MNQ1!`)
+    - Frontend: `useMnqLive` hook with WS-primary + 8s REST fallback + exponential reconnect
+    - `/app/SYNC_NOTES.md` documents symbol mapping and architecture
+    - 4 new pytest regressions in `/app/backend/tests/test_live_feed.py`
+
+19. **Code Quality Sweep — Feb 2026** (final pass):
+    - **Array-index keys eliminated** in 11 spots across `LandingPage.js`, `PerformancePage.js`, `AdminPanel.js`, `PromoModules.js`, `Leaderboard.js`, `PerformanceEngine.js` — now using stable `item.label`, `item.text`, `item.title`, `tier.id`, `email/id`, etc. Verified `grep "key={i}"` returns zero hits.
+    - **`market_context.py` refactored**: one 81-line cc=25 function → six focused helpers (`_fetch_daily_bars`, `_extract_quote_series`, `_compute_adr`, `_volume_strength`, `_trend_change_pct`, `_build_context`); each <35 lines, all cc<6.
+    - **`get_pine_script` refactored**: 117-line endpoint → 5-line endpoint reading from module-level `_PINE_SCRIPT_V3` constant + `_build_webhook_instructions()` helper.
+    - **`send_discord_signal` refactored**: 60-line cc=12 function → 9-line endpoint + 4 small helpers (`_discord_webhook_configured`, `_format_signal_pillars`, `_rr_ratio`, `_build_discord_payload`).
+    - **120 lines of dead code deleted** from server.py: unreachable `get_mnq_data_synthetic` (66 lines, hardcoded 18500 walk) and `operator_candles_synthetic` (54 lines). Replaced one remaining `base_price = 18500` in `generate_test_signal` with the live MNQ feed.
+    - **Type hints added** to all operator + market + admin/clicks endpoints (`Dict[str, Any]` return types) and to `market_feed.py` (refactored module-level dicts, helpers, broker class).
+    - **`LiveChart.js` deleted** — lightweight-charts custom chart no longer mounted since switching to TradingView widget.
+    - **`script.innerHTML` / `container.innerHTML`** in TradingViewWidget replaced with `script.textContent` and `container.replaceChildren()` — eliminates false-positive XSS lint warnings on hardcoded TV embed config.
+    - **`useMnqLive` empty-deps array** annotated with `eslint-disable-next-line react-hooks/exhaustive-deps` + intent comment so future linters don't keep flagging the intentional once-on-mount WebSocket lifecycle.
+    - Pyflakes cleanups: removed unused `import asyncio` + 3 unused `global signal_engine_state` declarations.
+    - All 14 of my regressions pass (operator cockpit + live feed + affiliate). Backend pyflakes clean. ESLint clean across `/app/frontend/src`. Backend trimmed from 2477 → 2372 lines.
+    - **Root cause fixed:** cockpit showed 18,500 vs TradingView 29,520 because backend used a hardcoded synthetic baseline
+    - Backend: new `market_feed.py` module fetches real CME data from **Yahoo `NQ=F`** (NQ and MNQ trade at the same price; MNQ is 1/10 contract size)
+    - Backend: WebSocket endpoint `/api/ws/mnq` streams ticks (~3s cadence, single fan-out broker pattern)
+    - Backend: `/api/futures/mnq` and `/api/operator/candles` now return real Yahoo data with computed EMA9/EMA21/VWAP/RSI
+    - Backend: order fills use the **live cached price** — if no live price available, fills return `503` rather than mis-filling
     - Frontend: replaced lightweight-charts custom panel with the **official TradingView Advanced Chart widget** (`CME_MINI:MNQ1!`) — visual ground truth, auto-handles quarterly rollover
     - Frontend: `useMnqLive` hook subscribes to WS with exponential reconnect + 8s REST fallback
     - Frontend: index.js global error handler suppresses benign cross-origin "Script error." from TV iframe telemetry

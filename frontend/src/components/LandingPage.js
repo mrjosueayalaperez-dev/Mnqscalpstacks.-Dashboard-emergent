@@ -136,8 +136,8 @@ const Problem = () => {
           { icon: Clock, text: "Late entries from second-guessing" },
           { icon: X, text: "Emotional decisions that blow accounts" },
           { icon: Eye, text: "Missed moves while waiting for confirmation" },
-        ].map((item, i) => (
-          <div key={i} className="flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-[#FF3B30]/5 border border-[#FF3B30]/20 rounded-sm">
+        ].map((item) => (
+          <div key={item.text} className="flex items-center gap-3 md:gap-4 p-3 md:p-4 bg-[#FF3B30]/5 border border-[#FF3B30]/20 rounded-sm">
             <item.icon className="w-5 h-5 text-[#FF3B30] shrink-0" />
             <span className="text-sm text-zinc-300">{item.text}</span>
           </div>
@@ -163,8 +163,8 @@ const Solution = () => {
           { icon: Target, title: "Wave Validation", desc: "High-probability entries backed by a 77.3% historical win rate", color: "#007AFF" },
           { icon: Crosshair, title: "Institutional Guardrails", desc: "Automated detection of psychological levels and resistance zones", color: "#34C759" },
           { icon: Layers, title: "Full Stack Integration", desc: "Pine Script v3 synced with Python backend for zero-lag execution", color: "#FFCC00" },
-        ].map((item, i) => (
-          <div key={i} className="p-5 md:p-6 bg-[#121212] border border-white/10 rounded-sm text-center hover:border-white/20 transition-colors">
+        ].map((item) => (
+          <div key={item.title} className="p-5 md:p-6 bg-[#121212] border border-white/10 rounded-sm text-center hover:border-white/20 transition-colors">
             <div className="w-12 h-12 mx-auto mb-4 rounded-sm flex items-center justify-center" style={{ background: `${item.color}15` }}>
               <item.icon className="w-6 h-6" style={{ color: item.color }} />
             </div>
@@ -221,8 +221,8 @@ const HowItWorks = ({ sectionRef }) => (
           { step: "01", title: "Load the System", desc: "Add MNQ Scalp Stacks v3 to your TradingView 1-min chart. One click." },
           { step: "02", title: "Wave Validation", desc: "EMA 21 Spine + VWAP + 27,972 resistance — the system does the thinking." },
           { step: "03", title: "Execute the Punch", desc: "BUY/SELL Punches fire to Discord + Dashboard. Trade with precision." },
-        ].map((item, i) => (
-          <div key={i} className="relative">
+        ].map((item) => (
+          <div key={item.step} className="relative">
             <span className="text-5xl md:text-6xl font-black text-white/5 absolute -top-2 md:-top-4 -left-1 md:-left-2">{item.step}</span>
             <div className="relative pt-6 md:pt-8">
               <h3 className="text-lg font-bold text-white mb-2">{item.title}</h3>
@@ -244,8 +244,8 @@ const StatsBar = ({ stats }) => (
         { label: "Profit Factor", value: stats?.profit_factor || "2.14", color: "text-white" },
         { label: "Net Profit", value: `$${(stats?.net_profit || 4280).toLocaleString()}`, color: "text-[#34C759]" },
         { label: "Sharpe Ratio", value: stats?.sharpe_ratio || "1.87", color: "text-[#007AFF]" },
-      ].map((s, i) => (
-        <div key={i}>
+      ].map((s) => (
+        <div key={s.label}>
           <span className="text-[0.55rem] md:text-[0.6rem] font-bold uppercase tracking-[0.2em] text-zinc-500 block mb-1">{s.label}</span>
           <span className={`text-xl md:text-3xl font-mono font-bold ${s.color}`}>{s.value}</span>
         </div>
@@ -405,7 +405,7 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
                 <div className="flex items-center gap-2 mb-2"><Icon className={`w-4 h-4 ${tier.accent}`} /><h3 className={`font-bold text-sm ${tier.accent}`}>{tier.name}</h3></div>
                 <div className="mb-3"><span className="text-2xl md:text-3xl font-mono font-bold text-white">{tier.price}</span>{tier.period && <span className="text-zinc-500 text-sm">{tier.period}</span>}</div>
                 <ul className="space-y-1">
-                  {tier.features.map((f, i) => (<li key={i} className="flex items-start gap-2 text-xs text-zinc-400"><Check className={`w-3 h-3 mt-0.5 shrink-0 ${tier.accent}`} />{f}</li>))}
+                  {tier.features.map((f) => (<li key={f} className="flex items-start gap-2 text-xs text-zinc-400"><Check className={`w-3 h-3 mt-0.5 shrink-0 ${tier.accent}`} />{f}</li>))}
                 </ul>
               </button>
             );

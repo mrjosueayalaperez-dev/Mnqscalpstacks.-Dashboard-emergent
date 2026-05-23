@@ -215,8 +215,8 @@ const MarketSidebar = ({ mnqData }) => {
             { text: "MNQ holding above session VWAP", sentiment: "bullish" },
             { text: "Fed rate decision pending", sentiment: "neutral" },
             { text: "Nasdaq tech earnings in focus", sentiment: "bullish" },
-          ].map((item, i) => (
-            <div key={`news-${i}`} className="flex items-start gap-2 text-[0.6rem]">
+          ].map((item) => (
+            <div key={item.text} className="flex items-start gap-2 text-[0.6rem]">
               <div className={`w-1.5 h-1.5 rounded-full mt-1 shrink-0 ${
                 item.sentiment === "bullish" ? "bg-[#34C759]" : item.sentiment === "bearish" ? "bg-[#FF3B30]" : "bg-[#FFCC00]"
               }`} />

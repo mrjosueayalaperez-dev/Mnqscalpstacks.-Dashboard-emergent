@@ -85,8 +85,8 @@ const AdminPanel = () => {
             { label: "MRR", value: `$${rev.mrr || 0}`, icon: DollarSign, color: "text-[#34C759]" },
             { label: "Total Signals", value: ov.signals?.total || 0, icon: Zap, color: "text-[#FFCC00]" },
             { label: "Total Trades", value: ov.trades?.total || 0, icon: BarChart3, color: "text-white" },
-          ].map((kpi, i) => (
-            <div key={i} className="bg-[#121212] border border-white/10 rounded-sm p-4" data-testid={`admin-kpi-${kpi.label.toLowerCase().replace(/\s/g, "-")}`}>
+          ].map((kpi) => (
+            <div key={kpi.label} className="bg-[#121212] border border-white/10 rounded-sm p-4" data-testid={`admin-kpi-${kpi.label.toLowerCase().replace(/\s/g, "-")}`}>
               <kpi.icon className={`w-5 h-5 mb-2 ${kpi.color}`} />
               <span className="text-[0.6rem] font-bold uppercase tracking-[0.15em] text-zinc-500 block">{kpi.label}</span>
               <span className={`text-2xl md:text-3xl font-mono font-bold ${kpi.color}`}>{kpi.value}</span>
@@ -187,7 +187,7 @@ const AdminPanel = () => {
             <h4 className="text-[0.6rem] font-bold uppercase tracking-wider text-zinc-500 mb-2">Top CTAs</h4>
             <div className="space-y-1.5 max-h-48 overflow-y-auto">
               {(clicks?.by_partner_src || []).slice(0, 8).map((r, i) => (
-                <div key={i} className="flex justify-between items-center text-[0.65rem]" data-testid={`affiliate-cta-${i}`}>
+                <div key={`${r.partner}-${r.src}`} className="flex justify-between items-center text-[0.65rem]" data-testid={`affiliate-cta-${i}`}>
                   <div className="flex items-center gap-2 min-w-0">
                     <span className={`px-1.5 py-0.5 rounded font-bold uppercase text-[0.5rem] ${
                       r.partner === "ninjatrader" ? "bg-[#007AFF]/15 text-[#007AFF]" :
@@ -234,7 +234,7 @@ const AdminPanel = () => {
             </h3>
             <div className="space-y-2">
               {(ov.recent_subscribers || []).map((s, i) => (
-                <div key={i} className="flex justify-between text-xs">
+                <div key={s.email || s.id || `sub-${i}`} className="flex justify-between text-xs">
                   <span className="text-zinc-300">{s.name || s.email?.slice(0, 15)}</span>
                   <span className={`font-bold ${s.tier === "pro" ? "text-[#FFCC00]" : s.tier === "elite" ? "text-[#34C759]" : "text-zinc-500"}`}>{s.tier}</span>
                 </div>
@@ -247,7 +247,7 @@ const AdminPanel = () => {
             </h3>
             <div className="space-y-2">
               {(ov.recent_signals || []).slice(0, 5).map((s, i) => (
-                <div key={i} className="flex justify-between text-xs">
+                <div key={s.id || `sig-${i}-${s.timestamp || ""}`} className="flex justify-between text-xs">
                   <span className={`font-bold ${s.side === "long" ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
                     {s.side?.toUpperCase()} ${s.entry_price?.toFixed(2)}
                   </span>

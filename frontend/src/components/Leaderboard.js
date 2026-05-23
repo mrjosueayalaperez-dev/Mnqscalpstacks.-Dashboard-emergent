@@ -42,7 +42,7 @@ const Leaderboard = () => {
               {data.top_referrers.slice(0, 5).map((r, i) => {
                 const RankIcon = rankIcons[i] || Star;
                 return (
-                  <div key={i} className="flex items-center justify-between p-2 bg-white/[0.03] rounded-sm" data-testid={`referrer-${i}`}>
+                  <div key={r.name || `referrer-${i}`} className="flex items-center justify-between p-2 bg-white/[0.03] rounded-sm" data-testid={`referrer-${i}`}>
                     <div className="flex items-center gap-2">
                       <RankIcon className={`w-4 h-4 ${i === 0 ? "text-[#FFCC00]" : i === 1 ? "text-zinc-300" : "text-[#CD7F32]"}`} />
                       <span className="text-sm text-white font-semibold">{r.name}</span>

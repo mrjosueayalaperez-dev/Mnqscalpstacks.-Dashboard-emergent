@@ -76,8 +76,8 @@ const PerformanceEngine = () => {
       <div className="widget-content">
         {/* Neon Readout Grid */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
-          {metrics.map((m, i) => (
-            <div key={i} className="p-3 bg-[#0A0A0A] border border-white/5 rounded-sm text-center" data-testid={`perf-${m.label.toLowerCase().replace(/[\s%]/g, "-")}`}>
+          {metrics.map((m) => (
+            <div key={m.label} className="p-3 bg-[#0A0A0A] border border-white/5 rounded-sm text-center" data-testid={`perf-${m.label.toLowerCase().replace(/[\s%]/g, "-")}`}>
               <span className="text-[0.5rem] font-bold uppercase tracking-[0.2em] text-zinc-600 block mb-1">{m.label}</span>
               <span
                 className="text-lg md:text-xl font-mono font-black block"

@@ -14,17 +14,17 @@ Symbol mapping:
 import asyncio
 import logging
 import time
-from typing import Dict, Optional, List
+from typing import Any, Dict, List, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-YAHOO_URL = "https://query1.finance.yahoo.com/v8/finance/chart/NQ=F"
-HEADERS = {"User-Agent": "Mozilla/5.0 (MNQScalpStacks/1.0)"}
+YAHOO_URL: str = "https://query1.finance.yahoo.com/v8/finance/chart/NQ=F"
+HEADERS: Dict[str, str] = {"User-Agent": "Mozilla/5.0 (MNQScalpStacks/1.0)"}
 
 # Last known good tick (warm cache so first connect is instant)
-_last_tick: Dict[str, float] = {
+_last_tick: Dict[str, Any] = {
     "price": 0.0,
     "previous_close": 0.0,
     "change": 0.0,
@@ -36,10 +36,10 @@ _last_tick: Dict[str, float] = {
 }
 
 # Recent candle window for chart-aligned indicators (server-side fallback)
-_minute_bars: List[dict] = []
+_minute_bars: List[Dict[str, Any]] = []
 
 
-async def _fetch_yahoo() -> Optional[dict]:
+async def _fetch_yahoo() -> Optional[Dict[str, Any]]:
     try:
         async with httpx.AsyncClient(timeout=8) as client:
             r = await client.get(
@@ -58,7 +58,7 @@ async def _fetch_yahoo() -> Optional[dict]:
             closes = quote.get("close", []) or []
             volumes = quote.get("volume", []) or []
 
-            bars: List[dict] = []
+            bars: List[Dict[str, Any]] = []
             for i, ts in enumerate(timestamps):
                 if i >= len(closes) or closes[i] is None:
                     continue
@@ -86,7 +86,7 @@ async def _fetch_yahoo() -> Optional[dict]:
         return None
 
 
-def _compute_indicators(bars: List[dict]) -> dict:
+def _compute_indicators(bars: List[Dict[str, Any]]) -> Dict[str, float]:
     """EMA9, EMA21, session VWAP, RSI14 from server-side bars (fallback when frontend chart hides them)."""
     if not bars:
         return {"ema9": 0.0, "ema21": 0.0, "vwap": 0.0, "rsi": 50.0}
@@ -131,7 +131,7 @@ def _compute_indicators(bars: List[dict]) -> dict:
     }
 
 
-async def refresh_once() -> dict:
+async def refresh_once() -> Dict[str, Any]:
     """Pull fresh tick from Yahoo, update cache, return the snapshot."""
     data = await _fetch_yahoo()
     if not data:
@@ -165,12 +165,12 @@ async def refresh_once() -> dict:
     return get_last()
 
 
-def get_last() -> dict:
+def get_last() -> Dict[str, Any]:
     """Return cached snapshot (does not network)."""
     return dict(_last_tick)
 
 
-def get_bars() -> List[dict]:
+def get_bars() -> List[Dict[str, Any]]:
     return list(_minute_bars)
 
 
@@ -184,19 +184,19 @@ class TickBroker:
         self._task: Optional[asyncio.Task] = None
         self._poll_seconds: int = 3
 
-    def register(self, ws) -> None:
+    def register(self, ws: Any) -> None:
         self._clients.add(ws)
         if not self._task or self._task.done():
             self._task = asyncio.create_task(self._loop())
 
-    def unregister(self, ws) -> None:
+    def unregister(self, ws: Any) -> None:
         self._clients.discard(ws)
 
     async def _loop(self) -> None:
         while self._clients:
             try:
                 snap = await refresh_once()
-                dead = []
+                dead: List[Any] = []
                 for c in list(self._clients):
                     try:
                         await c.send_json(snap)
@@ -208,4 +208,5 @@ class TickBroker:
                 logger.warning(f"tick loop error: {e}")
             await asyncio.sleep(self._poll_seconds)
 
-broker = TickBroker()
+
+broker: TickBroker = TickBroker()

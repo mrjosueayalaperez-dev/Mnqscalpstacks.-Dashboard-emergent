@@ -268,19 +268,11 @@ class BacktestCreate(BaseModel):
 
 # ============== Signal Engine Functions ==============
 
-async def send_discord_signal(signal: dict):
-    """Send branded signal to Discord webhook — MNQ SCALP STACKS BOT"""
-    if not DISCORD_WEBHOOK_URL or DISCORD_WEBHOOK_URL == "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL":
-        logger.info("Discord webhook not configured, skipping delivery")
-        return False
+def _discord_webhook_configured() -> bool:
+    return bool(DISCORD_WEBHOOK_URL) and DISCORD_WEBHOOK_URL != "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL"
 
-    is_long = signal["side"] == "long"
-    side_label = "LONG" if is_long else "SHORT"
-    side_emoji = "🟢" if is_long else "🔴"
-    signal_color = 5763719 if is_long else 15548997  # Green / Red
 
-    # Confluence components display
-    components = signal.get("components", {})
+def _format_signal_pillars(components: dict) -> str:
     pillars = []
     if components.get("ema21_cross"):
         pillars.append("EMA21 Cross")
@@ -288,19 +280,31 @@ async def send_discord_signal(signal: dict):
         pillars.append("VWAP")
     if not pillars:
         pillars = ["EMA21", "VWAP"]
+    return " + ".join(pillars) + " Confirmed"
 
-    pillar_status = " + ".join(pillars) + " Confirmed"
+
+def _rr_ratio(entry: float, stop: float, tp1: float) -> str:
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return "N/A"
+    return f"{abs(tp1 - entry) / risk:.1f}:1"
+
+
+def _build_discord_payload(signal: dict) -> dict:
+    is_long = signal["side"] == "long"
+    side_label = "LONG" if is_long else "SHORT"
+    side_emoji = "🟢" if is_long else "🔴"
+    signal_color = 5763719 if is_long else 15548997  # Green / Red
+
+    pillar_status = _format_signal_pillars(signal.get("components", {}))
     score = signal.get("confluence_score", 0)
 
-    # Risk-reward calculation
     entry = signal.get("entry_price", 0)
     stop = signal.get("stop_loss", 0)
     tp1 = signal.get("tp1", 0)
-    risk = abs(entry - stop)
-    reward = abs(tp1 - entry)
-    rr_ratio = f"{reward / risk:.1f}:1" if risk > 0 else "N/A"
+    rr = _rr_ratio(entry, stop, tp1)
 
-    payload = {
+    return {
         "username": "MNQ SCALP STACKS BOT",
         "avatar_url": "https://i.imgur.com/4S7S5vj.png",
         "embeds": [{
@@ -312,19 +316,25 @@ async def send_discord_signal(signal: dict):
                 {"name": "Status", "value": f"{'✅' if score >= 2 else '⚠️'} {pillar_status}", "inline": False},
                 {"name": "Entry", "value": f"```${entry:.2f}```", "inline": True},
                 {"name": "Stop Loss", "value": f"```${stop:.2f}```", "inline": True},
-                {"name": "R:R", "value": f"```{rr_ratio}```", "inline": True},
+                {"name": "R:R", "value": f"```{rr}```", "inline": True},
                 {"name": "TP1", "value": f"```${tp1:.2f}```", "inline": True},
                 {"name": "TP2", "value": f"```${signal.get('tp2', 0):.2f}```", "inline": True},
                 {"name": "Trend", "value": f"```{signal.get('trend_direction', 'neutral').upper()}```", "inline": True},
             ],
             "footer": {"text": "MNQ SCALP STACKS SaaS | Emergent.sh"},
             "timestamp": signal.get("created_at", datetime.now(timezone.utc).isoformat()),
-        }]
+        }],
     }
 
+
+async def send_discord_signal(signal: dict) -> bool:
+    """Send branded signal to Discord webhook — MNQ SCALP STACKS BOT."""
+    if not _discord_webhook_configured():
+        logger.info("Discord webhook not configured, skipping delivery")
+        return False
     try:
         async with httpx.AsyncClient() as http_client:
-            resp = await http_client.post(DISCORD_WEBHOOK_URL, json=payload, timeout=5.0)
+            resp = await http_client.post(DISCORD_WEBHOOK_URL, json=_build_discord_payload(signal), timeout=5.0)
             return resp.status_code in (200, 204)
     except Exception as e:
         logger.error(f"Discord send failed: {e}")
@@ -574,7 +584,7 @@ async def scan_stocks(min_change: float = 3.0):
 
 # MNQ Futures Routes — LIVE feed (CME via Yahoo NQ=F; NQ and MNQ trade at same price)
 @api_router.get("/futures/mnq")
-async def get_mnq_data():
+async def get_mnq_data() -> Dict[str, Any]:
     """Real-time MNQ futures snapshot. Falls back to cached tick on transient errors."""
     snap = await refresh_mnq()
     if not snap.get("price"):
@@ -631,80 +641,12 @@ async def mnq_socket(ws: WebSocket):
 
 # Multi-day market context (PDH/PDL, ADR, range expansion, trend)
 @api_router.get("/market/context")
-async def market_context():
+async def market_context() -> Dict[str, Any]:
     ctx = await get_market_context()
     if not ctx:
         raise HTTPException(status_code=503, detail="Market context unavailable")
     return ctx
 
-
-# Legacy MNQ Futures Route (synthetic fallback) — kept for compatibility, but never the primary path
-async def get_mnq_data_synthetic():
-    """Get MNQ (Micro Nasdaq) futures data with wave validation"""
-    # Key resistance levels
-    RESISTANCE_ZONES = [27972, 28000, 28500]
-    
-    quote = await fetch_stock_quote("QQQ")
-    if not quote:
-        base = 18500
-        price = base + _rng.uniform(-50, 50)
-        close_price = price + _rng.uniform(-5, 5)
-        vwap = base + 10
-        ema9 = base + 15
-        ema21 = base - 5
-        rsi_val = 50 + _rng.randint(-15, 15)
-        
-        # Resistance zone check
-        resistance_zones_hit = [z for z in RESISTANCE_ZONES if abs(price - z) < 50]
-        
-        return {
-            "symbol": "MNQ",
-            "price": round(price, 2),
-            "close": round(close_price, 2),
-            "change": round(_rng.uniform(-100, 100), 2),
-            "change_percent": str(round(_rng.uniform(-1, 1), 2)),
-            "high": round(base + 100, 2),
-            "low": round(base - 100, 2),
-            "vwap": round(vwap, 2),
-            "ema9": round(ema9, 2),
-            "ema21": round(ema21, 2),
-            "rsi": rsi_val,
-            "resistance_zones": resistance_zones_hit,
-            "in_resistance": len(resistance_zones_hit) > 0,
-            "data_source": "mock",
-            "is_mock": True,
-            "wave_valid": True,
-        }
-    
-    # Scale QQQ to approximate MNQ
-    scale = 45
-    price = round(quote["price"] * scale, 2)
-    close_price = round(price + _rng.uniform(-2, 2), 2)
-    vwap = round(quote["price"] * scale * 0.998, 2)
-    ema9 = round(quote["price"] * scale * 1.001, 2)
-    ema21 = round(quote["price"] * scale * 0.999, 2)
-    
-    # Resistance zone check
-    resistance_zones_hit = [z for z in RESISTANCE_ZONES if abs(price - z) < 50]
-    
-    return {
-        "symbol": "MNQ",
-        "price": price,
-        "close": close_price,
-        "change": round(quote["change"] * scale, 2),
-        "change_percent": quote["change_percent"],
-        "high": round(quote["high"] * scale, 2),
-        "low": round(quote["low"] * scale, 2),
-        "vwap": vwap,
-        "ema9": ema9,
-        "ema21": ema21,
-        "rsi": 55,
-        "resistance_zones": resistance_zones_hit,
-        "in_resistance": len(resistance_zones_hit) > 0,
-        "data_source": "qqq_proxy",
-        "is_proxy": True,
-        "wave_valid": True,
-    }
 
 # Watchlist Routes
 @api_router.get("/watchlist", response_model=List[WatchlistItem])
@@ -1270,10 +1212,7 @@ async def generate_test_signal(background_tasks: BackgroundTasks):
 
 
 # Pine Script Reference
-@api_router.get("/signals/pinescript")
-async def get_pine_script():
-    """Get the MNQ Scalp Stacks v3 Master Punch Pine Script"""
-    pine = '''//@version=5
+_PINE_SCRIPT_V3 = '''//@version=5
 strategy("MNQ Scalp Stacks v3", overlay=true,
      initial_capital=10000, pyramiding=0,
      commission_type=strategy.commission.percent, commission_value=0.01)
@@ -1355,11 +1294,15 @@ alertcondition(buyPunch, title="BUY PUNCH", message='{"type":"buy","symbol":"MNQ
 alertcondition(sellPunch, title="SELL PUNCH", message='{"type":"sell","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
 alertcondition(inResistanceZone, title="27972 RESISTANCE", message='{"type":"resistance","symbol":"MNQ","price":"{{close}}","level":"27972"}')
 '''
-    webhook_instructions = f"""
+
+
+def _build_webhook_instructions() -> str:
+    backend = os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')
+    return f"""
 ## MNQ Scalp Stacks v3 — TradingView Setup
 
 ### Webhook URL:
-{os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')}/api/webhook/tradingview
+{backend}/api/webhook/tradingview
 
 ### Setup Steps:
 1. Open TradingView -> MNQ 1-min chart (MNQ ONLY)
@@ -1384,10 +1327,14 @@ alertcondition(inResistanceZone, title="27972 RESISTANCE", message='{"type":"res
 - JSON format matches /api/webhook/tradingview endpoint
 """
 
+
+@api_router.get("/signals/pinescript")
+async def get_pine_script():
+    """Get the MNQ Scalp Stacks v3 Master Punch Pine Script."""
     return {
-        "pine_script": pine,
-        "webhook_instructions": webhook_instructions,
-        "webhook_url": "/api/webhook/tradingview"
+        "pine_script": _PINE_SCRIPT_V3,
+        "webhook_instructions": _build_webhook_instructions(),
+        "webhook_url": "/api/webhook/tradingview",
     }
 
 # ============== Backtest Routes ==============
@@ -2128,7 +2075,7 @@ def _ny_session_open() -> bool:
 
 
 @api_router.get("/operator/state")
-async def operator_state():
+async def operator_state() -> Dict[str, Any]:
     s = dict(_operator_state)
     s["session_seconds"] = int(
         (datetime.now(timezone.utc) - datetime.fromisoformat(s["session_started_at"])).total_seconds()
@@ -2141,7 +2088,7 @@ async def operator_state():
 
 
 @api_router.get("/operator/candles")
-async def operator_candles(timeframe: str = "1m", count: int = 120):
+async def operator_candles(timeframe: str = "1m", count: int = 120) -> Dict[str, Any]:
     """Real intraday candles from the live MNQ feed (Yahoo NQ=F)."""
     from market_feed import get_bars
     bars = get_bars()
@@ -2202,62 +2149,11 @@ async def operator_candles(timeframe: str = "1m", count: int = 120):
     }
 
 
-# Synthetic candle generator — kept for offline dev/testing only
-async def operator_candles_synthetic(timeframe: str = "1m", count: int = 120):
-    tf_seconds = {"1m": 60, "5m": 300, "15m": 900}.get(timeframe, 60)
-    now = int(datetime.now(timezone.utc).timestamp())
-    # Align to bar boundary
-    end = now - (now % tf_seconds)
-    candles = []
-    price = 18500.0
-    for i in range(count):
-        t = end - (count - 1 - i) * tf_seconds
-        # Deterministic-ish drift seeded by bar timestamp
-        seed = (t // tf_seconds) % 997
-        drift = (seed - 498) / 100.0
-        o = round(price, 2)
-        c = round(price + drift, 2)
-        h = round(max(o, c) + abs(drift) * 0.6 + 0.5, 2)
-        low = round(min(o, c) - abs(drift) * 0.6 - 0.5, 2)
-        v = int(2000 + (seed * 31) % 5000)
-        candles.append({"time": t, "open": o, "high": h, "low": low, "close": c, "volume": v})
-        price = c
-
-    # Indicators
-    closes = [k["close"] for k in candles]
-    def ema(period):
-        if len(closes) < period:
-            return []
-        k = 2 / (period + 1)
-        out = [None] * (period - 1)
-        seed = sum(closes[:period]) / period
-        out.append(round(seed, 2))
-        for i in range(period, len(closes)):
-            seed = closes[i] * k + seed * (1 - k)
-            out.append(round(seed, 2))
-        return out
-
-    # Session VWAP (cumulative across the window)
-    cum_pv, cum_v, vwap_line = 0.0, 0.0, []
-    for k in candles:
-        typ = (k["high"] + k["low"] + k["close"]) / 3
-        cum_pv += typ * k["volume"]
-        cum_v += k["volume"]
-        vwap_line.append(round(cum_pv / cum_v, 2) if cum_v else None)
-
-    return {
-        "symbol": "MNQ",
-        "timeframe": timeframe,
-        "candles": candles,
-        "ema9": [{"time": c["time"], "value": v} for c, v in zip(candles, ema(9)) if v is not None],
-        "ema21": [{"time": c["time"], "value": v} for c, v in zip(candles, ema(21)) if v is not None],
-        "vwap": [{"time": c["time"], "value": v} for c, v in zip(candles, vwap_line) if v is not None],
-        "last_close": candles[-1]["close"] if candles else None,
-    }
+# Synthetic candle generator was removed (2026-02-22) — live Yahoo feed is the only source.
 
 
 @api_router.post("/operator/order")
-async def operator_order(order: OperatorOrder):
+async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
     """Server-side validated order. PHASE 1: logs only, does NOT submit to a broker."""
     now_ts = datetime.now(timezone.utc).timestamp()
 
@@ -2354,7 +2250,7 @@ async def operator_order(order: OperatorOrder):
 
 
 @api_router.post("/operator/control/{action}")
-async def operator_control(action: str):
+async def operator_control(action: str) -> Dict[str, Any]:
     """Master controls: flatten | pause | resume | kill | reset_session"""
     action = action.lower()
     if action == "flatten":
@@ -2387,7 +2283,7 @@ async def operator_control(action: str):
 
 
 @api_router.get("/operator/journal")
-async def operator_journal(limit: int = 20):
+async def operator_journal(limit: int = 20) -> Dict[str, Any]:
     rows = await db.operator_orders.find({}, {"_id": 0}).sort("ts", -1).to_list(length=limit)
     return {"entries": rows}
 
@@ -2425,7 +2321,7 @@ async def affiliate_redirect(partner: str, request: Request, src: Optional[str] 
 
 
 @api_router.get("/admin/clicks")
-async def affiliate_click_stats():
+async def affiliate_click_stats() -> Dict[str, Any]:
     """Aggregated click stats per partner + src (for the admin revenue card)."""
     pipeline = [
         {"$group": {
