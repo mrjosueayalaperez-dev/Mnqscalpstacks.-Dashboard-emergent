@@ -67,6 +67,9 @@ export default function useMnqLive() {
       clearInterval(fallbackTimerRef.current);
       if (wsRef.current) { try { wsRef.current.close(); } catch { /* ignore */ } }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: this effect must run exactly once on mount.
+    // All captured values are module constants (API, WS_URL), refs, or React-stable setters.
+    // Re-running would tear down the live WebSocket every render.
   }, []);
 
   return { tick, connected };

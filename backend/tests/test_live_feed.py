@@ -36,12 +36,15 @@ def test_candles_use_real_feed():
 
 def test_order_fills_at_live_price_not_18500():
     httpx.post(f"{API}/operator/control/reset_session", timeout=10)
+    # Sleep past the server-side 1500ms cooldown to avoid 429 collisions with other tests
+    import time
+    time.sleep(2)
     r = httpx.post(
         f"{API}/operator/order",
         json={"action": "BUY", "symbol": "MNQ", "qty": 1, "order_type": "MARKET"},
         timeout=15,
     )
-    assert r.status_code == 200
+    assert r.status_code == 200, f"unexpected status {r.status_code}: {r.text}"
     fill = r.json()["order"]["fill_price"]
     # Fill must reflect the live feed, not the old hardcoded 18500
     assert fill > 1000

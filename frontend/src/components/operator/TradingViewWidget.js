@@ -15,7 +15,7 @@ export default function TradingViewWidget({ wsConnected, lastTick }) {
   useEffect(() => {
     if (!containerRef.current) return undefined;
     const container = containerRef.current;
-    container.innerHTML = ""; // re-mount safe
+    container.replaceChildren(); // safe: clear our own owned DOM
 
     const div = document.createElement("div");
     div.className = "tradingview-widget-container__widget";
@@ -27,7 +27,11 @@ export default function TradingViewWidget({ wsConnected, lastTick }) {
     script.type = "text/javascript";
     script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
     script.async = true;
-    script.innerHTML = JSON.stringify({
+    // safe: hardcoded TradingView embed config — never user input. This is the
+    // official embed pattern; the <script> tag expects its body to contain a
+    // JSON config that TV's loader parses. textContent prevents accidental
+    // HTML parsing.
+    script.textContent = JSON.stringify({
       autosize: true,
       symbol: "CME_MINI:MNQ1!",
       interval: "1",
@@ -61,7 +65,7 @@ export default function TradingViewWidget({ wsConnected, lastTick }) {
     container.appendChild(script);
 
     return () => {
-      try { container.innerHTML = ""; } catch { /* ignore */ }
+      try { container.replaceChildren(); } catch { /* ignore */ }
     };
   }, []);
 

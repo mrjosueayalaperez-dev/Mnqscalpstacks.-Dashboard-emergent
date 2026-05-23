@@ -13,7 +13,6 @@ from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
 import httpx
-import asyncio
 import secrets
 import hashlib
 from emergentintegrations.llm.chat import LlmChat, UserMessage
@@ -1043,8 +1042,6 @@ async def ai_analyze(request: AIAnalysisRequest):
 @api_router.post("/webhook/tradingview")
 async def receive_tradingview_webhook(payload: TradingViewWebhook, background_tasks: BackgroundTasks):
     """Receive signals from TradingView webhook"""
-    global signal_engine_state
-
     if signal_engine_state["kill_switch"]:
         return {"status": "blocked", "reason": "Kill switch active"}
 
@@ -1163,7 +1160,6 @@ async def get_signal_stats():
 @api_router.post("/signals/kill-switch")
 async def toggle_kill_switch(request: KillSwitchRequest):
     """Enable/disable the kill switch"""
-    global signal_engine_state
     signal_engine_state["kill_switch"] = request.enabled
     action = "ENABLED" if request.enabled else "DISABLED"
     logger.warning(f"Kill switch {action}: {request.reason or 'No reason'}")
@@ -1215,13 +1211,15 @@ async def get_system_health():
 @api_router.post("/signals/test")
 async def generate_test_signal(background_tasks: BackgroundTasks):
     """Generate a test signal matching Scalp Punch logic (EMA21 cross + VWAP)"""
-    global signal_engine_state
-
     if signal_engine_state["kill_switch"]:
         return {"status": "blocked", "reason": "Kill switch active"}
 
     side = _rng.choice(["long", "short"])
-    base_price = 18500 + _rng.uniform(-100, 100)
+    live_snap = get_last_mnq()
+    live_anchor = live_snap.get("price") or 0
+    if not live_anchor:
+        live_anchor = (await refresh_mnq()).get("price") or 29500
+    base_price = live_anchor + _rng.uniform(-50, 50)
     entry = round(base_price, 2)
 
     # Scalp Punch: EMA21 as spine, VWAP as institutional level
