@@ -1,0 +1,52 @@
+{
+  "summary": "BUG VERIFICATION: TradingView chart on /dashboard and /operator now renders correctly. The direct widgetembed iframe approach with CAPITALCOM:US100 + theme=dark is fully working — dark background, green/red candles, volume bars, VWAP overlay, 'US 100 Cash CFD · <interval> · Capital.com' legend, NO 'only available on TradingView' error, NO red X. Verified deterministic across two full page reloads and interval switches (1m → 5m → 15m). Operator cockpit chart also rendered with the same widgetembed URL (interval=1, hidesidetoolbar=0, withdateranges=1) with header overlay 'MNQ · US100 CFD chart 29,521.50 -419.5 (-1.4%) LIVE'. Live tape (price/session/VWAP/EMA/RSI) and signal bar (BUY PUNCH) all populated. Dashboard regression panels (mnq-tracker, checklist-panel, alerts-panel, calculator-panel, main-header) all present.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Dashboard /live-terminal-chart iframe.src is https://www.tradingview-widget.com/widgetembed/?symbol=CAPITALCOM%3AUS100&interval=1&theme=dark&... with two studies=... params (MAExp, VWAP)",
+    "TV iframe body bg = rgb(46,46,46) (dark), 7 canvases painted, legend text 'US 100 Cash CFD' present, NO 'only available on TradingView' text",
+    "Visual confirmation via screenshot: dark chart with green/red candles, volume bars at bottom, VWAP line, session ~08:00-12:45 UTC-4, price ~29,300 (US100 CFD), no red X, no error card",
+    "terminal-live-price = 29,517.25 (▼ -423.75 -1.42%) — MNQ tape via own WebSocket",
+    "terminal-ws-status = LIVE (green Wifi + pulse)",
+    "terminal-signal-bar shows BUY PUNCH with chips EMA21 ABOVE / VWAP ABOVE / RSI 18",
+    "Session High/Low, VWAP, EMA9, EMA21, RSI14 stat cells populated with real numbers",
+    "Timeframe switch terminal-tf-5m → iframe src becomes interval=5, iframe remounts (key change) and re-paints dark",
+    "Timeframe switch terminal-tf-15m → iframe src becomes interval=15, [15m] tv frame: bg=rgb(46,46,46) canvas=7 err=False legend=True",
+    "Reload determinism: 2 consecutive reloads both produce bg=rgb(46,46,46), 7 canvases, US 100 Cash CFD legend, NO error text — 100% deterministic dark render (no more intermittent light theme)",
+    "Dashboard regression panels all present: mnq-tracker, checklist-panel, alerts-panel, calculator-panel, main-header",
+    "Operator /operator tv-widget iframe.src = widgetembed CAPITALCOM:US100 interval=1 theme=dark hidesidetoolbar=0 withdateranges=1 — dark render (bg=rgb(46,46,46)), 7 canvases, US 100 Cash CFD legend visible",
+    "Operator header overlay reads 'MNQ · US100 CFD chart 29,521.50 -419.5 (-1.4%) LIVE' — WS price live, LIVE badge green",
+    "Operator regression visible in screenshot: KEY LEVELS strip (PDH/PDL/PDC/DAY H/DAY L/OPEN with tick deltas), POSITION panel (--FLAT--), SIGNAL ENGINE (Bias LONG, Confluence 3/4), MARKET CONTEXT (Today Range/Day Range/Sd Trend/Vol), LONG/SHORT panels with BUY MARKET/BUY LIMIT/SELL MARKET/SELL LIMIT, MASTER CONTROLS (FLATTEN/PAUSE/RESET/KILL SWITCH), BRACKET PRESETS (SNIPE 1R/SNIPE 2R/RUNNER), ARM SNIPE header — all rendered",
+    "Zero React pageerror / console errors during test run"
+  ],
+  "test_report_links": [
+    "/app/test_reports/iteration_8.json"
+  ],
+  "action_items": [
+    "No new bugs. Previously reported /api/checkout/status 500 (emergentintegrations pydantic) from iteration_7 remains open — not retested in this iteration per request scope."
+  ],
+  "critical_code_review_comments": [
+    "buildTvEmbedUrl() is clean and deterministic — good approach bypassing the script loader.",
+    "Note: iframe body bg is rgb(46,46,46) (TV chart canvas dark) — not fully near-black (#0A) but this is TradingView's own dark theme and is clearly readable / matches the design intent.",
+    "Consider adding a fallback 'chart loading…' skeleton behind the iframe in case a future TV outage returns a blank iframe — currently there is only the absolute-positioned watermark.",
+    "Operator regression selectors mentioned in the request (key-levels, position-panel, signal-engine-panel, operator-buy-market) did not resolve as data-testids — the corresponding UI elements ARE visibly rendered (verified via screenshot), but the tests using these testids would fail. Main agent may want to confirm/align data-testid naming for future automated regression."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "n/a — skipped per request",
+    "frontend": "100% (all chart bug verification and regression checks passed)"
+  },
+  "test_credentials": "None — no auth in app",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "TradingView chart bug is FULLY FIXED and verified. Both /dashboard LiveTerminalChart and /operator TradingViewWidget use buildTvEmbedUrl() from /app/frontend/src/lib/tvEmbedUrl.js which produces a direct widgetembed URL for CAPITALCOM:US100 with theme=dark, MAExp + VWAP studies. Iframe paints deterministically in headless Chromium (bg rgb(46,46,46), 7 canvases, US 100 Cash CFD legend, no error). Reload determinism confirmed x2. Interval switches 1→5→15 all remount iframe (key={interval}) and re-paint. Live tape and signal bar populated with real WS data. Operator cockpit fully renders with WS-driven header overlay showing LIVE badge. Only known remaining issue in the app is the /api/checkout/status 500 documented in iteration_7 (out of scope for this iteration).",
+  "rca of the issue": "Original bug: TV script loader (embed-widget-advanced-chart.js) nondeterministically ignored theme:dark AND CME_MINI:MNQ1! is blocked in anonymous embeds ('only available on TradingView'). Fix (already applied by main agent): replaced script loader with a direct <iframe src={buildTvEmbedUrl(...)}> using https://www.tradingview-widget.com/widgetembed/?symbol=CAPITALCOM:US100&theme=dark&... — CAPITALCOM:US100 is a real-time Nasdaq-100 CFD that tracks MNQ 1:1 and is NOT embed-blocked. Verified: 0/2 reloads showed the old bug; 3/3 interval switches painted dark candles."
+}

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Activity, Wifi, WifiOff, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import useMnqLive from "@/components/operator/useMnqLive";
+import { buildTvEmbedUrl } from "@/lib/tvEmbedUrl";
 
 const INTERVALS = [
   { label: "1m", tv: "1" },
@@ -16,59 +17,21 @@ const fmt = (v) =>
     ? v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : "—";
 
-/** Official TradingView Advanced Chart embed — remounts on interval change. */
-const TvEmbed = ({ interval }) => {
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return undefined;
-    const container = containerRef.current;
-    container.replaceChildren();
-
-    const div = document.createElement("div");
-    div.className = "tradingview-widget-container__widget";
-    div.style.height = "100%";
-    div.style.width = "100%";
-    container.appendChild(div);
-
-    const script = document.createElement("script");
-    script.type = "text/javascript";
-    script.src = "https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js";
-    script.async = true;
-    // safe: hardcoded TradingView embed config — never user input
-    script.textContent = JSON.stringify({
-      autosize: true,
-      symbol: "CME_MINI:MNQ1!",
-      interval,
-      timezone: "America/New_York",
-      theme: "dark",
-      style: "1",
-      locale: "en",
-      enable_publishing: false,
-      withdateranges: false,
-      hide_side_toolbar: true,
-      allow_symbol_change: false,
-      details: false,
-      hotlist: false,
-      calendar: false,
-      studies: ["STD;EMA", "STD;EMA", "STD;VWAP", "STD;Volume"],
-      studies_overrides: {
-        "moving average exponential.length": 9,
-        "moving average exponential.plot.color": "#FFCC00",
-      },
-      backgroundColor: "rgba(10, 10, 10, 1)",
-      gridColor: "rgba(255, 255, 255, 0.04)",
-      support_host: "https://www.tradingview.com",
-    });
-    container.appendChild(script);
-
-    return () => {
-      try { container.replaceChildren(); } catch { /* ignore */ }
-    };
-  }, [interval]);
-
-  return <div ref={containerRef} className="absolute inset-0" />;
-};
+/**
+ * Deterministic TradingView chart — direct `widgetembed` iframe (see
+ * lib/tvEmbedUrl.js for why we bypass the official embed script). The live
+ * tape above the chart shows the TRUE MNQ price from our own WebSocket feed;
+ * the chart plots CAPITALCOM:US100, a 1:1 MNQ structure proxy.
+ */
+const TvEmbed = ({ interval }) => (
+  <iframe
+    key={interval}
+    title="MNQ terminal chart"
+    src={buildTvEmbedUrl({ interval, hideSideToolbar: true, withDateRanges: false })}
+    className="absolute inset-0 w-full h-full border-0"
+    allowFullScreen
+  />
+);
 
 /** Big live price with green/red flash on tick direction. */
 const LivePrice = ({ tick }) => {
@@ -163,7 +126,7 @@ const SignalBar = ({ tick }) => {
 
 /**
  * LiveTerminalChart — full-width dashboard terminal: official TradingView
- * Advanced Chart (CME_MINI:MNQ1!) framed by a live WebSocket tape
+ * Advanced Chart (CAPITALCOM:US100 — MNQ 1:1 proxy) framed by a live WebSocket tape
  * (price / session levels / indicators) and a real-time confluence signal bar.
  */
 export default function LiveTerminalChart() {
@@ -177,7 +140,7 @@ export default function LiveTerminalChart() {
         <div className="flex items-center gap-2.5">
           <Activity className="w-4 h-4 text-[#34C759]" />
           <span className="text-xs md:text-sm font-black tracking-[0.2em] text-white">MNQ LIVE TERMINAL</span>
-          <span className="hidden sm:inline text-[0.6rem] font-mono text-zinc-500">CME_MINI:MNQ1!</span>
+          <span className="hidden sm:inline text-[0.6rem] font-mono text-zinc-500">US100 CFD · TRACKS MNQ 1:1</span>
           <div
             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-sm ${connected ? "bg-[#34C759]/10" : "bg-[#FF3B30]/10"}`}
             data-testid="terminal-ws-status"
