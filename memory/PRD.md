@@ -84,6 +84,16 @@
     - `/app/SYNC_NOTES.md` documents symbol mapping (TV `MNQ1!` ↔ NT `MNQ 03-26` ↔ Yahoo `NQ=F` ↔ backend `MNQ`) and the full live-feed architecture
     - 4 new pytest regressions in `/app/backend/tests/test_live_feed.py` (REST snapshot, candles, order fills, WS stream)
 
+20. **Live Terminal Chart on /dashboard** (2026-02-22):
+    - New `components/LiveTerminalChart.js`, mounted as ROW 0 (full-width, above MNQ Scalp Punch)
+    - Official TradingView Advanced Chart embed (`CME_MINI:MNQ1!`, dark, EMA9/EMA21/VWAP/Volume studies) — user's TV subscription supplies real-time CME data in their browser
+    - Terminal frame fed by `useMnqLive` WS hook: big live price with green/red tick-flash, change/%, LIVE/RECONNECT badge, market state
+    - Live tape: Session High/Low, VWAP, EMA9, EMA21, RSI14 (color-coded, mono)
+    - Timeframe quick-select (1m/5m/15m/1h/4h/D) — remounts TV embed with chosen interval
+    - Live SignalBar: BUY PUNCH / SELL PUNCH / NEUTRAL from EMA21+VWAP+RSI confluence with per-condition chips
+    - data-testids: `live-terminal-chart`, `terminal-live-price`, `terminal-ws-status`, `terminal-tf-*`, `terminal-signal-bar`, `terminal-session-high/low`, etc.
+    - Note: TV canvas doesn't paint in headless browsers (serves error-card to bots) — renders fine in real browsers, same as /operator
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

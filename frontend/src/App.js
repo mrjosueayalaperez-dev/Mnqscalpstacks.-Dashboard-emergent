@@ -19,6 +19,7 @@ import AutoSignalEngine from "@/components/AutoSignalEngine";
 import { FreemiumGate, AdBanner } from "@/components/FreemiumGate";
 import { NinjaTraderPanel, TradingViewPanel, GPayWidget, MarketSidebar } from "@/components/PromoModules";
 import OperatorCockpit from "@/components/operator/OperatorCockpit";
+import LiveTerminalChart from "@/components/LiveTerminalChart";
 import {
   TrendingUp,
   TrendingDown,
@@ -1417,6 +1418,9 @@ function App() {
 
       <main className="p-3 md:p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+          {/* ROW 0: LIVE TERMINAL CHART — official TradingView + live WS tape */}
+          <LiveTerminalChart />
+
           {/* ROW 1: MNQ Scalp Punch + Dual-Gate + Simulation Temple */}
           <MNQTracker data={mnqData} loading={loading.mnq} />
           <DualGate safeMode={safeMode} onToggleSafe={setSafeMode} />
