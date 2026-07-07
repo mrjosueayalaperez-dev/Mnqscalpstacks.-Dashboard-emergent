@@ -14,6 +14,7 @@ import MarketContext from "./MarketContext";
 import KeyLevels from "./KeyLevels";
 import SnipeBar, { HotkeyHelp } from "./SnipeBar";
 import BracketPresets, { PRESETS, presetById } from "./BracketPresets";
+import AtiBridgePanel from "./AtiBridgePanel";
 import useHotkeys from "./useHotkeys";
 import useMnqLive from "./useMnqLive";
 import { sounds, unlockAudio } from "./useAudio";
@@ -261,6 +262,7 @@ export default function OperatorCockpit() {
         <div className="col-span-12 md:col-span-4 space-y-3">
           <MasterControls state={state} onControl={sendControl} />
           <BracketPresets activeId={presetId} onSelect={selectPreset} brackets={brackets} />
+          <AtiBridgePanel />
         </div>
         <div className="col-span-12 md:col-span-4">
           <OrderPanel side="SHORT" onOrder={submitOrder} disabled={orderDisabled} snipeMode={snipe} bracketLabel={brackets ? activePreset : null} />
@@ -276,7 +278,11 @@ export default function OperatorCockpit() {
         <div className="col-span-12 mt-1">
           <div className="px-3 py-2 border border-[#34C759]/30 bg-[#34C759]/5 rounded-sm flex items-center justify-between text-[0.6rem]">
             <span className="text-[#34C759] font-black">◉ LIVE FEED — CME via TradingView + Yahoo NQ=F</span>
-            <span className="text-zinc-500">Chart, prices, and order fills use real MNQ data. Order execution = simulator until Phase 2 (NinjaTrader ATI bridge).</span>
+            <span className="text-zinc-500">
+              {state?.connection?.ati_enabled
+                ? "PHASE 2 ACTIVE — orders route to NinjaTrader via the ATI bridge."
+                : "Chart, prices, and order fills use real MNQ data. Arm the ATI bridge panel for Phase 2 NinjaTrader routing."}
+            </span>
           </div>
         </div>
       </main>

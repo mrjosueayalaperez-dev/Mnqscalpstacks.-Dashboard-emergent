@@ -1,0 +1,74 @@
+{
+  "summary": "Full regression of ATI Phase 2, refactored /dashboard, /operator cockpit, GPay via Stripe, and Live Terminal Chart. Backend: 121/122 pytest passed. Frontend: all critical flows verified end-to-end including Stripe redirect. One real backend bug: GET /api/checkout/status/{session_id} returns 500 due to emergentintegrations pydantic validation.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/checkout/status/{session_id}",
+        "issue": "Returns 500 - emergentintegrations CheckoutStatusResponse pydantic validation error: 'metadata Input should be a valid dictionary' — Stripe API now returns StripeObject where the library expects dict. Server log shows: emergentintegrations.payments.stripe.checkout.CheckoutError: Unexpected error retrieving session status: 1 validation error for CheckoutStatusResponse metadata Input should be a valid dictionary [type=dict_type, input_value=<StripeObject...>, input_type=StripeObject]",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "GET /api/ati/status shape (enabled,account,instrument,bridge_online,pending,dispatched)",
+    "POST /api/ati/config {enabled:true} arms; heartbeat flips bridge_online=true; /operator/state connection.status=CONNECTED with ati_enabled=true; disarm flips to DISCONNECTED",
+    "POST /api/operator/order SNIPE_2R with ATI armed -> ati.routed=true, command_id present; /ati/commands shows PLACE with atm_strategy_name=SNIPE_2R; /ati/ack removes from queue",
+    "POST /api/operator/order with ATI disarmed -> ati.routed=false",
+    "POST /api/operator/control/flatten enqueues FLATTENEVERYTHING",
+    "GET /api/ati/bridge-script downloads Python file with 'PLACE;' and 'incoming' folder logic",
+    "bridge_template.build_oif_line PLACE/CLOSEPOSITION/FLATTENEVERYTHING format all valid",
+    "POST /api/checkout/create tier=pro returns https://...stripe... url + session_id",
+    "POST /api/checkout/create tier=elite returns https://...stripe... url + session_id",
+    "Full pytest regression: 121/122 pass (only /checkout/status failing)",
+    "Frontend / (landing), /performance, /admin, /operator, /dashboard all render with 0 console errors",
+    "Dashboard panels present: live-terminal-chart, mnq-tracker, checklist-panel, alerts-panel, calculator-panel, ai-panel, main-header",
+    "MNQ tracker real price 29,776.00 (non-zero)",
+    "terminal-live-price ticking 29,772.50 with terminal-ws-status=LIVE, terminal-signal-bar visible",
+    "terminal-tf-5m timeframe button clicks without crash",
+    "Checklist first checkbox toggles (24 interactive children)",
+    "Alerts flow: add MNQ price=30000 -> item appears; delete -> item removed (toast 'Alert set for MNQ')",
+    "Calculator MNQ mode with stop_points=15, risk=30 -> 1 contract (correct: 15 pts * $2 = $30)",
+    "Header refresh (data-testid=refresh-all-btn) shows 'Data refreshed!' toast",
+    "GPay FAB opens popup; gpay-checkout 'Upgrade Pro — $49' and gpay-checkout-elite 'Go Elite — $149' present",
+    "Click gpay-checkout redirects browser to https://checkout.stripe.com/c/pay/cs_test_... — Stripe hosted page renders US$49.00 with Sandbox badge",
+    "Operator ATI panel: BRIDGE OFFLINE badge, TAP TO ARM toggle flips to LIVE ROUTING ARMED and back, ATI config updated toast",
+    "Operator ATI: editing ati-account-input dirties config and ati-save-btn appears",
+    "Operator ATI queue-stats shows 'QUEUE 0 pending · 22 sent', ati-download-bridge href = /api/ati/bridge-script",
+    "Operator BUY MARKET: toast 'BUY MARKET accepted Fill @ 29762.00 • SL 29752.00 / TP 29792.00 (Snipe 2R)'; position card shows LONG 2 MNQ",
+    "Operator FLATTEN ALL / RESET SESSION toasts work"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_ati_bridge.py",
+    "/app/backend/tests/test_ati_and_checkout_flow.py",
+    "/app/test_reports/pytest/ati_bridge_results.xml",
+    "/app/test_reports/pytest/ati_and_checkout_flow.xml"
+  ],
+  "action_items": [
+    "Fix GET /api/checkout/status/{session_id} — emergentintegrations lib fails Pydantic validation on Stripe metadata (StripeObject vs dict). Likely fixes: (a) upgrade emergentintegrations, (b) coerce metadata to dict before returning, or (c) call stripe.checkout.Session.retrieve directly and build the response manually. Frontend redirect flow works; only the status polling endpoint is affected — success/cancel page will error."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2000+ lines — should be split (operator, ati routing, checkout, signals) for maintainability",
+    "GET /api/checkout/status/{session_id} lacks defensive try/except — currently returns raw 500 to client; wrap and return a friendly 502/503 if upstream lib fails",
+    "GPay FAB (fixed bottom-right) collides with the Emergent preview badge; not an app bug but a UX collision in preview environment — testing needed force=True or badge hide",
+    "Test test_signal_engine.py::test_generate_test_signal returns a value instead of using assert — pytest warning"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_ati_and_checkout_flow.py (new)"
+  ],
+  "success_rate": {
+    "backend": "99% (121/122 pytest, 8/9 new suite)",
+    "frontend": "100% (all critical flows verified)"
+  },
+  "test_credentials": "None — no auth in app",
+  "seed_data_creation": "None — reused existing data. Cleanup: ATI disarmed & operator session reset after tests.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "ATI Phase 2 fully working end-to-end: /api/ati/status|config|heartbeat|commands|ack|bridge-script all pass; PLACE and FLATTENEVERYTHING enqueue correctly. Cockpit /operator UI ATI panel is functional (arm/disarm, save config, download bridge script). GPay Stripe checkout redirect works — verified with real Stripe hosted page (Sandbox mode). Only remaining bug is GET /api/checkout/status/{session_id} throwing 500 from emergentintegrations Pydantic validation. Dashboard refactor is clean — all data-testids present, MNQ price live, calculator/alerts/checklist all functional. Live Terminal Chart shows non-zero live price via WS (TV iframe canvas blank in headless is expected per user note).",
+  "rca of the issue": "/api/checkout/status/{session_id} 500: emergentintegrations/payments/stripe/checkout.py:204 raises CheckoutError because CheckoutStatusResponse Pydantic model requires metadata: dict but Stripe returned a StripeObject. Reproduction: POST /api/checkout/create then GET /api/checkout/status/<session_id> — instant 500. Mitigation options in action_items."
+}

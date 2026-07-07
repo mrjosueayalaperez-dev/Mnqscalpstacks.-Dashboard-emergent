@@ -40,6 +40,7 @@ def test_candles_have_indicators():
 
 def test_order_flow_buy_then_close():
     _reset()
+    time.sleep(1.6)  # clear any cooldown left by other test files in the suite
     r1 = httpx.post(f"{API}/operator/order",
                     json={"action": "BUY", "symbol": "MNQ", "qty": 1, "order_type": "MARKET"},
                     timeout=10)

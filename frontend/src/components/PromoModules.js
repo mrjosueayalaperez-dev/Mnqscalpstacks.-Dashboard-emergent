@@ -1,10 +1,12 @@
 import React, { useState } from "react";
+import axios from "axios";
 import {
   Zap, Shield, BarChart3, Activity, Cpu, Globe,
   Bell, Layers, Brain, CreditCard, Smartphone, Check, ExternalLink, Link2,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
+const API = `${BACKEND_URL}/api`;
 // Build a tracked outbound URL: /api/r/{partner}?src={cta-id}
 const track = (partner, src) =>
   `${BACKEND_URL}/api/r/${partner}?src=${encodeURIComponent(src)}`;
@@ -130,6 +132,21 @@ const TradingViewPanel = () => (
 // ============ GPAY FLOATING WIDGET ============
 const GPayWidget = () => {
   const [open, setOpen] = useState(false);
+  const [loadingTier, setLoadingTier] = useState(null);
+
+  const startCheckout = async (tier) => {
+    setLoadingTier(tier);
+    try {
+      const { data } = await axios.post(`${API}/checkout/create`, {
+        tier,
+        origin_url: window.location.origin,
+      });
+      window.location.href = data.url; // Stripe Checkout — GPay shows automatically on supported devices
+    } catch (e) {
+      console.error("GPay checkout failed:", e?.message || e);
+      setLoadingTier(null);
+    }
+  };
 
   return (
     <div className="fixed bottom-4 right-4 z-50" data-testid="gpay-widget">
@@ -142,21 +159,32 @@ const GPayWidget = () => {
             <button onClick={() => setOpen(false)} className="text-zinc-500 hover:text-white text-xs" data-testid="gpay-close">X</button>
           </div>
           <ul className="space-y-1.5 mb-3">
-            {["One-click upgrades", "Secure payment", "Instant activation", "Mobile optimized"].map((f) => (
+            {["Google Pay & cards via Stripe", "Secure payment", "Instant activation", "Mobile optimized"].map((f) => (
               <li key={f} className="flex items-center gap-2 text-[0.6rem] text-zinc-400">
                 <Check className="w-3 h-3 text-[#34C759]" />{f}
               </li>
             ))}
           </ul>
-          <a
-            href={track("gpay", "gpay-checkout")}
-            target="_blank"
-            rel="noopener noreferrer sponsored"
-            className="w-full flex items-center justify-center gap-2 py-2 bg-[#FFCC00] text-black text-xs font-black rounded-sm hover:bg-[#FFCC00]/80 transition-colors"
-            data-testid="gpay-checkout"
-          >
-            <CreditCard className="w-4 h-4" /> Pay with GPay
-          </a>
+          <div className="space-y-2">
+            <button
+              onClick={() => startCheckout("pro")}
+              disabled={!!loadingTier}
+              className="w-full flex items-center justify-center gap-2 py-2 bg-[#FFCC00] text-black text-xs font-black rounded-sm hover:bg-[#FFCC00]/80 transition-colors disabled:opacity-60"
+              data-testid="gpay-checkout"
+            >
+              <CreditCard className="w-4 h-4" />
+              {loadingTier === "pro" ? "Opening Stripe…" : "Upgrade Pro — $49"}
+            </button>
+            <button
+              onClick={() => startCheckout("elite")}
+              disabled={!!loadingTier}
+              className="w-full flex items-center justify-center gap-2 py-1.5 bg-white/5 border border-[#FFCC00]/30 text-[#FFCC00] text-[0.65rem] font-black rounded-sm hover:bg-[#FFCC00]/10 transition-colors disabled:opacity-60"
+              data-testid="gpay-checkout-elite"
+            >
+              {loadingTier === "elite" ? "Opening Stripe…" : "Go Elite — $149"}
+            </button>
+          </div>
+          <p className="mt-2 text-[0.5rem] text-zinc-600 text-center">Powered by Stripe · GPay appears automatically on supported devices</p>
         </div>
       )}
       <button

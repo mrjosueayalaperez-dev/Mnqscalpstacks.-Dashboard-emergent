@@ -14,7 +14,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001').rstrip('/')
 
 
 class TestSignalEngineV2Components:
@@ -34,8 +34,8 @@ class TestSignalEngineV2Components:
         signal = data['signal']
         components = signal.get('components', {})
         
-        # v2 components: vwap_filter, rsi_momentum, structure
-        v2_components = ['vwap_filter', 'rsi_momentum', 'structure']
+        # Current confluence components: EMA21 cross + VWAP filter
+        v2_components = ['ema21_cross', 'vwap_filter']
         for comp in v2_components:
             assert comp in components, f"Missing v2 component: {comp}"
             assert isinstance(components[comp], bool), f"Component {comp} should be boolean"
@@ -104,10 +104,9 @@ class TestPineScriptV2:
         data = response.json()
         
         pine_script = data.get('pine_script', '')
-        assert 'MNQ Scalp Stack v2' in pine_script, "Pine Script should have v2 title"
-        assert 'Session VWAP + Structure' in pine_script, "Pine Script should mention VWAP + Structure"
-        
-        print("✓ Pine Script has v2 title: 'MNQ Scalp Stack v2 - Session VWAP + Structure'")
+        assert 'MNQ Scalp Stacks v3' in pine_script, "Pine Script should have v3 title"
+
+        print("✓ Pine Script has v3 title: 'MNQ Scalp Stacks v3'")
     
     def test_pinescript_contains_vwap(self):
         """GET /api/signals/pinescript - v2 script contains ta.vwap"""
@@ -116,8 +115,6 @@ class TestPineScriptV2:
         
         pine_script = data.get('pine_script', '')
         assert 'ta.vwap' in pine_script, "Pine Script should use ta.vwap"
-        assert 'useSessionVWAP' in pine_script, "Pine Script should have VWAP input option"
-        
         print("✓ Pine Script contains ta.vwap for Session VWAP")
     
     def test_pinescript_contains_pivots(self):
@@ -126,12 +123,10 @@ class TestPineScriptV2:
         data = response.json()
         
         pine_script = data.get('pine_script', '')
-        assert 'pivothigh' in pine_script, "Pine Script should use pivothigh"
-        assert 'pivotlow' in pine_script, "Pine Script should use pivotlow"
-        assert 'ta.pivothigh' in pine_script, "Pine Script should use ta.pivothigh"
-        assert 'ta.pivotlow' in pine_script, "Pine Script should use ta.pivotlow"
-        
-        print("✓ Pine Script contains pivot functions for structure detection")
+        assert 'ta.ema' in pine_script, "Pine Script should use the EMA21 spine"
+        assert 'strategy.entry' in pine_script, "Pine Script should submit strategy entries"
+
+        print("✓ Pine Script contains EMA spine + strategy entries")
     
     def test_pinescript_contains_alertcondition(self):
         """GET /api/signals/pinescript - v2 script contains alertcondition"""
@@ -140,8 +135,8 @@ class TestPineScriptV2:
         
         pine_script = data.get('pine_script', '')
         assert 'alertcondition' in pine_script, "Pine Script should have alertcondition"
-        assert 'Long Signal' in pine_script, "Pine Script should have Long Signal alert"
-        assert 'Short Signal' in pine_script, "Pine Script should have Short Signal alert"
+        assert 'BUY PUNCH' in pine_script, "Pine Script should have BUY PUNCH alert"
+        assert 'SELL PUNCH' in pine_script, "Pine Script should have SELL PUNCH alert"
         
         print("✓ Pine Script contains alertcondition for TradingView alerts")
     
@@ -151,10 +146,10 @@ class TestPineScriptV2:
         data = response.json()
         
         pine_script = data.get('pine_script', '')
-        assert 'higherLowFormed' in pine_script, "Pine Script should detect higher-low"
-        assert 'lowerHighFormed' in pine_script, "Pine Script should detect lower-high"
-        
-        print("✓ Pine Script contains structure detection (higher-low/lower-high)")
+        assert 'vwapVal' in pine_script, "Pine Script should use the VWAP institutional level"
+        assert 'ema21' in pine_script, "Pine Script should use the EMA21 spine"
+
+        print("✓ Pine Script contains EMA21 + VWAP confluence structure")
     
     def test_webhook_instructions_mention_v2(self):
         """GET /api/signals/pinescript - webhook_instructions mention v2"""
@@ -162,11 +157,10 @@ class TestPineScriptV2:
         data = response.json()
         
         instructions = data.get('webhook_instructions', '')
-        assert 'v2' in instructions.lower(), "Webhook instructions should mention v2"
-        assert 'VWAP' in instructions, "Webhook instructions should mention VWAP"
-        assert 'Structure' in instructions or 'structure' in instructions, "Webhook instructions should mention structure"
-        
-        print("✓ Webhook instructions mention v2 signal logic")
+        assert 'v3' in instructions.lower(), "Webhook instructions should mention v3"
+        assert 'MNQ' in instructions, "Webhook instructions should mention MNQ"
+
+        print("✓ Webhook instructions mention v3 signal logic")
 
 
 class TestWebhookStillWorks:
@@ -245,8 +239,7 @@ class TestSignalHistoryAndStats:
         # Verify v2 signal structure
         v2_signal = v2_signals[0]
         assert 'vwap_filter' in v2_signal['components']
-        assert 'rsi_momentum' in v2_signal['components']
-        assert 'structure' in v2_signal['components']
+        assert 'ema21_cross' in v2_signal['components']
         
         print(f"✓ Found {len(v2_signals)} v2 signals in history")
     

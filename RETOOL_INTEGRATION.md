@@ -139,6 +139,55 @@ AFFILIATE_URL_TRADINGVIEW=...
 
 Then `sudo supervisorctl restart backend` (preview) or redeploy (production).
 
-## NinjaTrader Bridge (Phase 2 — Coming)
+## NinjaTrader Bridge (Phase 2 — LIVE)
 
-When we wire the NinjaTrader ATI file writer, the `/api/operator/order` endpoint stays identical — Retool doesn't change. The backend just gains the ability to emit real order files instead of just logging. Zero client changes required.
+Phase 2 is shipped. `/api/operator/order` stays identical for Retool — but when ATI
+routing is armed, the backend also enqueues a real NinjaTrader OIF command.
+
+### ATI endpoints
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| GET  | `/api/ati/status` | none | enabled flag, bridge heartbeat, queue depth |
+| POST | `/api/ati/config` | X-API-Key | `{enabled, account, instrument, atm_template}` |
+| GET  | `/api/ati/commands` | X-API-Key | pending OIF commands (bridge polls this) |
+| POST | `/api/ati/ack` | X-API-Key | `{command_ids: [...]}` → mark dispatched |
+| POST | `/api/ati/heartbeat` | X-API-Key | bridge liveness ping |
+| GET  | `/api/ati/bridge-script` | none | download the Windows bridge (`mnq_ati_bridge.py`) |
+
+### Bridge setup (on your trading PC)
+1. Download `mnq_ati_bridge.py` from `/api/ati/bridge-script`.
+2. NinjaTrader 8 → Tools → Options → Automated trading interface → enable **AT Interface**. Restart NT8.
+3. Create ATM templates named exactly `SNIPE_1R`, `SNIPE_2R`, `RUNNER` (matching cockpit presets).
+4. `set SCALP_BACKEND_URL=https://<your-app>` and `set SCALP_API_KEY=<RETOOL_API_KEY>` then `python mnq_ati_bridge.py`.
+5. Arm **LIVE ROUTING** in the cockpit's ATI panel (or POST `/api/ati/config {"enabled": true}`).
+6. Test on **Sim101** before switching the account to live.
+
+## Ready-To-Paste Retool Query Pack
+
+Create a REST resource `MNQ_API` (base URL + `X-API-Key` header), then add:
+
+### 1. `getAtiStatus` — GET `/api/ati/status` (run every 5s)
+Bind a Status indicator: `{{ getAtiStatus.data.bridge_online ? "BRIDGE ONLINE" : "OFFLINE" }}`
+
+### 2. `armLiveRouting` — POST `/api/ati/config`
+Body: `{ "enabled": {{ !getAtiStatus.data.enabled }} }` — wire to a toggle button.
+
+### 3. `getOperatorState` — GET `/api/operator/state` (run every 2s)
+Position card: `{{ getOperatorState.data.position.side || "FLAT" }}`, PnL: `{{ getOperatorState.data.daily_pnl }}`
+
+### 4. `submitOrder` — POST `/api/operator/order`
+Body:
+```json
+{ "action": "{{ sideSelect.value }}", "qty": {{ qtyInput.value }}, "order_type": "MARKET",
+  "preset": "{{ presetSelect.value }}", "sl_ticks": 40, "tp_ticks": 120 }
+```
+
+### 5. `flattenAll` — POST `/api/operator/control/flatten` (red button + confirm modal)
+
+### 6. `getJournal` — GET `/api/operator/journal?limit=50` → Table on `{{ getJournal.data.entries }}`
+
+### 7. `getClicks` — GET `/api/admin/clicks` → revenue dashboard (`by_partner` bar chart)
+
+### 8. `getSubscribers` — GET `/api/admin/subscribers` → business KPI table
+
+### 9. `getAtiQueue` — GET `/api/ati/commands` → ops table for stuck commands (pending > 60s = bridge down)

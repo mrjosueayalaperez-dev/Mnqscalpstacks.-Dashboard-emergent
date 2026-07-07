@@ -2,6 +2,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request,
 from fastapi.responses import RedirectResponse
 from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq
 from market_context import get_market_context
+import ati
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -80,6 +81,7 @@ app = FastAPI(
         {"name": "signals",  "description": "Signal engine, TradingView webhooks, Pine script."},
         {"name": "admin",    "description": "Subscriber management + affiliate revenue."},
         {"name": "public",   "description": "Public performance / leaderboard / referrals."},
+        {"name": "ati",      "description": "NinjaTrader ATI bridge (Phase 2 real order routing)."},
     ],
 )
 api_router = APIRouter(prefix="/api")
@@ -2107,6 +2109,13 @@ def _ny_session_open() -> bool:
 @api_router.get("/operator/state", tags=["operator"])
 async def operator_state() -> Dict[str, Any]:
     s = dict(_operator_state)
+    # Live connection status derives from the ATI bridge heartbeat
+    s["connection"] = {
+        **s["connection"],
+        "status": "CONNECTED" if (ati.ati_enabled() and ati.bridge_online()) else "DISCONNECTED",
+        "ati_enabled": ati.ati_enabled(),
+        "bridge_online": ati.bridge_online(),
+    }
     s["session_seconds"] = int(
         (datetime.now(timezone.utc) - datetime.fromisoformat(s["session_started_at"])).total_seconds()
     )
@@ -2321,12 +2330,22 @@ async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
     _apply_fill(order, fill_price)
 
     entry = _build_journal_entry(order, fill_price)
+    ati_cmd = None
     try:
         await db.operator_orders.insert_one(dict(entry))
     except Exception as e:
         logger.warning(f"operator_orders insert failed: {e}")
+    try:
+        ati_cmd = await ati.enqueue(db, ati.build_ati_command_for_order(order, entry["id"]))
+    except Exception as e:
+        logger.warning(f"ati enqueue failed: {e}")
 
-    return {"ok": True, "order": entry, "state": _operator_state["position"]}
+    return {
+        "ok": True,
+        "order": entry,
+        "state": _operator_state["position"],
+        "ati": {"routed": ati_cmd is not None, "command_id": ati_cmd["id"] if ati_cmd else None},
+    }
 
 
 @api_router.post("/operator/control/{action}", tags=["operator"], dependencies=[Depends(require_write_key)])
@@ -2339,6 +2358,7 @@ async def operator_control(action: str) -> Dict[str, Any]:
             "id": str(uuid.uuid4()), "ts": datetime.now(timezone.utc).isoformat(),
             "action": "FLATTEN_ALL", "phase": "SIM_LOG_ONLY",
         })
+        await ati.enqueue(db, ati.build_flatten_command())
         return {"ok": True, "action": "FLATTEN", "position": _operator_state["position"]}
     if action == "pause":
         _operator_state["automation_paused"] = True
@@ -2349,6 +2369,7 @@ async def operator_control(action: str) -> Dict[str, Any]:
     if action == "kill":
         _operator_state["kill_switch"] = True
         _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        await ati.enqueue(db, ati.build_flatten_command())
         return {"ok": True, "kill_switch": True}
     if action == "unkill":
         _operator_state["kill_switch"] = False
@@ -2456,6 +2477,7 @@ async def affiliate_click_stats() -> Dict[str, Any]:
 
 
 # Include the router in the main app
+api_router.include_router(ati.build_ati_router(db, require_write_key))
 app.include_router(api_router)
 
 app.add_middleware(

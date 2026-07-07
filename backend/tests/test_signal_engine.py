@@ -16,7 +16,7 @@ import requests
 import os
 import time
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001').rstrip('/')
 
 class TestSignalEngineBasics:
     """Basic Signal Engine endpoint tests"""
@@ -78,7 +78,7 @@ class TestSignalEngineBasics:
         
         # Verify Pine Script contains key elements
         assert '//@version=5' in data['pine_script'], "Pine Script should have version header"
-        assert 'ema20' in data['pine_script'], "Pine Script should define EMA20"
+        assert 'ta.ema' in data['pine_script'], "Pine Script should define the EMA spine"
         assert 'alertcondition' in data['pine_script'], "Pine Script should have alert conditions"
         
         print(f"✓ GET /api/signals/pinescript - Pine Script length: {len(data['pine_script'])} chars")
