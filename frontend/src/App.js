@@ -361,7 +361,7 @@ const StockScanner = ({ results, onScan, loading }) => (
         <div className="space-y-2">
           {results.map((stock, idx) => (
             <div
-              key={idx}
+              key={stock.symbol || `scan-${idx}`}
               className={`flex items-center justify-between p-2 rounded-sm border ${
                 stock.alert_type === "breakout"
                   ? "border-[#34C759]/30 bg-[#34C759]/5"

@@ -1,6 +1,20 @@
 import React from "react";
 import { Radio } from "lucide-react";
 
+const BIAS_COLORS = { LONG: "#34C759", SHORT: "#FF3B30", NEUTRAL: "#FFCC00" };
+
+const biasFromTrend = (above, below) => {
+  if (above) return "LONG";
+  if (below) return "SHORT";
+  return "NEUTRAL";
+};
+
+const rsiColor = (rsi) => {
+  if (rsi > 70) return "#FF3B30";
+  if (rsi < 30) return "#34C759";
+  return "#a1a1aa";
+};
+
 export default function SignalPanel({ mnqData }) {
   const price = mnqData?.close || mnqData?.price || 0;
   const ema21 = mnqData?.ema21 || 0;
@@ -9,8 +23,8 @@ export default function SignalPanel({ mnqData }) {
 
   const above = price > ema21 && price > vwap;
   const below = price < ema21 && price < vwap;
-  const bias = above ? "LONG" : below ? "SHORT" : "NEUTRAL";
-  const biasColor = bias === "LONG" ? "#34C759" : bias === "SHORT" ? "#FF3B30" : "#FFCC00";
+  const bias = biasFromTrend(above, below);
+  const biasColor = BIAS_COLORS[bias];
 
   // Confluence: trend + vwap + RSI not extreme
   let score = 0;
@@ -45,7 +59,7 @@ export default function SignalPanel({ mnqData }) {
         </div>
         <div className="flex justify-between">
           <span className="text-zinc-500">RSI</span>
-          <span className={rsi > 70 ? "text-[#FF3B30]" : rsi < 30 ? "text-[#34C759]" : "text-zinc-300"}>{rsi}</span>
+          <span className="font-mono" style={{ color: rsiColor(rsi) }}>{rsi}</span>
         </div>
       </div>
     </div>

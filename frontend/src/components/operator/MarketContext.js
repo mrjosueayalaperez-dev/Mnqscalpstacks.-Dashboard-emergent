@@ -5,6 +5,34 @@ import { Layers, ArrowUp, ArrowDown, TrendingUp, TrendingDown, Activity } from "
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
+const COLOR = { green: "#34C759", red: "#FF3B30", yellow: "#FFCC00", muted: "#9ca3af" };
+
+const pdhPillColor = (ctx) => {
+  if (ctx.is_above_pdh) return COLOR.green;
+  if (ctx.ticks_from_pdh > -40) return COLOR.yellow;
+  return COLOR.muted;
+};
+const pdlPillColor = (ctx) => {
+  if (ctx.is_below_pdl) return COLOR.red;
+  if (ctx.ticks_from_pdl < 40) return COLOR.yellow;
+  return COLOR.muted;
+};
+const trendColor = (pct) => {
+  if (pct > 0.5) return COLOR.green;
+  if (pct < -0.5) return COLOR.red;
+  return COLOR.yellow;
+};
+const rangeColor = (ctx) => {
+  if (ctx.is_range_extended) return COLOR.red;
+  if (ctx.range_expansion_pct > 80) return COLOR.yellow;
+  return COLOR.green;
+};
+const volumeColor = (pct) => {
+  if (pct > 100) return COLOR.green;
+  if (pct < 60) return COLOR.red;
+  return COLOR.yellow;
+};
+
 const Row = ({ label, value, color, sub, testId }) => (
   <div className="flex items-center justify-between" data-testid={testId}>
     <span className="text-zinc-500">{label}</span>
@@ -53,11 +81,12 @@ export default function MarketContext() {
     );
   }
 
-  // Color logic
-  const pdhColor = ctx.is_above_pdh ? "#34C759" : ctx.ticks_from_pdh > -40 ? "#FFCC00" : "#9ca3af";
-  const pdlColor = ctx.is_below_pdl ? "#FF3B30" : ctx.ticks_from_pdl < 40 ? "#FFCC00" : "#9ca3af";
-  const trendColor = ctx.trend_5d_pct > 0.5 ? "#34C759" : ctx.trend_5d_pct < -0.5 ? "#FF3B30" : "#FFCC00";
-  const rangeColor = ctx.is_range_extended ? "#FF3B30" : ctx.range_expansion_pct > 80 ? "#FFCC00" : "#34C759";
+  // Color logic (via helpers above to avoid nested ternaries)
+  const pdhColor = pdhPillColor(ctx);
+  const pdlColor = pdlPillColor(ctx);
+  const trendCol = trendColor(ctx.trend_5d_pct);
+  const rangeCol = rangeColor(ctx);
+  const volCol = volumeColor(ctx.volume_strength_pct);
 
   // Position-in-day bar
   const pos = Math.min(100, Math.max(0, ctx.pos_in_day_pct));
@@ -99,20 +128,20 @@ export default function MarketContext() {
       <div className="border-t border-white/5 pt-2" data-testid="context-today">
         <div className="flex items-center justify-between text-[0.6rem] mb-1">
           <span className="text-zinc-500">Today Range</span>
-          <span className="font-mono" style={{ color: rangeColor }}>
+          <span className="font-mono" style={{ color: rangeCol }}>
             {ctx.today_range_points}p
           </span>
         </div>
         <div className="flex items-center justify-between text-[0.55rem] mb-1">
           <span className="text-zinc-600">vs ADR(5) {ctx.adr5}p</span>
-          <span className="font-mono font-bold" style={{ color: rangeColor }}>
+          <span className="font-mono font-bold" style={{ color: rangeCol }}>
             {ctx.range_expansion_pct}%
           </span>
         </div>
         <div className="h-1 bg-white/5 rounded-full overflow-hidden">
           <div
             className="h-full transition-all"
-            style={{ width: `${Math.min(100, ctx.range_expansion_pct)}%`, backgroundColor: rangeColor }}
+            style={{ width: `${Math.min(100, ctx.range_expansion_pct)}%`, backgroundColor: rangeCol }}
           />
         </div>
       </div>
@@ -143,7 +172,7 @@ export default function MarketContext() {
             {ctx.trend_5d_pct >= 0 ? <TrendingUp className="w-2.5 h-2.5" /> : <TrendingDown className="w-2.5 h-2.5" />}
             5d Trend
           </div>
-          <div className="font-mono font-bold" style={{ color: trendColor }}>
+          <div className="font-mono font-bold" style={{ color: trendCol }}>
             {ctx.trend_5d_pct >= 0 ? "+" : ""}{ctx.trend_5d_pct}%
           </div>
         </div>
@@ -153,7 +182,7 @@ export default function MarketContext() {
           </div>
           <div
             className="font-mono font-bold"
-            style={{ color: ctx.volume_strength_pct > 100 ? "#34C759" : ctx.volume_strength_pct < 60 ? "#FF3B30" : "#FFCC00" }}
+            style={{ color: volCol }}
           >
             {ctx.volume_strength_pct}%
           </div>

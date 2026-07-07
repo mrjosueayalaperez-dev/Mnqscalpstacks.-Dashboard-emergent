@@ -26,6 +26,16 @@ const LS_SOUND = "operator.sound";
 const LS_PRESET = "operator.preset";
 const LS_BRACKETS = "operator.brackets";
 
+// Module-level constant — passed to Toaster. Prevents new object reference per render.
+const TOASTER_OPTIONS = {
+  style: {
+    background: "#121212",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "#fff",
+    fontSize: "0.75rem",
+  },
+};
+
 export default function OperatorCockpit() {
   const [state, setState] = useState(null);
   const [journal, setJournal] = useState([]);
@@ -55,14 +65,18 @@ export default function OperatorCockpit() {
     try {
       const { data } = await axios.get(`${API}/operator/state`);
       setState(data);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      console.warn("[Cockpit] state refresh failed:", e?.message || e);
+    }
   }, []);
 
   const refreshJournal = useCallback(async () => {
     try {
       const { data } = await axios.get(`${API}/operator/journal`, { params: { limit: 15 } });
       setJournal(data.entries || []);
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+      console.warn("[Cockpit] journal refresh failed:", e?.message || e);
+    }
   }, []);
 
   useEffect(() => {
@@ -202,9 +216,7 @@ export default function OperatorCockpit() {
     >
       <Toaster
         position="top-right"
-        toastOptions={{
-          style: { background: "#121212", border: "1px solid rgba(255,255,255,0.1)", color: "#fff", fontSize: "0.75rem" },
-        }}
+        toastOptions={TOASTER_OPTIONS}
       />
 
       {/* Snipe-mode glow ring */}

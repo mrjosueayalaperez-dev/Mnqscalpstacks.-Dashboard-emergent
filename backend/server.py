@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Depends, Header
 from fastapi.responses import RedirectResponse
 from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq
 from market_context import get_market_context
@@ -66,9 +66,39 @@ signal_engine_state = {
     "last_error": None,
 }
 
-# Create the main app without a prefix
-app = FastAPI()
+# Create the main app with a proper title (drives the OpenAPI spec Retool consumes)
+app = FastAPI(
+    title="MNQ Scalp Stacks API",
+    description="Operator cockpit + subscriber/admin/market backend. Retool-ready.",
+    version="1.5.0",
+    openapi_url="/api/openapi.json",
+    docs_url="/api/docs",
+    redoc_url="/api/redoc",
+    openapi_tags=[
+        {"name": "operator", "description": "Personal trading cockpit (orders, state, journal, controls)."},
+        {"name": "market",   "description": "Live MNQ feed + multi-day context."},
+        {"name": "signals",  "description": "Signal engine, TradingView webhooks, Pine script."},
+        {"name": "admin",    "description": "Subscriber management + affiliate revenue."},
+        {"name": "public",   "description": "Public performance / leaderboard / referrals."},
+    ],
+)
 api_router = APIRouter(prefix="/api")
+
+# ---- Retool integration guard ----
+# Retool + any other write client must present X-API-Key on state-mutating endpoints.
+# Reads (GET) stay open so the public site / Retool dashboards can display data
+# without needing keys. Configure via env: RETOOL_API_KEY=<any long random string>.
+RETOOL_API_KEY = os.environ.get("RETOOL_API_KEY", "")
+
+
+def require_write_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> None:
+    """FastAPI dependency: enforced on every mutating endpoint. If RETOOL_API_KEY
+    is unset (dev/preview default), this is a no-op — the endpoint is open.
+    Set the env var in production to lock all writes to Retool + your own tools."""
+    if not RETOOL_API_KEY:
+        return
+    if x_api_key != RETOOL_API_KEY:
+        raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key header")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -583,7 +613,7 @@ async def scan_stocks(min_change: float = 3.0):
     return {"scanners": results}
 
 # MNQ Futures Routes — LIVE feed (CME via Yahoo NQ=F; NQ and MNQ trade at same price)
-@api_router.get("/futures/mnq")
+@api_router.get("/futures/mnq", tags=["market"])
 async def get_mnq_data() -> Dict[str, Any]:
     """Real-time MNQ futures snapshot. Falls back to cached tick on transient errors."""
     snap = await refresh_mnq()
@@ -640,7 +670,7 @@ async def mnq_socket(ws: WebSocket):
 
 
 # Multi-day market context (PDH/PDL, ADR, range expansion, trend)
-@api_router.get("/market/context")
+@api_router.get("/market/context", tags=["market"])
 async def market_context() -> Dict[str, Any]:
     ctx = await get_market_context()
     if not ctx:
@@ -2074,7 +2104,7 @@ def _ny_session_open() -> bool:
     return 9 * 60 + 30 <= ny_minutes <= 16 * 60
 
 
-@api_router.get("/operator/state")
+@api_router.get("/operator/state", tags=["operator"])
 async def operator_state() -> Dict[str, Any]:
     s = dict(_operator_state)
     s["session_seconds"] = int(
@@ -2087,7 +2117,61 @@ async def operator_state() -> Dict[str, Any]:
     return s
 
 
-@api_router.get("/operator/candles")
+_EMPTY_CANDLE_RESPONSE: Dict[str, Any] = {
+    "symbol": "MNQ", "candles": [], "ema9": [], "ema21": [], "vwap": [],
+    "last_close": None, "source": "empty",
+}
+
+
+def _aggregate_bars(bars: List[Dict[str, Any]], tf_seconds: int, count: int) -> List[Dict[str, Any]]:
+    """Roll up 1-minute bars to the requested timeframe."""
+    if tf_seconds == 60:
+        return bars[-count:]
+    bucket: Dict[int, Dict[str, Any]] = {}
+    for b in bars:
+        slot = (b["time"] // tf_seconds) * tf_seconds
+        cur = bucket.get(slot)
+        if cur is None:
+            bucket[slot] = {"time": slot, "open": b["open"], "high": b["high"],
+                            "low": b["low"], "close": b["close"], "volume": b["volume"]}
+        else:
+            cur["high"] = max(cur["high"], b["high"])
+            cur["low"] = min(cur["low"], b["low"])
+            cur["close"] = b["close"]
+            cur["volume"] += b["volume"]
+    return list(bucket.values())[-count:]
+
+
+def _series_ema(closes: List[float], period: int) -> List[Optional[float]]:
+    """Standard EMA series with None padding for the first (period-1) values."""
+    if len(closes) < period:
+        return []
+    k = 2 / (period + 1)
+    out: List[Optional[float]] = [None] * (period - 1)
+    seed = sum(closes[:period]) / period
+    out.append(round(seed, 2))
+    for i in range(period, len(closes)):
+        seed = closes[i] * k + seed * (1 - k)
+        out.append(round(seed, 2))
+    return out
+
+
+def _series_vwap(agg: List[Dict[str, Any]]) -> List[Optional[float]]:
+    cum_pv, cum_v, line = 0.0, 0.0, []
+    for k in agg:
+        typ = (k["high"] + k["low"] + k["close"]) / 3
+        vol = k["volume"] or 1
+        cum_pv += typ * vol
+        cum_v += vol
+        line.append(round(cum_pv / cum_v, 2) if cum_v else None)
+    return line
+
+
+def _line_points(agg: List[Dict[str, Any]], series: List[Optional[float]]) -> List[Dict[str, Any]]:
+    return [{"time": c["time"], "value": v} for c, v in zip(agg, series) if v is not None]
+
+
+@api_router.get("/operator/candles", tags=["operator"])
 async def operator_candles(timeframe: str = "1m", count: int = 120) -> Dict[str, Any]:
     """Real intraday candles from the live MNQ feed (Yahoo NQ=F)."""
     from market_feed import get_bars
@@ -2096,54 +2180,19 @@ async def operator_candles(timeframe: str = "1m", count: int = 120) -> Dict[str,
         await refresh_mnq()
         bars = get_bars()
     if not bars:
-        # Genuinely no feed — return empty payload, frontend uses TradingView widget anyway
-        return {"symbol": "MNQ", "timeframe": timeframe, "candles": [], "ema9": [], "ema21": [], "vwap": [], "last_close": None, "source": "empty"}
+        return {**_EMPTY_CANDLE_RESPONSE, "timeframe": timeframe}
 
-    # Aggregate to requested timeframe
     tf_seconds = {"1m": 60, "5m": 300, "15m": 900}.get(timeframe, 60)
-    if tf_seconds == 60:
-        agg = bars[-count:]
-    else:
-        bucket = {}
-        for b in bars:
-            slot = (b["time"] // tf_seconds) * tf_seconds
-            cur = bucket.get(slot)
-            if not cur:
-                bucket[slot] = {"time": slot, "open": b["open"], "high": b["high"], "low": b["low"], "close": b["close"], "volume": b["volume"]}
-            else:
-                cur["high"] = max(cur["high"], b["high"])
-                cur["low"] = min(cur["low"], b["low"])
-                cur["close"] = b["close"]
-                cur["volume"] += b["volume"]
-        agg = list(bucket.values())[-count:]
-
+    agg = _aggregate_bars(bars, tf_seconds, count)
     closes = [k["close"] for k in agg]
-    def ema(period):
-        if len(closes) < period:
-            return []
-        k = 2 / (period + 1)
-        out = [None] * (period - 1)
-        seed = sum(closes[:period]) / period
-        out.append(round(seed, 2))
-        for i in range(period, len(closes)):
-            seed = closes[i] * k + seed * (1 - k)
-            out.append(round(seed, 2))
-        return out
-
-    cum_pv, cum_v, vwap_line = 0.0, 0.0, []
-    for k in agg:
-        typ = (k["high"] + k["low"] + k["close"]) / 3
-        cum_pv += typ * (k["volume"] or 1)
-        cum_v += k["volume"] or 1
-        vwap_line.append(round(cum_pv / cum_v, 2) if cum_v else None)
 
     return {
         "symbol": "MNQ",
         "timeframe": timeframe,
         "candles": agg,
-        "ema9": [{"time": c["time"], "value": v} for c, v in zip(agg, ema(9)) if v is not None],
-        "ema21": [{"time": c["time"], "value": v} for c, v in zip(agg, ema(21)) if v is not None],
-        "vwap": [{"time": c["time"], "value": v} for c, v in zip(agg, vwap_line) if v is not None],
+        "ema9": _line_points(agg, _series_ema(closes, 9)),
+        "ema21": _line_points(agg, _series_ema(closes, 21)),
+        "vwap": _line_points(agg, _series_vwap(agg)),
         "last_close": agg[-1]["close"] if agg else None,
         "source": "yahoo:NQ=F",
     }
@@ -2152,12 +2201,8 @@ async def operator_candles(timeframe: str = "1m", count: int = 120) -> Dict[str,
 # Synthetic candle generator was removed (2026-02-22) — live Yahoo feed is the only source.
 
 
-@api_router.post("/operator/order")
-async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
-    """Server-side validated order. PHASE 1: logs only, does NOT submit to a broker."""
-    now_ts = datetime.now(timezone.utc).timestamp()
-
-    # Validation chain — every failure rejects the order
+def _validate_order(order: OperatorOrder, now_ts: float) -> None:
+    """Run safety chain on every order. Raises HTTPException on first violation."""
     if _operator_state["kill_switch"]:
         raise HTTPException(status_code=423, detail="KILL_SWITCH active — orders blocked")
     if _operator_state["automation_paused"] and order.action.startswith(("AUTO_",)):
@@ -2166,60 +2211,84 @@ async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
         raise HTTPException(status_code=423, detail="Max daily loss hit — locked out")
     if _operator_state["daily_trades"] >= _operator_state["max_daily_trades"]:
         raise HTTPException(status_code=423, detail="Max daily trades reached")
-    if (now_ts - _operator_state["last_order_at"]) * 1000 < _ORDER_COOLDOWN_MS:
-        wait_ms = int(_ORDER_COOLDOWN_MS - (now_ts - _operator_state["last_order_at"]) * 1000)
-        raise HTTPException(status_code=429, detail=f"Cooldown — wait {wait_ms}ms")
+    elapsed_ms = (now_ts - _operator_state["last_order_at"]) * 1000
+    if elapsed_ms < _ORDER_COOLDOWN_MS:
+        raise HTTPException(status_code=429, detail=f"Cooldown — wait {int(_ORDER_COOLDOWN_MS - elapsed_ms)}ms")
     if order.order_type == "LIMIT" and order.limit_price is None:
         raise HTTPException(status_code=400, detail="LIMIT order requires limit_price")
 
-    # Mutate state (simulated fill at current LIVE price from Yahoo feed cache)
-    _operator_state["last_order_at"] = now_ts
-    _operator_state["daily_trades"] += 1
 
-    pos = _operator_state["position"]
-    live_snap = get_last_mnq()
-    live_price = live_snap.get("price") or 0.0
+async def _resolve_fill_price(order: OperatorOrder) -> float:
+    """LIMIT → user price. MARKET → live feed cache (or refresh once if cold)."""
+    if order.order_type == "LIMIT" and order.limit_price:
+        return order.limit_price
+    live_price = get_last_mnq().get("price") or 0.0
     if not live_price:
-        # First-ever tick not cached yet — fetch once
-        live_snap = await refresh_mnq()
-        live_price = live_snap.get("price") or 0.0
+        live_price = (await refresh_mnq()).get("price") or 0.0
     if not live_price:
-        # Genuinely no feed — refuse rather than mis-fill
         raise HTTPException(status_code=503, detail="No live MNQ price available — feed offline")
-    fill_price = order.limit_price if order.order_type == "LIMIT" and order.limit_price else live_price
+    return live_price
 
-    if order.action == "BUY":
+
+def _weighted_avg(prev_qty: int, prev_avg: float, add_qty: int, add_price: float) -> float:
+    """Compute new average entry when stacking onto an existing position."""
+    new_qty = prev_qty + add_qty
+    if not new_qty:
+        return add_price
+    return ((prev_avg * prev_qty) + (add_price * add_qty)) / new_qty
+
+
+def _flat_position() -> Dict[str, Any]:
+    return {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+
+
+def _apply_fill(order: OperatorOrder, fill_price: float) -> None:
+    """Mutate _operator_state['position'] and ['daily_pnl'] based on the action."""
+    pos = _operator_state["position"]
+    action = order.action
+
+    if action == "BUY":
         if pos["side"] == "SHORT":
-            # Close short
-            pnl = (pos["avg_entry"] - fill_price) * pos["qty"] * 2  # MNQ $2/point
+            pnl = (pos["avg_entry"] - fill_price) * pos["qty"] * 2
             _operator_state["daily_pnl"] += pnl
-            _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+            _operator_state["position"] = _flat_position()
         else:
             new_qty = pos["qty"] + order.qty
-            new_avg = ((pos["avg_entry"] * pos["qty"]) + (fill_price * order.qty)) / new_qty if new_qty else fill_price
+            new_avg = _weighted_avg(pos["qty"], pos["avg_entry"], order.qty, fill_price)
             _operator_state["position"] = {"side": "LONG", "qty": new_qty, "avg_entry": round(new_avg, 2), "unrealized_pnl": 0.0}
-    elif order.action == "SELL":
+    elif action == "SELL":
         if pos["side"] == "LONG":
             pnl = (fill_price - pos["avg_entry"]) * pos["qty"] * 2
             _operator_state["daily_pnl"] += pnl
-            _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+            _operator_state["position"] = _flat_position()
         else:
             new_qty = pos["qty"] + order.qty
-            new_avg = ((pos["avg_entry"] * pos["qty"]) + (fill_price * order.qty)) / new_qty if new_qty else fill_price
+            new_avg = _weighted_avg(pos["qty"], pos["avg_entry"], order.qty, fill_price)
             _operator_state["position"] = {"side": "SHORT", "qty": new_qty, "avg_entry": round(new_avg, 2), "unrealized_pnl": 0.0}
-    elif order.action in ("CLOSE_LONG", "CLOSE_SHORT"):
-        if pos["side"]:
-            mult = 1 if pos["side"] == "LONG" else -1
-            pnl = (fill_price - pos["avg_entry"]) * pos["qty"] * 2 * mult
-            _operator_state["daily_pnl"] += pnl
-            _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
-    elif order.action == "BREAK_EVEN":
-        # No PnL change — just acknowledged (SL→BE in a real engine)
-        pass
+    elif action in ("CLOSE_LONG", "CLOSE_SHORT") and pos["side"]:
+        mult = 1 if pos["side"] == "LONG" else -1
+        pnl = (fill_price - pos["avg_entry"]) * pos["qty"] * 2 * mult
+        _operator_state["daily_pnl"] += pnl
+        _operator_state["position"] = _flat_position()
+    # BREAK_EVEN is a no-op on PnL (SL→BE marker only in a real engine)
 
     _operator_state["daily_pnl"] = round(_operator_state["daily_pnl"], 2)
 
-    log_entry = {
+
+def _bracket_price(action: str, fill_price: float, ticks: Optional[int], is_stop: bool) -> Optional[float]:
+    """Compute SL or TP price from ticks distance. SL goes against, TP with."""
+    if ticks is None:
+        return None
+    ticks_pts = ticks * 0.25
+    if action == "BUY":
+        return round(fill_price - ticks_pts if is_stop else fill_price + ticks_pts, 2)
+    if action == "SELL":
+        return round(fill_price + ticks_pts if is_stop else fill_price - ticks_pts, 2)
+    return None
+
+
+def _build_journal_entry(order: OperatorOrder, fill_price: float) -> Dict[str, Any]:
+    return {
         "id": str(uuid.uuid4()),
         "ts": datetime.now(timezone.utc).isoformat(),
         "action": order.action,
@@ -2231,25 +2300,36 @@ async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
         "sl_ticks": order.sl_ticks,
         "tp_ticks": order.tp_ticks,
         "preset": order.preset,
-        "sl_price": round(fill_price - (order.sl_ticks * 0.25), 2) if order.sl_ticks and order.action == "BUY" else (
-            round(fill_price + (order.sl_ticks * 0.25), 2) if order.sl_ticks and order.action == "SELL" else None
-        ),
-        "tp_price": round(fill_price + (order.tp_ticks * 0.25), 2) if order.tp_ticks and order.action == "BUY" else (
-            round(fill_price - (order.tp_ticks * 0.25), 2) if order.tp_ticks and order.action == "SELL" else None
-        ),
+        "sl_price": _bracket_price(order.action, fill_price, order.sl_ticks, is_stop=True),
+        "tp_price": _bracket_price(order.action, fill_price, order.tp_ticks, is_stop=False),
         "resulting_position": _operator_state["position"],
         "daily_pnl": _operator_state["daily_pnl"],
         "phase": "SIM_LOG_ONLY",
     }
+
+
+@api_router.post("/operator/order", tags=["operator"], dependencies=[Depends(require_write_key)])
+async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
+    """Server-side validated order. PHASE 1: logs only, does NOT submit to a broker."""
+    now_ts = datetime.now(timezone.utc).timestamp()
+    _validate_order(order, now_ts)
+
+    _operator_state["last_order_at"] = now_ts
+    _operator_state["daily_trades"] += 1
+
+    fill_price = await _resolve_fill_price(order)
+    _apply_fill(order, fill_price)
+
+    entry = _build_journal_entry(order, fill_price)
     try:
-        await db.operator_orders.insert_one(dict(log_entry))
+        await db.operator_orders.insert_one(dict(entry))
     except Exception as e:
         logger.warning(f"operator_orders insert failed: {e}")
 
-    return {"ok": True, "order": log_entry, "state": _operator_state["position"]}
+    return {"ok": True, "order": entry, "state": _operator_state["position"]}
 
 
-@api_router.post("/operator/control/{action}")
+@api_router.post("/operator/control/{action}", tags=["operator"], dependencies=[Depends(require_write_key)])
 async def operator_control(action: str) -> Dict[str, Any]:
     """Master controls: flatten | pause | resume | kill | reset_session"""
     action = action.lower()
@@ -2282,10 +2362,29 @@ async def operator_control(action: str) -> Dict[str, Any]:
     raise HTTPException(status_code=400, detail=f"Unknown control action: {action}")
 
 
-@api_router.get("/operator/journal")
-async def operator_journal(limit: int = 20) -> Dict[str, Any]:
-    rows = await db.operator_orders.find({}, {"_id": 0}).sort("ts", -1).to_list(length=limit)
-    return {"entries": rows}
+@api_router.get("/operator/journal", tags=["operator"])
+async def operator_journal(
+    limit: int = 20,
+    skip: int = 0,
+    action: Optional[str] = None,
+    since: Optional[str] = None,  # ISO timestamp
+) -> Dict[str, Any]:
+    """Paginated operator order journal. Retool-friendly."""
+    query: Dict[str, Any] = {}
+    if action:
+        query["action"] = action.upper()
+    if since:
+        query["ts"] = {"$gte": since}
+    total = await db.operator_orders.count_documents(query)
+    rows = (
+        await db.operator_orders
+        .find(query, {"_id": 0})
+        .sort("ts", -1)
+        .skip(skip)
+        .limit(limit)
+        .to_list(length=limit)
+    )
+    return {"entries": rows, "total": total, "limit": limit, "skip": skip}
 
 
 # ============== AFFILIATE CLICK TRACKING (Revenue) ==============
@@ -2320,7 +2419,7 @@ async def affiliate_redirect(partner: str, request: Request, src: Optional[str] 
     return RedirectResponse(url=target, status_code=302)
 
 
-@api_router.get("/admin/clicks")
+@api_router.get("/admin/clicks", tags=["admin"])
 async def affiliate_click_stats() -> Dict[str, Any]:
     """Aggregated click stats per partner + src (for the admin revenue card)."""
     pipeline = [

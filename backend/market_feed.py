@@ -39,48 +39,71 @@ _last_tick: Dict[str, Any] = {
 _minute_bars: List[Dict[str, Any]] = []
 
 
+def _safe_float(v: Any, fallback: float = 0.0) -> float:
+    """None-safe float coerce."""
+    if v is None:
+        return fallback
+    try:
+        return float(v)
+    except (TypeError, ValueError):
+        return fallback
+
+
+def _build_bars(timestamps: List[int], q: Dict[str, List]) -> List[Dict[str, Any]]:
+    """Zip Yahoo's parallel OHLCV arrays into bar dicts. Skips bars with no close."""
+    opens = q.get("open", []) or []
+    highs = q.get("high", []) or []
+    lows = q.get("low", []) or []
+    closes = q.get("close", []) or []
+    volumes = q.get("volume", []) or []
+
+    bars: List[Dict[str, Any]] = []
+    for i, ts in enumerate(timestamps):
+        if i >= len(closes) or closes[i] is None:
+            continue
+        close = float(closes[i])
+        bars.append({
+            "time": int(ts),
+            "open": _safe_float(opens[i] if i < len(opens) else None, close),
+            "high": _safe_float(highs[i] if i < len(highs) else None, close),
+            "low": _safe_float(lows[i] if i < len(lows) else None, close),
+            "close": close,
+            "volume": int(volumes[i]) if i < len(volumes) and volumes[i] is not None else 0,
+        })
+    return bars
+
+
+def _parse_yahoo_response(payload: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Pull meta + OHLCV out of Yahoo's nested response. Returns None on shape mismatch."""
+    try:
+        result = payload["chart"]["result"][0]
+        meta = result["meta"]
+        timestamps = result.get("timestamp", []) or []
+        quote = result["indicators"]["quote"][0]
+    except (KeyError, IndexError, TypeError) as e:
+        logger.warning(f"yahoo response shape invalid: {e}")
+        return None
+
+    price = _safe_float(meta.get("regularMarketPrice"))
+    return {
+        "price": price,
+        "previous_close": _safe_float(meta.get("previousClose"), price),
+        "day_high": _safe_float(meta.get("regularMarketDayHigh")),
+        "day_low": _safe_float(meta.get("regularMarketDayLow")),
+        "currency": meta.get("currency", "USD"),
+        "exchange": meta.get("exchangeName", "CME"),
+        "market_state": meta.get("marketState", "UNKNOWN"),
+        "bars": _build_bars(timestamps, quote),
+    }
+
+
 async def _fetch_yahoo() -> Optional[Dict[str, Any]]:
+    """Single network call to Yahoo's chart endpoint. Parsing handled by helpers."""
     try:
         async with httpx.AsyncClient(timeout=8) as client:
-            r = await client.get(
-                YAHOO_URL,
-                params={"range": "1d", "interval": "1m"},
-                headers=HEADERS,
-            )
+            r = await client.get(YAHOO_URL, params={"range": "1d", "interval": "1m"}, headers=HEADERS)
             r.raise_for_status()
-            data = r.json()
-            meta = data["chart"]["result"][0]["meta"]
-            timestamps = data["chart"]["result"][0].get("timestamp", []) or []
-            quote = data["chart"]["result"][0]["indicators"]["quote"][0]
-            opens = quote.get("open", []) or []
-            highs = quote.get("high", []) or []
-            lows = quote.get("low", []) or []
-            closes = quote.get("close", []) or []
-            volumes = quote.get("volume", []) or []
-
-            bars: List[Dict[str, Any]] = []
-            for i, ts in enumerate(timestamps):
-                if i >= len(closes) or closes[i] is None:
-                    continue
-                bars.append({
-                    "time": int(ts),
-                    "open": float(opens[i]) if opens[i] is not None else float(closes[i]),
-                    "high": float(highs[i]) if highs[i] is not None else float(closes[i]),
-                    "low": float(lows[i]) if lows[i] is not None else float(closes[i]),
-                    "close": float(closes[i]),
-                    "volume": int(volumes[i]) if volumes[i] is not None else 0,
-                })
-
-            return {
-                "price": float(meta["regularMarketPrice"]),
-                "previous_close": float(meta.get("previousClose", meta["regularMarketPrice"])),
-                "day_high": float(meta.get("regularMarketDayHigh", 0) or 0),
-                "day_low": float(meta.get("regularMarketDayLow", 0) or 0),
-                "currency": meta.get("currency", "USD"),
-                "exchange": meta.get("exchangeName", "CME"),
-                "market_state": meta.get("marketState", "UNKNOWN"),
-                "bars": bars,
-            }
+            return _parse_yahoo_response(r.json())
     except Exception as e:
         logger.warning(f"yahoo fetch failed: {e}")
         return None

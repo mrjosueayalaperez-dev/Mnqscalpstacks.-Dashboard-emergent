@@ -60,7 +60,9 @@ export default function KeyLevels({ currentPrice }) {
       try {
         const { data } = await axios.get(`${API}/market/context`);
         if (active) setCtx(data);
-      } catch { /* ignore */ }
+      } catch (e) {
+        console.warn("[KeyLevels] context fetch failed:", e?.message || e);
+      }
     };
     load();
     const id = setInterval(load, 60000);
@@ -81,7 +83,11 @@ export default function KeyLevels({ currentPrice }) {
       const crossedDown = prev > lvl && currentPrice <= lvl;
       if (crossedUp || crossedDown) {
         // Fire
-        try { sounds.breakEven(); } catch { /* audio context not ready */ }
+        try {
+          sounds.breakEven();
+        } catch (e) {
+          console.warn("[KeyLevels] audio playback blocked:", e?.message || e);
+        }
         toast(`◆ ${alert.label} ${crossedUp ? "broken UP" : "broken DOWN"}`, {
           description: `${lvl.toFixed(2)} @ ${currentPrice.toFixed(2)}`,
           duration: 6000,
@@ -108,7 +114,11 @@ export default function KeyLevels({ currentPrice }) {
         toast(`${label} alert disarmed`, { duration: 1500 });
       } else {
         next[id] = { price, label, armed_at: Date.now() };
-        try { sounds.click(); } catch { /* ignore */ }
+        try {
+          sounds.click();
+        } catch (e) {
+          console.warn("[KeyLevels] click sound blocked:", e?.message || e);
+        }
         toast.success(`${label} alert ARMED @ ${price.toFixed(2)}`, { duration: 2000 });
       }
       localStorage.setItem(LS_ALERTS, JSON.stringify(next));

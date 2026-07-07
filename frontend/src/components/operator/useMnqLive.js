@@ -10,6 +10,10 @@ const WS_URL = `${BACKEND_URL.replace(/^http/, "ws")}/api/ws/mnq`;
  *
  * Strategy: WebSocket primary, REST fallback every 8s in case the socket drops.
  * Auto-reconnects with exponential backoff (capped at 15s).
+ *
+ * Empty-deps `[]` is intentional: this effect must run exactly once on mount.
+ * All captured values are module-level constants (`API`, `WS_URL`), refs, or
+ * React-stable setters. Re-running would tear down the live WebSocket every render.
  */
 export default function useMnqLive() {
   const [tick, setTick] = useState(null);
@@ -26,7 +30,12 @@ export default function useMnqLive() {
       try {
         const { data } = await axios.get(`${API}/futures/mnq`);
         if (!cancelled) setTick((prev) => prev || data);
-      } catch { /* ignore */ }
+      } catch (e) {
+        // Network blip — REST poll will retry in 8s. Log only when persistent.
+        if (process.env.NODE_ENV !== "production") {
+          console.debug("[useMnqLive] REST fallback fetch failed:", e?.message || e);
+        }
+      }
     };
     restPoll();
     fallbackTimerRef.current = setInterval(restPoll, 8000);
@@ -45,7 +54,9 @@ export default function useMnqLive() {
           try {
             const data = JSON.parse(ev.data);
             if (data && typeof data.price === "number") setTick(data);
-          } catch { /* ignore */ }
+          } catch (e) {
+            console.warn("[useMnqLive] malformed WS payload:", e?.message || e);
+          }
         };
         ws.onclose = () => {
           setConnected(false);
@@ -54,8 +65,15 @@ export default function useMnqLive() {
           retryRef.current += 1;
           setTimeout(connect, delay);
         };
-        ws.onerror = () => { try { ws.close(); } catch { /* ignore */ } };
+        ws.onerror = () => {
+          try {
+            ws.close();
+          } catch (e) {
+            console.warn("[useMnqLive] WS close after error failed:", e?.message || e);
+          }
+        };
       } catch (e) {
+        console.warn("[useMnqLive] WS connect threw, retrying in 3s:", e?.message || e);
         if (!cancelled) setTimeout(connect, 3000);
       }
     };
@@ -65,11 +83,15 @@ export default function useMnqLive() {
     return () => {
       cancelled = true;
       clearInterval(fallbackTimerRef.current);
-      if (wsRef.current) { try { wsRef.current.close(); } catch { /* ignore */ } }
+      if (wsRef.current) {
+        try {
+          wsRef.current.close();
+        } catch (e) {
+          // Cleanup race — socket already closed; safe to ignore.
+        }
+      }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: this effect must run exactly once on mount.
-    // All captured values are module constants (API, WS_URL), refs, or React-stable setters.
-    // Re-running would tear down the live WebSocket every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { tick, connected };
