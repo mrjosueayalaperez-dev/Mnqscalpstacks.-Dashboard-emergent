@@ -1328,8 +1328,8 @@ alertcondition(inResistanceZone, title="27972 RESISTANCE", message='{"type":"res
 '''
 
 
-def _build_webhook_instructions() -> str:
-    backend = os.environ.get('REACT_APP_BACKEND_URL', 'YOUR_BACKEND_URL')
+def _build_webhook_instructions(base_url: str) -> str:
+    backend = base_url.rstrip('/')
     return f"""
 ## MNQ Scalp Stacks v3 — TradingView Setup
 
@@ -1361,11 +1361,16 @@ def _build_webhook_instructions() -> str:
 
 
 @api_router.get("/signals/pinescript")
-async def get_pine_script():
+async def get_pine_script(request: Request):
     """Get the MNQ Scalp Stacks v3 Master Punch Pine Script."""
+    # Derive the public base URL from the incoming request (works in any env)
+    base = str(request.base_url)
+    proto = request.headers.get("x-forwarded-proto")
+    if proto == "https" and base.startswith("http://"):
+        base = "https://" + base[len("http://"):]
     return {
         "pine_script": _PINE_SCRIPT_V3,
-        "webhook_instructions": _build_webhook_instructions(),
+        "webhook_instructions": _build_webhook_instructions(base),
         "webhook_url": "/api/webhook/tradingview",
     }
 
