@@ -94,6 +94,13 @@
     - data-testids: `live-terminal-chart`, `terminal-live-price`, `terminal-ws-status`, `terminal-tf-*`, `terminal-signal-bar`, `terminal-session-high/low`, etc.
     - Note: TV canvas doesn't paint in headless browsers (serves error-card to bots) — renders fine in real browsers, same as /operator
 
+21. **TradingView chart bug fix + deploy prep** (2026-02-22):
+    - ROOT CAUSE: TV blocks CME futures symbols (CME_MINI:MNQ1!) in anonymous embeds; embed script loader also nondeterministically ignored theme:dark and misplaced the iframe
+    - FIX: `src/lib/tvEmbedUrl.js` builds a deterministic direct `widgetembed` iframe URL — CAPITALCOM:US100 (real-time Nasdaq-100 CFD, tracks MNQ 1:1), theme=dark, MAExp+VWAP studies. Used by both LiveTerminalChart (dashboard) and operator TradingViewWidget
+    - Verified by testing agent (iteration_8): 100% pass, deterministic dark render across reloads + interval switches
+    - Deploy blocker fixed: /api/signals/pinescript webhook instructions now derive base URL from request (x-forwarded-proto aware) instead of REACT_APP_BACKEND_URL env
+    - Deployment agent re-check: PASS (production-ready)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
