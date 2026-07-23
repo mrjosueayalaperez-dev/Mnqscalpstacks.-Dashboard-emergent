@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
+import ProofGallery from "./ProofGallery";
 import {
   Zap, TrendingUp, Target, Shield, ChevronRight, Check, X, Star, Crown,
   BarChart3, Clock, Activity, ArrowRight, Eye, Crosshair, Layers, Mail,
@@ -568,6 +569,7 @@ const LandingPage = () => {
         <BeforeAfter />
         <HowItWorks sectionRef={howRef} />
         <StatsBar stats={backtestStats} />
+        <ProofGallery />
         <Pricing ctaRef={ctaRef} onSignup={handleSignup} onCheckout={handleCheckout} loading={loading}
           signedUp={signedUp} discordInvite={discordInvite} referralCode={referralCode}
           welcomeSteps={welcomeSteps} onCompleteStep={handleCompleteStep} referrerName={referrerName} />

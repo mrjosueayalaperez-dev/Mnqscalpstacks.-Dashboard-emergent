@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast, Toaster } from "sonner";
+import ProofManager from "./ProofManager";
 import {
   Users, DollarSign, Zap, BarChart3, Crown, Star, Trash2,
   ChevronUp, ChevronDown, Shield, Activity, TrendingUp, RefreshCw,
@@ -93,6 +94,9 @@ const AdminPanel = () => {
             </div>
           ))}
         </div>
+
+        {/* Proof Gallery Manager */}
+        <ProofManager />
 
         {/* Tier Breakdown */}
         <div className="bg-[#121212] border border-white/10 rounded-sm p-4">

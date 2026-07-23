@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq
 from market_context import get_market_context
 import ati
+import proof
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -2483,6 +2484,7 @@ async def affiliate_click_stats() -> Dict[str, Any]:
 
 # Include the router in the main app
 api_router.include_router(ati.build_ati_router(db, require_write_key))
+api_router.include_router(proof.build_proof_router(db, require_write_key))
 app.include_router(api_router)
 
 app.add_middleware(
