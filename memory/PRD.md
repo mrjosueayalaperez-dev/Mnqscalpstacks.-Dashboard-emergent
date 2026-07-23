@@ -101,6 +101,14 @@
     - Deploy blocker fixed: /api/signals/pinescript webhook instructions now derive base URL from request (x-forwarded-proto aware) instead of REACT_APP_BACKEND_URL env
     - Deployment agent re-check: PASS (production-ready)
 
+22. **Verified Results proof gallery** (2026-07-20):
+    - Backend `proof.py`: /api/proof/list|image/{id}|upload|delete — images base64 in Mongo `proof_shots` (survive redeploys), write endpoints gated by require_write_key, 8MB/type validation
+    - Landing page: "VERIFIED RESULTS — REAL TRADE PROOF" section (ProofGallery.js) with lightbox, hidden when empty
+    - Admin panel: ProofManager.js — upload (file+caption), thumbnail grid, hover-delete
+    - Seeded 2 real user proof collages (P&L receipts + closed MNQ Sep-26 positions)
+    - Testing agent iteration_9: 100% backend + frontend pass; regression suite now includes tests/test_proof_gallery.py
+    - User has MORE proof shots to upload later via /admin
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
