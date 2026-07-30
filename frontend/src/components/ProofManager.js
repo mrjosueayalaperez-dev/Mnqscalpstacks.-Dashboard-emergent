@@ -63,7 +63,7 @@ export default function ProofManager() {
         <input
           type="file"
           ref={fileRef}
-          accept="image/png,image/jpeg,image/webp,image/gif"
+          accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/webm"
           className="flex-1 text-xs text-zinc-400 file:mr-2 file:px-3 file:py-1.5 file:bg-white/10 file:border-0 file:rounded-sm file:text-white file:text-xs file:cursor-pointer"
           data-testid="proof-file-input"
         />
@@ -93,7 +93,11 @@ export default function ProofManager() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {shots.map((s) => (
             <div key={s.id} className="relative group border border-white/10 rounded-sm overflow-hidden" data-testid={`proof-admin-${s.id}`}>
-              <img src={`${BACKEND}${s.url}`} alt={s.caption} className="w-full h-28 object-cover object-top" loading="lazy" />
+              {(s.content_type || "").startsWith("video/") ? (
+                <video src={`${BACKEND}${s.url}`} muted playsInline preload="metadata" className="w-full h-28 object-cover object-top" />
+              ) : (
+                <img src={`${BACKEND}${s.url}`} alt={s.caption} className="w-full h-28 object-cover object-top" loading="lazy" />
+              )}
               <div className="px-2 py-1 text-[0.55rem] text-zinc-500 font-mono truncate">{s.caption || "—"}</div>
               <button
                 onClick={() => handleDelete(s.id)}

@@ -7,8 +7,8 @@ from typing import Any, Dict
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 
-MAX_IMAGE_BYTES = 8 * 1024 * 1024  # 8MB per shot
-ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+MAX_FILE_BYTES = 11 * 1024 * 1024  # 11MB raw (base64 must stay under Mongo's 16MB doc cap)
+ALLOWED_TYPES = {"image/png", "image/jpeg", "image/webp", "image/gif", "video/mp4", "video/webm"}
 
 
 def build_proof_router(db: Any, require_write_key: Any) -> APIRouter:
@@ -43,8 +43,8 @@ def build_proof_router(db: Any, require_write_key: Any) -> APIRouter:
         if file.content_type not in ALLOWED_TYPES:
             raise HTTPException(status_code=400, detail=f"Unsupported type: {file.content_type}")
         raw = await file.read()
-        if len(raw) > MAX_IMAGE_BYTES:
-            raise HTTPException(status_code=400, detail="Image too large (max 8MB)")
+        if len(raw) > MAX_FILE_BYTES:
+            raise HTTPException(status_code=400, detail="File too large (max 11MB)")
         doc = {
             "id": str(uuid.uuid4()),
             "caption": caption.strip()[:200],

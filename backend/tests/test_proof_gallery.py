@@ -72,7 +72,10 @@ class TestProofImage:
     def test_image_bytes_served(self, api_session):
         shots = api_session.get(f"{API}/proof/list", timeout=30).json()["shots"]
         assert shots, "need at least one shot"
-        pid = shots[0]["id"]
+        # Pick first image-type shot (list can now contain video items too)
+        image_shots = [s for s in shots if s["content_type"].startswith("image/")]
+        assert image_shots, "no image-type shot found"
+        pid = image_shots[0]["id"]
         r = api_session.get(f"{API}/proof/image/{pid}", timeout=60)
         assert r.status_code == 200
         assert r.headers.get("content-type", "").startswith("image/")
