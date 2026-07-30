@@ -114,7 +114,7 @@
     - Fixed /api/checkout/status 500 by upgrading emergentintegrations 0.1.0 → 0.2.0; status now returns amount/metadata + NEW discord_invite field (post-payment success panel wired to it)
     - Proof gallery now supports VIDEO (mp4/webm, 11MB): play overlay on cards, <video controls> in lightbox, admin video thumbs. Seeded user's new proof: MNQ/MES positions collage + 8.6MB video (gallery = 4 items)
     - Testing agent iteration_10: 100% backend + frontend pass; new regression file tests/test_black_screen_and_video.py (run with REACT_APP_BACKEND_URL exported)
-    - PENDING FROM USER: real Discord invite link(s) → set DISCORD_INVITE_FREE/PRO/ELITE in backend/.env, then redeploy
+    - PENDING FROM USER: ~~real Discord invite link~~ DONE (2026-07-30): https://discord.gg/UdDu7CHF set for FREE/PRO/ELITE + AFFILIATE_URL_DISCORD in backend/.env; verified on signup, paid checkout status, and /performance UI (Join Discord button live)
 
 ## Configured
 - Discord Webhook: LIVE
