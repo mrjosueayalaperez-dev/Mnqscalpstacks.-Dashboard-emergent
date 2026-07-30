@@ -439,7 +439,7 @@ const SignupForm = ({ onSignup, onCheckout, loading, signedUp, discordInvite }) 
         </div>
         <h3 className="text-xl font-bold text-white mb-2">You're In!</h3>
         <p className="text-zinc-400 text-sm mb-4">Welcome to MNQ Stack Signals. Join the Discord to start receiving signals.</p>
-        {discordInvite && discordInvite !== "REPLACE_WITH_FREE_DISCORD_INVITE" ? (
+        {discordInvite && !discordInvite.startsWith("REPLACE") ? (
           <a
             href={discordInvite}
             target="_blank"
