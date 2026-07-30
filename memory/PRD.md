@@ -109,6 +109,13 @@
     - Testing agent iteration_9: 100% backend + frontend pass; regression suite now includes tests/test_proof_gallery.py
     - User has MORE proof shots to upload later via /admin
 
+23. **Black-screen Discord bug fix + video proof + Stripe status fix** (2026-07-30):
+    - FIXED user-reported production bug: paid users clicking "Join Discord" hit a black screen — placeholder env invite rendered as relative href to a non-existent route. Guard now `!startsWith("REPLACE")` (PerformancePage) + catch-all route `*` → Navigate to / (App.js)
+    - Fixed /api/checkout/status 500 by upgrading emergentintegrations 0.1.0 → 0.2.0; status now returns amount/metadata + NEW discord_invite field (post-payment success panel wired to it)
+    - Proof gallery now supports VIDEO (mp4/webm, 11MB): play overlay on cards, <video controls> in lightbox, admin video thumbs. Seeded user's new proof: MNQ/MES positions collage + 8.6MB video (gallery = 4 items)
+    - Testing agent iteration_10: 100% backend + frontend pass; new regression file tests/test_black_screen_and_video.py (run with REACT_APP_BACKEND_URL exported)
+    - PENDING FROM USER: real Discord invite link(s) → set DISCORD_INVITE_FREE/PRO/ELITE in backend/.env, then redeploy
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

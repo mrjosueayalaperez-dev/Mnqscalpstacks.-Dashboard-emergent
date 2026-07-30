@@ -594,7 +594,7 @@ const PerformancePage = () => {
           if (res.data.payment_status === "paid") {
             setPaymentSuccess(true);
             setPaymentTier(tier || "pro");
-            setDiscordInvite(tier === "elite" ? "" : ""); // Will be set from env
+            setDiscordInvite(res.data.discord_invite || "");
             toast.success("Payment successful! Welcome aboard.");
           } else if (res.data.status !== "expired") {
             setTimeout(() => pollStatus(attempts + 1), 2000);

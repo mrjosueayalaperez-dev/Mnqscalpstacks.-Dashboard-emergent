@@ -1868,6 +1868,7 @@ async def get_checkout_status(session_id: str, http_request: Request):
         "amount_total": status.amount_total,
         "currency": status.currency,
         "metadata": status.metadata,
+        "discord_invite": DISCORD_INVITES.get((status.metadata or {}).get("tier", ""), ""),
     }
 
 
