@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { useAuth } from "@/context/AuthContext";
 import {
   Zap, Shield, BarChart3, Activity, Cpu, Globe,
   Bell, Layers, Brain, CreditCard, Smartphone, Check, ExternalLink, Link2,
@@ -133,6 +134,7 @@ const TradingViewPanel = () => (
 const GPayWidget = () => {
   const [open, setOpen] = useState(false);
   const [loadingTier, setLoadingTier] = useState(null);
+  const auth = useAuth();
 
   const startCheckout = async (tier) => {
     setLoadingTier(tier);
@@ -140,6 +142,7 @@ const GPayWidget = () => {
       const { data } = await axios.post(`${API}/checkout/create`, {
         tier,
         origin_url: window.location.origin,
+        email: auth?.user?.email || "",
       });
       window.location.href = data.url; // Stripe Checkout — GPay shows automatically on supported devices
     } catch (e) {

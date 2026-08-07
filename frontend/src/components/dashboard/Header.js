@@ -1,7 +1,10 @@
 import React from "react";
-import { Activity, BarChart3, RefreshCw } from "lucide-react";
+import { Activity, BarChart3, LogOut, RefreshCw } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 
-export const Header = ({ onRefresh, lastUpdate }) => (
+export const Header = ({ onRefresh, lastUpdate }) => {
+  const { user, logout } = useAuth();
+  return (
   <header className="h-12 md:h-14 border-b border-white/10 bg-[#0A0A0A]/90 backdrop-blur-xl flex items-center justify-between px-3 md:px-4 sticky top-0 z-50" data-testid="main-header">
     <div className="flex items-center gap-2 md:gap-3">
       <div className="flex items-center gap-1.5">
@@ -26,6 +29,22 @@ export const Header = ({ onRefresh, lastUpdate }) => (
       <button onClick={onRefresh} className="p-1.5 hover:bg-white/5 rounded transition-colors" data-testid="refresh-all-btn">
         <RefreshCw className="w-3.5 h-3.5 text-zinc-400" />
       </button>
+      {user && (
+        <div className="flex items-center gap-2 pl-2 border-l border-white/10">
+          <span className="hidden sm:inline text-[0.65rem] text-zinc-400 font-mono max-w-[120px] truncate" data-testid="header-user-name">
+            {user.name || user.email}
+          </span>
+          <button
+            onClick={logout}
+            className="p-1.5 hover:bg-[#FF3B30]/15 rounded transition-colors"
+            title="Log out"
+            data-testid="logout-btn"
+          >
+            <LogOut className="w-3.5 h-3.5 text-zinc-400" />
+          </button>
+        </div>
+      )}
     </div>
   </header>
-);
+  );
+};

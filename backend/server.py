@@ -4,6 +4,7 @@ from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_
 from market_context import get_market_context
 import ati
 import proof
+import auth as auth_module
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -247,6 +248,7 @@ class SubscriberCreate(BaseModel):
 class CheckoutRequest(BaseModel):
     tier: str  # pro, elite
     origin_url: str
+    email: str = ""  # logged-in user's email for auto tier upgrade
 
 class BacktestResult(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -1821,7 +1823,7 @@ async def create_checkout(request: CheckoutRequest, http_request: Request):
         currency="usd",
         success_url=success_url,
         cancel_url=cancel_url,
-        metadata={"tier": tier, "product": f"MNQ Stack Signals - {tier.title()}"},
+        metadata={"tier": tier, "product": f"MNQ Stack Signals - {tier.title()}", "email": request.email.lower()},
     )
 
     session = await stripe_checkout.create_checkout_session(checkout_req)
@@ -1862,6 +1864,14 @@ async def get_checkout_status(session_id: str, http_request: Request):
             }}
         )
 
+    meta = status.metadata or {}
+    if status.payment_status == "paid" and meta.get("email"):
+        tier = meta.get("tier", "pro")
+        await db.users.update_one({"email": meta["email"]}, {"$set": {"tier": tier}})
+        await db.subscribers.update_one(
+            {"email": meta["email"]},
+            {"$set": {"tier": tier, "stripe_session_id": session_id}},
+        )
     return {
         "status": status.status,
         "payment_status": status.payment_status,
@@ -1902,6 +1912,8 @@ async def stripe_webhook(request: Request):
                     {"email": email},
                     {"$set": {"tier": tier, "stripe_session_id": event.session_id}}
                 )
+                # Auto-upgrade the logged-in user's account tier
+                await db.users.update_one({"email": email}, {"$set": {"tier": tier}})
 
         return {"status": "ok"}
     except Exception as e:
@@ -2486,7 +2498,16 @@ async def affiliate_click_stats() -> Dict[str, Any]:
 # Include the router in the main app
 api_router.include_router(ati.build_ati_router(db, require_write_key))
 api_router.include_router(proof.build_proof_router(db, require_write_key))
+api_router.include_router(auth_module.build_auth_router(db))
 app.include_router(api_router)
+
+
+@app.on_event("startup")
+async def seed_auth() -> None:
+    await auth_module.seed_admin(db)
+    await db.users.create_index("email", unique=True)
+    await db.user_sessions.create_index("session_token")
+    await db.login_attempts.create_index("identifier")
 
 app.add_middleware(
     CORSMiddleware,

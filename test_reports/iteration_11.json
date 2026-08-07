@@ -1,0 +1,56 @@
+{
+  "summary": "Auth feature testing (JWT register/login + Google session + role gating + Stripe metadata). Backend pytest: 12/13 pass. Frontend UI: gating + register + role-block + Google button navigation all pass. Two real bugs surfaced: (1) LOCKOUT DOES NOT TRIGGER behind ingress — 5 wrong-password attempts only incremented count to 3 because `request.client.host` rotates across k8s ingress pods, and (2) LOGOUT BUTTON IN UI does not appear to trigger the /api/auth/logout POST (no request observed within 10s of forced click; on re-visit of /dashboard the app stays on /dashboard instead of redirecting to /auth). All other spec items — cookies on register, 409 duplicate, 400 short password, admin login role=admin tier=elite, wrong-password 401, /me via cookies AND Bearer, /me 401 with no creds, Google session-token via Bearer, expired session 401, admin passes /operator+/admin, user blocked from /operator+/admin with admin-only-block, register lands on /dashboard with header-user-name, Google button routes to auth.emergentagent.com, Stripe pro checkout create+status 200 with metadata.email echoed — verified.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "POST /api/auth/login",
+        "issue": "Brute-force lockout can be bypassed. `_check_lockout`/`_record_failure` key on `request.client.host:email`, but behind the Kubernetes ingress `request.client.host` is the ingress-pod IP and rotates across pods. Observed: 5 sequential wrong-password attempts against a fresh user only reached count=3 in `login_attempts` (identifier=10.231.155.130:...), so the 6th correct-password attempt returned 200 instead of 429. Fix: key lockout on the email alone (or use X-Forwarded-For's first hop), and/or enforce `Uvicorn(proxy_headers=True, forwarded_allow_ips='*')` and read `request.headers.get('X-Forwarded-For','').split(',')[0].strip()` for the IP piece.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "dashboard/Header.js logout-btn",
+        "issue": "Clicking the logout button does not clear the session. Observed twice: (a) after force-clicking logout-btn on /dashboard the URL stays at /dashboard and re-navigating to /dashboard STILL renders the dashboard (no redirect to /auth); (b) `page.expect_response('/api/auth/logout')` timed out at 10s after the click — no POST was fired. Likely cause: `Data initialized!` toast (top-right z-index overlay) sits over the header logout icon and eats the pointer; even with force=True the synthetic React onClick doesn't reach the button. Recommend either raising the header z-index above the toast, or dispatching the toast into a non-overlapping position, or attaching the logout handler at pointerup instead of click.",
+        "selector": "[data-testid=\"logout-btn\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Admin post-login redirect",
+        "issue": "Spec says admin login should land on /dashboard, but on the first admin sign-in the URL settled on /admin (subsequent sessions during register-flow test correctly landed on /dashboard). Not blocking — admin has access to both — but inconsistent with the stated flow.",
+        "affected_selectors": ["/auth", "/dashboard", "/admin"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth.py",
+    "/app/test_reports/pytest/auth_results.xml"
+  ],
+  "action_items": [
+    "Fix lockout identifier — do NOT include request.client.host (or read X-Forwarded-For first hop) so 5 failed attempts always trip the 429 regardless of which ingress pod served the request.",
+    "Fix UI logout — ensure clicking [data-testid=logout-btn] actually POSTs /api/auth/logout and clears user state; investigate the 'Data initialized!' toast overlay that appears to be intercepting the click in the top-right header area.",
+    "(Optional/nice-to-have) Make admin post-login redirect deterministic — always go to /dashboard as documented, then let admin navigate to /admin themselves."
+  ],
+  "critical_code_review_comments": [
+    "auth.py lockout keys `f\"{request.client.host}:{email}\"` — insecure behind any reverse-proxy/ingress with multiple pods; effectively disables brute-force protection in this environment.",
+    "auth.py `/logout` clears cookies but does not revoke the JWT — stateless JWTs remain valid until exp (1h). Acceptable for MVP but consider a `token_denylist` collection or shortening access token TTL and relying on refresh-token rotation for hard logout.",
+    "AuthContext.logout only does setUser(false); if the cookie clear fails browser-side the ProtectedRoute would still let subsequent full-page loads back into /dashboard because checkAuth re-hydrates from any surviving cookie. Consider also calling a client-side document.cookie clear as belt-and-suspenders, and forcing a Navigate('/auth') from the Header onClick after logout resolves.",
+    "delete_cookie in FastAPI does not include HttpOnly attribute on the Set-Cookie deletion; while most browsers still match by (name, path, domain), some Chrome builds are strict — worth setting `httponly=True` on delete_cookie too for symmetry."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_auth.py"
+  ],
+  "success_rate": {"backend": "92% (12/13 auth pytest — 1 real lockout failure)", "frontend": "~90% (all gating/register/role-block/Google-btn OK; logout broken)"},
+  "test_credentials": "Admin operator@mnqscalpstacks.com / ScalpStacks!2026 (from /app/memory/test_credentials.md). All test users created with prefix TEST_* or testreg*/testauth* — cleaned up in mongo.",
+  "seed_data_creation": "Inserted+deleted TEST_google_* user + valid & expired session_token in test_database.user_sessions via mongosh (per /app/auth_testing.md). Removed after test. Also removed lockout residue in login_attempts.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth pytest is at /app/backend/tests/test_auth.py (13 tests). Export REACT_APP_BACKEND_URL before running. The lockout test WILL keep failing until identifier is changed to not rely on request.client.host (ingress pod rotation). Frontend logout is the other outstanding bug — reproduce by admin-login → /dashboard → click [data-testid=logout-btn] → navigate to /dashboard again and observe URL stays on /dashboard instead of /auth. Note: 'Data initialized!' toast in top-right may be occluding the logout icon; try dismissing toasts first, or check onClick wiring on Header.js line 37.",
+  "rca_of_the_issue": "Lockout bypass RCA: k8s ingress fronts /api on multiple proxy pods. Each pod terminates TCP and forwards to backend, so FastAPI sees `request.client.host = <ingress-pod-IP>` which varies per request. login_attempts identifier `pod_ip:email` therefore splits the counter across several documents (observed 3 pods across 5 attempts), never reaching count>=5. Mitigation: strip IP from identifier (use email only) OR trust X-Forwarded-For's first hop AND run uvicorn with `--proxy-headers --forwarded-allow-ips='*'`. Logout RCA (hypothesis): DOM overlay from success toast in top-right of header intercepts the pointer target; page.click(force=True) dispatches a synthetic click but React's onClick delegates via document listener — if pointerdown was captured by the overlay, React never fires onClick on the underlying button."
+}
