@@ -116,6 +116,15 @@
     - Testing agent iteration_10: 100% backend + frontend pass; new regression file tests/test_black_screen_and_video.py (run with REACT_APP_BACKEND_URL exported)
     - PENDING FROM USER: ~~real Discord invite link~~ DONE (2026-07-30): https://discord.gg/UdDu7CHF set for FREE/PRO/ELITE + AFFILIATE_URL_DISCORD in backend/.env; verified on signup, paid checkout status, and /performance UI (Join Discord button live)
 
+24. **Authentication (email/password JWT + Emergent Google OAuth)** (2026-08-07):
+    - Backend `auth.py`: register/login/session/me/refresh/logout; unified get_current_user (JWT cookie/Bearer OR Google session_token); bcrypt, 1h access + 7d refresh cookies (secure, samesite=none); brute-force lockout keyed on EMAIL (ingress pod IPs rotate — never key on request.client.host); admin seeded from env
+    - Admin/owner: operator@mnqscalpstacks.com / ScalpStacks!2026 (role admin, tier elite) — see /app/memory/test_credentials.md
+    - Route gating: /dashboard = any logged-in user; /operator + /admin = admin only (personal cockpit); / , /performance, /auth public; frontend: AuthContext, AuthPage (tabs + Google button), AuthCallback (useLocation().hash), ProtectedRoute
+    - Stripe auto-upgrade: checkout metadata carries logged-in email → users.tier + subscribers.tier updated on webhook AND status poll
+    - Dashboard header: user name + logout (navigates to /auth); Toaster moved bottom-center (top-right toast was eating header clicks)
+    - Testing agent iteration_11 found 2 bugs (lockout bypass via pod IPs, logout not firing) — both fixed + self-verified: 13/13 tests/test_auth.py, UI logout e2e pass
+    - /app/auth_testing.md = auth testing playbook
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

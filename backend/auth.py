@@ -189,7 +189,9 @@ def build_auth_router(db: Any) -> APIRouter:
     @router.post("/login")
     async def login(body: LoginBody, request: Request, response: Response) -> Dict[str, Any]:
         email = body.email.lower()
-        identifier = f"{request.client.host if request.client else 'unknown'}:{email}"
+        # Keyed on email only: behind the k8s ingress request.client.host is a
+        # rotating proxy-pod IP, which would split the counter and disable lockout.
+        identifier = email
         await _check_lockout(db, identifier)
         user = await db.users.find_one({"email": email}, {"_id": 0})
         if not user or not user.get("password_hash") or not verify_password(body.password, user["password_hash"]):
@@ -266,7 +268,7 @@ def build_auth_router(db: Any) -> APIRouter:
         if session_token:
             await db.user_sessions.delete_one({"session_token": session_token})
         for cookie in ("access_token", "refresh_token", "session_token"):
-            response.delete_cookie(cookie, path="/", secure=True, samesite="none")
+            response.delete_cookie(cookie, path="/", secure=True, samesite="none", httponly=True)
         return {"ok": True}
 
     return router

@@ -1,9 +1,15 @@
 import React from "react";
+import { useNavigate } from "react-router-dom";
 import { Activity, BarChart3, LogOut, RefreshCw } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 export const Header = ({ onRefresh, lastUpdate }) => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  const handleLogout = async () => {
+    await logout();
+    navigate("/auth", { replace: true });
+  };
   return (
   <header className="h-12 md:h-14 border-b border-white/10 bg-[#0A0A0A]/90 backdrop-blur-xl flex items-center justify-between px-3 md:px-4 sticky top-0 z-50" data-testid="main-header">
     <div className="flex items-center gap-2 md:gap-3">
@@ -35,7 +41,7 @@ export const Header = ({ onRefresh, lastUpdate }) => {
             {user.name || user.email}
           </span>
           <button
-            onClick={logout}
+            onClick={handleLogout}
             className="p-1.5 hover:bg-[#FF3B30]/15 rounded transition-colors"
             title="Log out"
             data-testid="logout-btn"
