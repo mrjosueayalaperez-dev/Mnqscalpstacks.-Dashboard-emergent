@@ -1,0 +1,38 @@
+{
+  "summary": "Full end-to-end verification of TradingView webhook -> Discord signal delivery pipeline. Wrote a new pytest suite (test_tradingview_webhook_pipeline.py) covering buy/sell paths, signal persistence with correct entry/stop/tp1/tp2 (-8/+10/+20), duplicate suppression within 3-min window, kill-switch block+restore, Pine script v3 endpoint (alertcondition + JSON messages + https webhook URL), latency (<2s avg), and Discord delivery verification via backend logs. All 8 new tests pass. Also ran the existing regression suites test_signal_engine.py + test_signal_engine_v2.py: 47/47 pass. Kill switch confirmed OFF at end. Zero 'Discord send failed' entries in backend logs. Latency observed ~200-400ms per POST.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/webhook/tradingview", "issue": "Duplicate suppression is per (symbol,side) within 3min but queries status:'active' with no upper bound; signals never auto-transition out of 'active', so a single active long can block ALL long webhooks for 3 min regardless of price. Currently working as designed but consider closing old signals when a new one arrives to keep the flow responsive."},
+      {"endpoint": "/api/signals/pinescript", "issue": "Response key is 'pine_script' (snake_case) while other similar endpoints use camelCase. Cosmetic — not a bug. Webhook host in instructions is derived from request.headers Host, which for the ingress resolves to the emergentcf.cloud host rather than REACT_APP_BACKEND_URL public host. Users will still be able to POST to it, but a mismatch with the branded public URL could surprise them."},
+      {"endpoint": "/api/webhook/tradingview", "issue": "signal_engine_state['errors'] is incremented on duplicate hits. Semantically a duplicate is not an error; this inflates the error rate used by the auto kill-switch (>5% threshold) in /system/health."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_tradingview_webhook_pipeline.py",
+    "/app/test_reports/pytest/webhook_pipeline.xml",
+    "/app/test_reports/pytest/signal_regressions.xml"
+  ],
+  "action_items": [
+    "Consider decoupling duplicate detection from status: use created_at only (any signal in last N minutes), or explicitly close active signals after TP/SL/timeout so duplicate window is meaningful.",
+    "Do not increment signal_engine_state['errors'] on duplicate suppression — dedup hits are expected traffic and should not degrade the auto-kill-switch health metric.",
+    "Optional: return derived https URL from REACT_APP_BACKEND_URL (or an env var PUBLIC_APP_URL) in pinescript webhook_instructions so the URL shown to users matches the branded domain."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 2500+ lines — should be split into routers (signals, webhook, operator, checkout, etc.).",
+    "send_discord_signal creates a new httpx.AsyncClient per call; reuse a shared client for lower latency/connection reuse.",
+    "check_duplicate_signal filters by status:'active' but nothing marks signals inactive automatically; combined with 3-min window this is fragile.",
+    "receive_tradingview_webhook payload accepts price as string then floats it without validation — a bad payload will raise ValueError -> 500. Wrap in try/except and return 400."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_tradingview_webhook_pipeline.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8 new pipeline + 47/47 regression)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "not needed; endpoints under test are unauthenticated",
+  "seed_data_creation": "Created ~5 signal documents in db.signals via webhook. Cleared prior 'active' signals to 'closed_by_test' to allow duplicate-suppression test to run deterministically.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pipeline verified end-to-end. Kill switch is OFF. New regression file at /app/backend/tests/test_tradingview_webhook_pipeline.py — export REACT_APP_BACKEND_URL before running. To rerun cleanly, the fixture auto-closes prior active signals via direct MongoDB access using MONGO_URL/DB_NAME from /app/backend/.env.",
+  "rca of the issue": "Initial run of the new tests appeared to fail with status:'duplicate' because prior iterations left long signals in status:'active'; the webhook's dedup check (status:active + last 3 min) blocked new longs. Root cause: signals never transition out of 'active'. Mitigation in tests: reset active->closed_by_test in a module fixture. Product-side mitigation recommended in action_items."
+}
