@@ -125,6 +125,17 @@
     - Testing agent iteration_11 found 2 bugs (lockout bypass via pod IPs, logout not firing) — both fixed + self-verified: 13/13 tests/test_auth.py, UI logout e2e pass
     - /app/auth_testing.md = auth testing playbook
 
+25. **Traffic & user analytics** (2026-08-09):
+    - Backend `analytics.py`: POST /api/analytics/visit (deduped per visitor/path/day, unique index), GET /api/analytics/stats (admin KPIs: visitors, views, users, subscribers, paying, MRR, conversion capped 100%), GET /api/analytics/public (traders + visitors)
+    - Frontend: useVisitTracker hook (localStorage visitor id + sessionStorage dedupe, fires per route), TrafficStats 8-KPI row in /admin, LiveCounters social-proof strip on landing (below StatsBar)
+    - Self-tested: curl dedupe verified, UI screenshots of both surfaces
+
+## USER BUSINESS PLAN (pasted 2026-08-09)
+- Goal: reliable automated MNQ signals via TradingView + Discord. Live site operating; payments tested; first paying customer done. Currently integrating TradingView alerts → Discord signals.
+- 90-day priorities: end-to-end signal delivery, 20–50 paying subscribers, measure conversion/retention/signal performance
+- KPIs: paying subs, conversion, retention, MRR, signal win rate, delivery speed, Discord members
+- Marketing: X, Reddit, Facebook, Discord; long-term: AI-assisted futures platform
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

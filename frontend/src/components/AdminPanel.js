@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast, Toaster } from "sonner";
 import ProofManager from "./ProofManager";
+import TrafficStats from "./TrafficStats";
 import {
   Users, DollarSign, Zap, BarChart3, Crown, Star, Trash2,
   ChevronUp, ChevronDown, Shield, Activity, TrendingUp, RefreshCw,
@@ -94,6 +95,9 @@ const AdminPanel = () => {
             </div>
           ))}
         </div>
+
+        {/* Traffic & Growth KPIs */}
+        <TrafficStats />
 
         {/* Proof Gallery Manager */}
         <ProofManager />

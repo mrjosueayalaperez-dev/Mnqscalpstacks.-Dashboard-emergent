@@ -5,6 +5,7 @@ from market_context import get_market_context
 import ati
 import proof
 import auth as auth_module
+import analytics
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -2499,6 +2500,7 @@ async def affiliate_click_stats() -> Dict[str, Any]:
 api_router.include_router(ati.build_ati_router(db, require_write_key))
 api_router.include_router(proof.build_proof_router(db, require_write_key))
 api_router.include_router(auth_module.build_auth_router(db))
+api_router.include_router(analytics.build_analytics_router(db))
 app.include_router(api_router)
 
 
@@ -2508,6 +2510,7 @@ async def seed_auth() -> None:
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
+    await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
 
 app.add_middleware(
     CORSMiddleware,

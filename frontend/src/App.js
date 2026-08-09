@@ -10,9 +10,11 @@ import AuthPage from "@/pages/AuthPage";
 import AuthCallback from "@/components/AuthCallback";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { AuthProvider } from "@/context/AuthContext";
+import useVisitTracker from "@/hooks/useVisitTracker";
 
 function AppRoutes() {
   const location = useLocation(); // read hash from here, not window.location.hash (not reactive)
+  useVisitTracker();
   // Google OAuth returns with #session_id= — process it before any route/auth check
   if (location.hash?.includes("session_id=")) {
     return <AuthCallback />;
