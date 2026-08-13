@@ -1028,10 +1028,12 @@ async def receive_tradingview_webhook(payload: TradingViewWebhook, background_ta
     symbol = payload.symbol or "MNQ"
     is_dup = await check_duplicate_signal(symbol, side, minutes=3)
     if is_dup:
-        signal_engine_state["errors"] += 1
         return {"status": "duplicate", "reason": "Signal already active"}
 
-    price = float(payload.price) if payload.price else 18500.0
+    try:
+        price = float(payload.price) if payload.price else 18500.0
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="Invalid price in webhook payload")
 
     # Calculate entry/stop/tp
     if side == "long":

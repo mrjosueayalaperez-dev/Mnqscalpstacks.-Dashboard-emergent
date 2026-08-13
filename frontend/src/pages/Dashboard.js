@@ -14,6 +14,7 @@ import { FreemiumGate, AdBanner } from "@/components/FreemiumGate";
 import { NinjaTraderPanel, TradingViewPanel, GPayWidget, MarketSidebar } from "@/components/PromoModules";
 import LiveTerminalChart from "@/components/LiveTerminalChart";
 import { Header } from "@/components/dashboard/Header";
+import ExecutionPanel from "@/components/dashboard/ExecutionPanel";
 import { MNQTracker } from "@/components/dashboard/MNQTracker";
 import { Checklist } from "@/components/dashboard/Checklist";
 import { AIAnalysis } from "@/components/dashboard/AIAnalysis";
@@ -190,6 +191,12 @@ export default function Dashboard() {
 
       <main className="p-3 md:p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+          {/* ROW -1: MOBILE-FIRST EXECUTION STRIP — price + one-thumb trading */}
+          <ExecutionPanel
+            checklistDone={checklist.filter((i) => i.completed).length}
+            checklistTotal={checklist.length}
+          />
+
           {/* ROW 0: LIVE TERMINAL CHART — official TradingView + live WS tape */}
           <LiveTerminalChart />
 

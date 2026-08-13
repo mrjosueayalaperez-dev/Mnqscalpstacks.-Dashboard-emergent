@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend-only verification of the new mobile-first ExecutionPanel on /dashboard (390x844 viewport). Logged in as admin, ExecutionPanel renders as the first panel with a live ticking price (30,196–30,202), risk pill 'SAFE · $1,000 limit · N/20', qty selector, BUY/SELL/CLOSE/FLATTEN, and a graded signal card (SHORT MNQ, grade C, 60% conf, entry/stop/TP1/TP2). All flows work end-to-end via the server order engine: qty-2 BUY → success toast + position badge 'LONG 2 @ 30,201.00' + trade counter increment; CLOSE → toast + badge disappears; second BUY + FLATTEN → 'FLATTENED' toast + position gone; signal-execute-btn placed a SELL 2 @ 30,196.50 (SHORT signal). Checklist chip shows 11/11 and scrolls without crash. LiveTerminalChart renders below and its terminal-live-price ticks (30,195.50). Operator cockpit still loads for admin. Session left clean: kill=false, position=none, trades=0.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ExecutionPanel @ 390x844", "issues": ["BUY/SELL buttons wrap to two rows on mobile because min-w-[110px] + qty selector + CLOSE + FLATTEN overflow one line (measured BUY at x=229,y=208 and SELL at x=25,y=256). Still tappable and fully above the fold, but the intended single-row 'one-thumb' layout breaks. Consider hiding CLOSE/FLATTEN on <sm (they duplicate the position-badge close flow) or wrapping them on a second row and keeping BUY/SELL together on row 1."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_tradingview_webhook_pipeline.py (existing regression, not re-run)"],
+  "action_items": [
+    "Optional UX: keep BUY MARKET and SELL MARKET on the same row at 390px width; move CLOSE/FLATTEN to a secondary row or icon-only.",
+    "Cooldown UX: SELL button is disabled while `busy` is true, so an immediate BUY→SELL click is silently ignored (no toast). The 1500ms server cooldown/client warning only fires for the SECOND independent click after busy clears. Consider showing a 'Cooldown' toast if a user clicks while busy=true so the behavior is discoverable."
+  ],
+  "critical_code_review_comments": [
+    "ExecutionPanel.placeOrder: `cooldownRef` is only set after a successful order (line 94). If two clicks race before `busy` resolves, the second is dropped via the disabled attribute (silent). Setting cooldownRef at click-time OR emitting a toast when disabled would be more predictable.",
+    "closePosition() calls placeOrder('CLOSE_LONG'|'CLOSE_SHORT') which will be blocked by the 1.6s client cooldown after a fill; on a real fast close users may hit the warning toast. Consider bypassing cooldown for CLOSE/FLATTEN paths.",
+    "5s polling in useEffect plus useMnqLive WebSocket is fine but WS is reconnecting frequently in the preview (multiple 'closed before established' warnings). Not blocking; may want backoff/logging."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (per request)", "frontend": "100% (all listed flows pass)"},
+  "test_credentials": "admin: operator@mnqscalpstacks.com / ScalpStacks!2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — an active SHORT MNQ signal was already present from prior iterations (dedup window). Session was reset at the end via /api/operator/control/flatten + /api/operator/control/reset_session (both 200).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "ExecutionPanel testids verified: execution-panel, exec-live-price, risk-pill, exec-position, qty-selector, qty-1..10, exec-buy-btn, exec-sell-btn, exec-close-btn, exec-flatten-btn, signal-card, signal-grade, signal-confidence, signal-execute-btn, checklist-chip. Toasts use Sonner (query [data-sonner-toast]). Server order engine on preview is reachable; positions/trades refresh via 5s poll of /api/operator/state. Kill switch left OFF; session reset."
+}
