@@ -136,6 +136,11 @@
 - KPIs: paying subs, conversion, retention, MRR, signal win rate, delivery speed, Discord members
 - Marketing: X, Reddit, Facebook, Discord; long-term: AI-assisted futures platform
 
+26. **Mobile-first Execution Layout + Admin Users Table** (2026-08-13):
+    - ExecutionPanel (dashboard ROW -1): big live WS price + session H/L, risk pill (SAFE/AT RISK/LOCKED · limit · trades), position badge, checklist chip, qty 1-10, one-row BUY/SELL (grid-cols-2, verified same row @390px), CLOSE/FLATTEN (bypass client cooldown), graded signal card (A+/B/C + confidence + entry/stop/TPs + EXECUTE) — all through /api/operator/order (SNIPE_2R). Testing agent iteration_13: 100% pass; 2 polish items fixed after
+    - Admin: GET /api/analytics/users (no password_hash) + UsersTable in /admin (email, name, tier, role, joined, last_login); last_login now tracked on login + Google session
+    - Real users spotted in preview: jayalaperez383@gmail.com, mr.josueayalaperez@gmail.com (likely owner's personal accounts — candidate for admin swap)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

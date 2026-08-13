@@ -55,6 +55,17 @@ def build_analytics_router(db: Any) -> APIRouter:
             "conversion_rate": conversion,
         }
 
+    @router.get("/users", tags=["admin"])
+    async def analytics_users() -> Dict[str, Any]:
+        """Registered users list for the admin panel (no password hashes)."""
+        rows = (
+            await db.users
+            .find({}, {"_id": 0, "password_hash": 0})
+            .sort("created_at", -1)
+            .to_list(length=500)
+        )
+        return {"users": rows, "total": len(rows)}
+
     @router.get("/public")
     async def analytics_public() -> Dict[str, Any]:
         """Public social-proof counters for the landing page."""

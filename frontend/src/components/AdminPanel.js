@@ -3,6 +3,7 @@ import axios from "axios";
 import { toast, Toaster } from "sonner";
 import ProofManager from "./ProofManager";
 import TrafficStats from "./TrafficStats";
+import UsersTable from "./UsersTable";
 import {
   Users, DollarSign, Zap, BarChart3, Crown, Star, Trash2,
   ChevronUp, ChevronDown, Shield, Activity, TrendingUp, RefreshCw,
@@ -98,6 +99,9 @@ const AdminPanel = () => {
 
         {/* Traffic & Growth KPIs */}
         <TrafficStats />
+
+        {/* Registered Users */}
+        <UsersTable />
 
         {/* Proof Gallery Manager */}
         <ProofManager />

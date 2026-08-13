@@ -198,6 +198,7 @@ def build_auth_router(db: Any) -> APIRouter:
             await _record_failure(db, identifier)
             raise HTTPException(status_code=401, detail="Invalid email or password")
         await db.login_attempts.delete_one({"identifier": identifier})
+        await db.users.update_one({"email": email}, {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}})
         _set_jwt_cookies(response, create_access_token(user["user_id"], email), create_refresh_token(user["user_id"]))
         return _public_user(user)
 
@@ -231,6 +232,7 @@ def build_auth_router(db: Any) -> APIRouter:
             )
 
         session_token = data["session_token"]
+        await db.users.update_one({"email": email}, {"$set": {"last_login": datetime.now(timezone.utc).isoformat()}})
         await db.user_sessions.insert_one({
             "user_id": user["user_id"],
             "session_token": session_token,
