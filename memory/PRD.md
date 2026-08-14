@@ -151,6 +151,8 @@
     - ExecutionPanel: SHARE button next to risk pill → branded session P&L card (shareTradeCard); verified 106KB download e2e
     - STILL WAITING: sk_live secret key from user (they sent pk_live publishable — cannot charge with it)
 
+29. **Night session proof batch** (2026-08-14): gallery = 9 items (added +$24.30, +$10.30 wins and -$17.70 transparency stop). STILL PENDING FROM USER: Stripe live secret key — user's "Reveal" hits an email-verification loop; instructed to create a restricted key (rk_live_) at dashboard.stripe.com/apikeys which shows once with no loop. When key arrives: set STRIPE_API_KEY in backend/.env, restart, verify checkout/create returns live session, user redeploys. User asked to conserve credits — keep next actions minimal.
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
