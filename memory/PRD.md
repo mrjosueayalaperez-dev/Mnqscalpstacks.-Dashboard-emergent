@@ -146,6 +146,11 @@
     - Share cards: lib/shareCard.js canvas-renders branded 1080x1080 P&L PNG (side, qty, PnL hero, entry, preset, site URL) → Web Share API with download fallback; Share2 button on every filled journal entry (journal-share-{i}); verified 102KB download e2e
     - Stripe live key: user sent pk_live (publishable) — WAITING for sk_live secret key before switching STRIPE_API_KEY
 
+28. **Owner Discord alerts + dashboard share button** (2026-08-14):
+    - notify.py: fire-and-forget owner_alert() to DISCORD_WEBHOOK_URL; wired to register (🆕), first Google sign-in (🆕), and paid upgrades (💰, deduped via tier $ne match so status polling can't spam)
+    - ExecutionPanel: SHARE button next to risk pill → branded session P&L card (shareTradeCard); verified 106KB download e2e
+    - STILL WAITING: sk_live secret key from user (they sent pk_live publishable — cannot charge with it)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

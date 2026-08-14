@@ -6,6 +6,7 @@ import ati
 import proof
 import auth as auth_module
 import analytics
+import notify
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1870,11 +1871,16 @@ async def get_checkout_status(session_id: str, http_request: Request):
     meta = status.metadata or {}
     if status.payment_status == "paid" and meta.get("email"):
         tier = meta.get("tier", "pro")
-        await db.users.update_one({"email": meta["email"]}, {"$set": {"tier": tier}})
+        upgraded = await db.users.update_one(
+            {"email": meta["email"], "tier": {"$ne": tier}}, {"$set": {"tier": tier}}
+        )
         await db.subscribers.update_one(
             {"email": meta["email"]},
             {"$set": {"tier": tier, "stripe_session_id": session_id}},
         )
+        if upgraded.modified_count:
+            amount = (status.amount_total or 0) / 100
+            notify.owner_alert("💰 PAID UPGRADE", f"**{meta['email']}** upgraded to **{tier.upper()}** — ${amount:.2f}", 15844367)
     return {
         "status": status.status,
         "payment_status": status.payment_status,

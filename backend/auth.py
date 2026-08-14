@@ -16,6 +16,8 @@ import jwt
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 
+from notify import owner_alert
+
 JWT_ALGORITHM = "HS256"
 EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
 LOCKOUT_ATTEMPTS = 5
@@ -194,6 +196,7 @@ def build_auth_router(db: Any) -> APIRouter:
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(dict(doc))
+        owner_alert("🆕 New User Registered", f"**{doc['name']}** ({email}) just created an account — tier: free", 3447003)
         _set_jwt_cookies(response, create_access_token(doc["user_id"], email), create_refresh_token(doc["user_id"]))
         return _public_user(doc)
 
@@ -235,6 +238,7 @@ def build_auth_router(db: Any) -> APIRouter:
                 "created_at": datetime.now(timezone.utc).isoformat(),
             }
             await db.users.insert_one(dict(user))
+            owner_alert("🆕 New User (Google)", f"**{user['name']}** ({email}) signed in with Google for the first time", 3447003)
         else:
             await db.users.update_one(
                 {"email": email},

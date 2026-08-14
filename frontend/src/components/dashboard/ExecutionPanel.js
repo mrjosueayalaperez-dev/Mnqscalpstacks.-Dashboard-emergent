@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { CheckSquare, Shield, XCircle, Zap } from "lucide-react";
+import { CheckSquare, Share2, Shield, XCircle, Zap } from "lucide-react";
 import useMnqLive from "@/components/operator/useMnqLive";
+import { shareTradeCard } from "@/lib/shareCard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const QTYS = [1, 2, 3, 5, 10];
@@ -161,6 +162,21 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0 }
             {state?.kill_switch ? "LOCKED" : risky ? "AT RISK" : "SAFE"} · ${Math.abs(state?.max_daily_loss ?? 1000).toLocaleString()} limit · {state?.daily_trades ?? 0}/{state?.max_daily_trades ?? 20}
           </span>
           <div className="flex items-center gap-1.5">
+            <button
+              onClick={async () => {
+                const result = await shareTradeCard({
+                  side: "SESSION",
+                  qty: state?.daily_trades ?? 0,
+                  pnl: state?.daily_pnl ?? 0,
+                  grade: `${state?.daily_trades ?? 0} TRADES`,
+                });
+                toast.success(result === "shared" ? "Session card shared!" : "Session card downloaded — post it!");
+              }}
+              className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.55rem] font-bold border border-[#007AFF]/40 text-[#007AFF] hover:bg-[#007AFF]/10 transition-colors"
+              data-testid="share-session-btn"
+            >
+              <Share2 className="w-3 h-3" /> SHARE
+            </button>
             {pos?.side && (
               <span className={`px-2 py-0.5 rounded-full text-[0.55rem] font-black border ${pos.side === "LONG" ? "border-[#34C759]/40 text-[#34C759]" : "border-[#FF3B30]/40 text-[#FF3B30]"}`} data-testid="exec-position">
                 {pos.side} {pos.qty} @ {fmt(pos.avg_entry)}
