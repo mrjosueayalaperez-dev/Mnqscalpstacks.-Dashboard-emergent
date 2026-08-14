@@ -1,5 +1,19 @@
 import React from "react";
-import { BookOpen } from "lucide-react";
+import { BookOpen, Share2 } from "lucide-react";
+import { toast } from "sonner";
+import { shareTradeCard } from "@/lib/shareCard";
+
+const shareEntry = async (e) => {
+  const result = await shareTradeCard({
+    side: e.action,
+    qty: e.qty,
+    entry: e.fill_price,
+    pnl: typeof e.realized_pnl === "number" ? e.realized_pnl : e.daily_pnl ?? 0,
+    grade: e.preset || "",
+    ts: e.ts,
+  });
+  toast.success(result === "shared" ? "Trade card shared!" : "Trade card downloaded — post it!");
+};
 
 const sideColor = (a) => {
   if (!a) return "#9ca3af";
@@ -43,9 +57,21 @@ export default function JournalPanel({ entries }) {
                   </span>
                 )}
               </div>
-              <span className="font-mono text-zinc-500 shrink-0">
-                {e.fill_price ? `@${e.fill_price.toFixed(2)}` : ""}
-                {typeof e.daily_pnl === "number" ? ` | PnL ${e.daily_pnl >= 0 ? "+" : ""}${e.daily_pnl.toFixed(0)}` : ""}
+              <span className="flex items-center gap-1.5 shrink-0">
+                <span className="font-mono text-zinc-500">
+                  {e.fill_price ? `@${e.fill_price.toFixed(2)}` : ""}
+                  {typeof e.daily_pnl === "number" ? ` | PnL ${e.daily_pnl >= 0 ? "+" : ""}${e.daily_pnl.toFixed(0)}` : ""}
+                </span>
+                {e.fill_price && (
+                  <button
+                    onClick={() => shareEntry(e)}
+                    className="p-0.5 text-zinc-600 hover:text-[#007AFF] transition-colors"
+                    title="Share trade card"
+                    data-testid={`journal-share-${i}`}
+                  >
+                    <Share2 className="w-3 h-3" />
+                  </button>
+                )}
               </span>
             </div>
             {(e.sl_price || e.tp_price) && (

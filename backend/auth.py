@@ -64,8 +64,13 @@ def _public_user(doc: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _admin_emails() -> set:
+    raw = os.environ.get("ADMIN_EMAILS", "") or os.environ.get("ADMIN_EMAIL", "")
+    return {e.strip().lower() for e in raw.split(",") if e.strip()}
+
+
 def _role_for(email: str) -> str:
-    return "admin" if email.lower() == os.environ.get("ADMIN_EMAIL", "").lower() else "user"
+    return "admin" if email.lower() in _admin_emails() else "user"
 
 
 class RegisterBody(BaseModel):
@@ -141,6 +146,12 @@ async def seed_admin(db: Any) -> None:
         await db.users.update_one(
             {"email": email},
             {"$set": {"password_hash": hash_password(password), "role": "admin"}},
+        )
+    # Promote any other configured admin emails WITHOUT touching their passwords
+    for admin_email in _admin_emails():
+        await db.users.update_one(
+            {"email": admin_email, "role": {"$ne": "admin"}},
+            {"$set": {"role": "admin", "tier": "elite"}},
         )
 
 

@@ -141,6 +141,11 @@
     - Admin: GET /api/analytics/users (no password_hash) + UsersTable in /admin (email, name, tier, role, joined, last_login); last_login now tracked on login + Google session
     - Real users spotted in preview: jayalaperez383@gmail.com, mr.josueayalaperez@gmail.com (likely owner's personal accounts — candidate for admin swap)
 
+27. **Admin swap + Trade Share Cards** (2026-08-14):
+    - ADMIN_EMAILS env (comma list) — mr.josueayalaperez@gmail.com promoted to admin+elite on startup WITHOUT touching their password (works in production after redeploy); _role_for covers Google login too
+    - Share cards: lib/shareCard.js canvas-renders branded 1080x1080 P&L PNG (side, qty, PnL hero, entry, preset, site URL) → Web Share API with download fallback; Share2 button on every filled journal entry (journal-share-{i}); verified 102KB download e2e
+    - Stripe live key: user sent pk_live (publishable) — WAITING for sk_live secret key before switching STRIPE_API_KEY
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
