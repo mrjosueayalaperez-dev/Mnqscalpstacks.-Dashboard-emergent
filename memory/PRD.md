@@ -153,6 +153,14 @@
 
 29. **Night session proof batch** (2026-08-14): gallery = 9 items (added +$24.30, +$10.30 wins and -$17.70 transparency stop). STILL PENDING FROM USER: Stripe live secret key — user's "Reveal" hits an email-verification loop; instructed to create a restricted key (rk_live_) at dashboard.stripe.com/apikeys which shows once with no loop. When key arrives: set STRIPE_API_KEY in backend/.env, restart, verify checkout/create returns live session, user redeploys. User asked to conserve credits — keep next actions minimal.
 
+30. **Pro terminal mobile redesign — one pass** (2026-08-15):
+    - Home: ExecutionPanel (big price/BUY/SELL/signal card+confidence) at top with risk disclaimer under it
+    - MobileShell.js: MoreTools collapsible (NinjaTrader, TradingView, SafetySentinel, AI, Checklist, KnowledgeVault), BottomNav (Terminal/Chart/Plans/More, mobile-only), RiskDisclaimer (futures risk warning, shown 3x)
+    - GPay floating FAB REMOVED from dashboard (BottomNav replaces it; GPayWidget still exported from PromoModules but unmounted)
+    - Premium tier $99.99 added: SUBSCRIPTION_TIERS + checkout validation + DISCORD_INVITES + FreemiumGate 4-col card (tier-premium); premium checkout verified via curl
+    - All numbers live/consistent (WS feed); verified via mobile screenshots @390px. Testing agent SKIPPED intentionally — user asked to conserve credits; self-tested via curl + screenshots
+    - Stripe live key STILL PENDING (user stuck in Stripe reveal email loop; advised restricted-key creation)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

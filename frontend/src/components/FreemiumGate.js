@@ -20,7 +20,7 @@ const FreemiumGate = ({ userPlan, onUpgrade }) => {
         </span>
       </div>
       <div className="widget-content">
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
           {/* Free */}
           <div className={`p-3 rounded-sm border text-center ${plan === "free" ? "border-[#007AFF]/40 bg-[#007AFF]/5" : "border-white/5 bg-white/[0.02]"}`}>
             <Zap className="w-5 h-5 text-[#007AFF] mx-auto mb-1" />
@@ -51,6 +51,24 @@ const FreemiumGate = ({ userPlan, onUpgrade }) => {
               <span className="text-[0.55rem] text-[#FFCC00] font-bold">CURRENT</span>
             ) : (
               <a href="/performance" className="text-[0.55rem] text-[#FFCC00] font-bold hover:underline">UPGRADE</a>
+            )}
+          </div>
+
+          {/* Premium */}
+          <div className={`p-3 rounded-sm border text-center ${plan === "premium" ? "border-[#BF5AF2]/40 bg-[#BF5AF2]/5" : "border-white/5 bg-white/[0.02]"}`} data-testid="tier-premium">
+            <Star className="w-5 h-5 text-[#BF5AF2] mx-auto mb-1" />
+            <span className="text-xs font-black text-white block">Premium</span>
+            <span className="text-lg font-mono font-bold text-white block mb-2">$99.99<span className="text-[0.55rem] text-zinc-500">/mo</span></span>
+            <ul className="text-[0.55rem] text-zinc-400 space-y-1 text-left mb-2">
+              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Everything in Pro</li>
+              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Operator bracket presets</li>
+              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Live key-level alerts</li>
+              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Weekly performance report</li>
+            </ul>
+            {plan === "premium" ? (
+              <span className="text-[0.55rem] text-[#BF5AF2] font-bold">CURRENT</span>
+            ) : (
+              <a href="/performance" className="text-[0.55rem] text-[#BF5AF2] font-bold hover:underline">UPGRADE</a>
             )}
           </div>
 

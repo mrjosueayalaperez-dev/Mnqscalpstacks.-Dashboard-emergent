@@ -43,6 +43,7 @@ STRIPE_API_KEY = os.environ.get('STRIPE_API_KEY', '')
 SUBSCRIPTION_TIERS = {
     "free": {"name": "Free", "price": 0.0, "discord_env": "DISCORD_INVITE_FREE"},
     "pro": {"name": "Pro", "price": 49.00, "discord_env": "DISCORD_INVITE_PRO"},
+    "premium": {"name": "Premium", "price": 99.99, "discord_env": "DISCORD_INVITE_PRO"},
     "elite": {"name": "Elite", "price": 149.00, "discord_env": "DISCORD_INVITE_ELITE"},
 }
 
@@ -50,6 +51,7 @@ SUBSCRIPTION_TIERS = {
 DISCORD_INVITES = {
     "free": os.environ.get("DISCORD_INVITE_FREE", ""),
     "pro": os.environ.get("DISCORD_INVITE_PRO", ""),
+    "premium": os.environ.get("DISCORD_INVITE_PRO", ""),
     "elite": os.environ.get("DISCORD_INVITE_ELITE", ""),
 }
 
@@ -1809,8 +1811,8 @@ async def get_tiers():
 async def create_checkout(request: CheckoutRequest, http_request: Request):
     """Create Stripe checkout session for paid tiers"""
     tier = request.tier
-    if tier not in ("pro", "elite"):
-        raise HTTPException(status_code=400, detail="Invalid tier. Choose 'pro' or 'elite'")
+    if tier not in ("pro", "premium", "elite"):
+        raise HTTPException(status_code=400, detail="Invalid tier. Choose 'pro', 'premium' or 'elite'")
 
     amount = SUBSCRIPTION_TIERS[tier]["price"]
     origin = request.origin_url.rstrip("/")

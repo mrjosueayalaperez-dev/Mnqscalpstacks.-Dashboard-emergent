@@ -11,7 +11,7 @@ import KnowledgeVault from "@/components/KnowledgeVault";
 import ExecutionHub from "@/components/ExecutionHub";
 import AutoSignalEngine from "@/components/AutoSignalEngine";
 import { FreemiumGate, AdBanner } from "@/components/FreemiumGate";
-import { NinjaTraderPanel, TradingViewPanel, GPayWidget, MarketSidebar } from "@/components/PromoModules";
+import { NinjaTraderPanel, TradingViewPanel, MarketSidebar } from "@/components/PromoModules";
 import LiveTerminalChart from "@/components/LiveTerminalChart";
 import { Header } from "@/components/dashboard/Header";
 import ExecutionPanel from "@/components/dashboard/ExecutionPanel";
@@ -20,6 +20,7 @@ import { Checklist } from "@/components/dashboard/Checklist";
 import { AIAnalysis } from "@/components/dashboard/AIAnalysis";
 import { PositionCalculator } from "@/components/dashboard/PositionCalculator";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
+import { MoreTools, BottomNav, RiskDisclaimer } from "@/components/dashboard/MobileShell";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -192,13 +193,18 @@ export default function Dashboard() {
       <main className="p-3 md:p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
           {/* ROW -1: MOBILE-FIRST EXECUTION STRIP — price + one-thumb trading */}
-          <ExecutionPanel
-            checklistDone={checklist.filter((i) => i.completed).length}
-            checklistTotal={checklist.length}
-          />
+          <div id="exec-top" className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+            <ExecutionPanel
+              checklistDone={checklist.filter((i) => i.completed).length}
+              checklistTotal={checklist.length}
+            />
+            <RiskDisclaimer />
+          </div>
 
           {/* ROW 0: LIVE TERMINAL CHART — official TradingView + live WS tape */}
-          <LiveTerminalChart />
+          <div id="chart-section" className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+            <LiveTerminalChart />
+          </div>
 
           {/* ROW 1: MNQ Scalp Punch + Dual-Gate + Simulation Temple */}
           <MNQTracker data={mnqData} loading={loading.mnq} />
@@ -208,15 +214,8 @@ export default function Dashboard() {
           {/* MARKET SIDEBAR (Sentiment + Session) */}
           <MarketSidebar mnqData={mnqData} />
 
-          {/* NINJATRADER AUTOMATION CENTER */}
-          <NinjaTraderPanel />
-
-          {/* TRADINGVIEW SIGNAL INTELLIGENCE */}
-          <TradingViewPanel />
-
-          {/* ROW 2: EXECUTION HUB (BUY/SELL PUNCH) + Safety Sentinel */}
+          {/* ROW 2: EXECUTION HUB (BUY/SELL PUNCH) */}
           <ExecutionHub mnqPrice={mnqData?.close || mnqData?.price} safeMode={safeMode} />
-          <SafetySentinel />
 
           {/* ROW 3: Auto Signal Engine + Freemium Plans */}
           <AutoSignalEngine
@@ -237,31 +236,43 @@ export default function Dashboard() {
           {/* ROW 4: Signal Engine */}
           <SignalDashboard />
 
-          {/* ROW 5: Hydro-Pilot + Checklist */}
+          {/* ROW 5: Hydro-Pilot + Performance */}
           <HydroPilot />
-          <Checklist
-            items={checklist}
-            onToggle={handleToggleChecklist}
-            onReset={handleResetChecklist}
-            onAdd={handleAddChecklist}
-          />
-
-          {/* ROW 6: Performance Engine + Knowledge Vault */}
           <PerformanceEngine />
-          <KnowledgeVault />
 
-          {/* ROW 7: AI + Alerts + Position Calculator */}
-          <AIAnalysis onAnalyze={handleAIAnalyze} loading={loading.ai} result={aiResult} />
+          {/* ROW 7: Alerts + Position Calculator */}
           <AlertsPanel alerts={alerts} onAdd={handleAddAlert} onDelete={handleDeleteAlert} />
           <PositionCalculator />
+
+          {/* Plans anchor for bottom nav */}
+          <div id="plans-section" className="col-span-1 md:col-span-4 lg:col-span-12 h-0" />
+
+          {/* MORE TOOLS — secondary panels collapsed for a clean home screen */}
+          <MoreTools>
+            <NinjaTraderPanel />
+            <TradingViewPanel />
+            <SafetySentinel />
+            <AIAnalysis onAnalyze={handleAIAnalyze} loading={loading.ai} result={aiResult} />
+            <Checklist
+              items={checklist}
+              onToggle={handleToggleChecklist}
+              onReset={handleResetChecklist}
+              onAdd={handleAddChecklist}
+            />
+            <KnowledgeVault />
+            <RiskDisclaimer />
+          </MoreTools>
+
+          <RiskDisclaimer />
 
           {/* Ad Placements (Free tier) */}
           <AdBanner position="bottom" />
         </div>
       </main>
 
-      {/* GPay Floating FAB */}
-      <GPayWidget />
+      {/* Mobile bottom navigation (replaces floating wallet FAB) */}
+      <BottomNav />
+      <div className="h-12 md:hidden" />
     </div>
   );
 }
