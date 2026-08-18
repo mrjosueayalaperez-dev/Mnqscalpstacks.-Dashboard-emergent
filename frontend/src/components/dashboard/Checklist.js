@@ -15,7 +15,7 @@ export const Checklist = ({ items, onToggle, onReset, onAdd }) => {
   };
 
   return (
-    <div className="widget-panel col-span-1 md:col-span-2 lg:col-span-3" data-testid="checklist-panel">
+    <div className="widget-panel col-span-1 md:col-span-2 lg:col-span-6" data-testid="checklist-panel">
       <div className="widget-header">
         <h3 className="flex items-center gap-2">
           <CheckSquare className="w-4 h-4 text-[#007AFF]" />

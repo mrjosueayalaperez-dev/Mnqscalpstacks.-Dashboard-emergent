@@ -26,7 +26,6 @@ const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 export default function Dashboard() {
   const [mnqData, setMnqData] = useState(null);
-  const [watchlist, setWatchlist] = useState([]);
   const [checklist, setChecklist] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [aiResult, setAiResult] = useState(null);
@@ -44,15 +43,6 @@ export default function Dashboard() {
       console.error("Error fetching MNQ:", e);
     }
     setLoading((l) => ({ ...l, mnq: false }));
-  }, []);
-
-  const fetchWatchlist = useCallback(async () => {
-    try {
-      const res = await axios.get(`${API}/watchlist`);
-      setWatchlist(res.data);
-    } catch (e) {
-      console.error("Error fetching watchlist:", e);
-    }
   }, []);
 
   const fetchChecklist = useCallback(async () => {
@@ -76,17 +66,17 @@ export default function Dashboard() {
   const seedData = useCallback(async () => {
     try {
       await axios.post(`${API}/seed`);
-      await Promise.all([fetchWatchlist(), fetchChecklist()]);
+      await fetchChecklist();
       toast.success("Data initialized!");
     } catch (e) {
       console.error("Error seeding:", e);
     }
-  }, [fetchWatchlist, fetchChecklist]);
+  }, [fetchChecklist]);
 
   // Initial load + 30s auto-refresh
   useEffect(() => {
     const init = async () => {
-      await Promise.all([fetchMNQData(), fetchWatchlist(), fetchChecklist(), fetchAlerts()]);
+      await Promise.all([fetchMNQData(), fetchChecklist(), fetchAlerts()]);
       setLastUpdate(new Date().toLocaleTimeString());
     };
     init();
@@ -97,14 +87,14 @@ export default function Dashboard() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [fetchMNQData, fetchWatchlist, fetchChecklist, fetchAlerts]);
+  }, [fetchMNQData, fetchChecklist, fetchAlerts]);
 
   // Seed defaults when fresh database
   useEffect(() => {
-    if (watchlist.length === 0 && checklist.length === 0) {
+    if (checklist.length === 0) {
       seedData();
     }
-  }, [watchlist.length, checklist.length, seedData]);
+  }, [checklist.length, seedData]);
 
   // Action handlers
   const handleRefreshAll = async () => {
@@ -192,7 +182,7 @@ export default function Dashboard() {
 
       <main className="p-3 md:p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
-          {/* ROW -1: MOBILE-FIRST EXECUTION STRIP — price + one-thumb trading */}
+          {/* ROW -1: MOBILE-FIRST EXECUTION STRIP — live price + one-thumb trading + signal card */}
           <div id="exec-top" className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
             <ExecutionPanel
               checklistDone={checklist.filter((i) => i.completed).length}
@@ -206,59 +196,54 @@ export default function Dashboard() {
             <LiveTerminalChart />
           </div>
 
-          {/* ROW 1: MNQ Scalp Punch + Dual-Gate + Simulation Temple */}
-          <MNQTracker data={mnqData} loading={loading.mnq} />
-          <DualGate safeMode={safeMode} onToggleSafe={setSafeMode} />
-          <SimulationTemple />
-
-          {/* MARKET SIDEBAR (Sentiment + Session) */}
-          <MarketSidebar mnqData={mnqData} />
-
-          {/* ROW 2: EXECUTION HUB (BUY/SELL PUNCH) */}
-          <ExecutionHub mnqPrice={mnqData?.close || mnqData?.price} safeMode={safeMode} />
-
-          {/* ROW 3: Auto Signal Engine + Freemium Plans */}
-          <AutoSignalEngine
-            mnqData={mnqData}
-            onAutoExecute={(side) => {
-              axios.post(`${API}/trades`, {
-                symbol: "MNQ",
-                entry_price: mnqData?.close || mnqData?.price || 18500,
-                quantity: 1,
-                side: side,
-                notes: `AUTO | ${side.toUpperCase()} | Signal Engine`,
-              }).then(() => toast.success(`AUTO ${side.toUpperCase()} executed`))
-                .catch(() => toast.error("Auto execution failed"));
-            }}
-          />
-          <FreemiumGate userPlan="free" />
-
-          {/* ROW 4: Signal Engine */}
+          {/* ROW 1: SIGNAL ENGINE — prominent stats + live feed */}
           <SignalDashboard />
 
-          {/* ROW 5: Hydro-Pilot + Performance */}
-          <HydroPilot />
-          <PerformanceEngine />
-
-          {/* ROW 7: Alerts + Position Calculator */}
-          <AlertsPanel alerts={alerts} onAdd={handleAddAlert} onDelete={handleDeleteAlert} />
-          <PositionCalculator />
+          {/* ROW 2: DAILY CHECKLIST (prominent) + SUBSCRIPTION PLANS */}
+          <Checklist
+            items={checklist}
+            onToggle={handleToggleChecklist}
+            onReset={handleResetChecklist}
+            onAdd={handleAddChecklist}
+          />
+          <FreemiumGate userPlan="free" />
 
           {/* Plans anchor for bottom nav */}
           <div id="plans-section" className="col-span-1 md:col-span-4 lg:col-span-12 h-0" />
 
           {/* MORE TOOLS — secondary panels collapsed for a clean home screen */}
           <MoreTools>
+            <MNQTracker data={mnqData} loading={loading.mnq} />
+            <DualGate safeMode={safeMode} onToggleSafe={setSafeMode} />
+            <SimulationTemple />
+            <MarketSidebar mnqData={mnqData} />
+            <ExecutionHub mnqPrice={mnqData?.close || mnqData?.price} safeMode={safeMode} />
+            <AutoSignalEngine
+              mnqData={mnqData}
+              onAutoExecute={(side) => {
+                const livePrice = mnqData?.close || mnqData?.price;
+                if (!livePrice) {
+                  toast.error("No live price — auto execution blocked");
+                  return;
+                }
+                axios.post(`${API}/trades`, {
+                  symbol: "MNQ",
+                  entry_price: livePrice,
+                  quantity: 1,
+                  side: side,
+                  notes: `AUTO | ${side.toUpperCase()} | Signal Engine`,
+                }).then(() => toast.success(`AUTO ${side.toUpperCase()} executed`))
+                  .catch(() => toast.error("Auto execution failed"));
+              }}
+            />
+            <HydroPilot />
+            <PerformanceEngine />
+            <AlertsPanel alerts={alerts} onAdd={handleAddAlert} onDelete={handleDeleteAlert} />
+            <PositionCalculator />
             <NinjaTraderPanel />
             <TradingViewPanel />
             <SafetySentinel />
             <AIAnalysis onAnalyze={handleAIAnalyze} loading={loading.ai} result={aiResult} />
-            <Checklist
-              items={checklist}
-              onToggle={handleToggleChecklist}
-              onReset={handleResetChecklist}
-              onAdd={handleAddChecklist}
-            />
             <KnowledgeVault />
             <RiskDisclaimer />
           </MoreTools>

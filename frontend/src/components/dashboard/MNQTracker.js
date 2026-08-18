@@ -89,10 +89,10 @@ export const MNQTracker = ({ data, loading }) => {
         {data && (
           <div className="mt-4 space-y-2">
             {/* Resistance Zone Warning */}
-            {data?.in_resistance && (
+            {data?.in_resistance && data?.resistance_zones?.[0] && (
               <div className="p-2 bg-[#FF3B30]/10 border border-[#FF3B30]/30 rounded-sm flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4 text-[#FF3B30]" />
-                <span className="text-xs text-[#FF3B30] font-bold">RESISTANCE ZONE: {data?.resistance_zones?.[0] || 27972}</span>
+                <span className="text-xs text-[#FF3B30] font-bold">RESISTANCE ZONE: {data?.resistance_zones?.[0]}</span>
               </div>
             )}
             <div className="p-3 bg-white/5 rounded-sm border border-white/10">

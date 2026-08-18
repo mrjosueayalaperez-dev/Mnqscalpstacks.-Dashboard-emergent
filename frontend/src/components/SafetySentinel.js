@@ -12,11 +12,12 @@ const API = `${BACKEND_URL}/api`;
 const formatPrice = (p) =>
   typeof p === "number" ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
 
+const DAILY_LIMIT = -100;
+
 const SafetySentinel = () => {
   const [trades, setTrades] = useState([]);
   const [stats, setStats] = useState({ total_pnl: 0 });
   const [locked, setLocked] = useState(false);
-  const DAILY_LIMIT = -100;
 
   const fetchData = useCallback(async () => {
     try {

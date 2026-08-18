@@ -1,8 +1,12 @@
 import React from "react";
 import { Crown, Star, Zap, Check, ExternalLink, Lock } from "lucide-react";
+import { paymentLinkFor } from "@/lib/paymentLinks";
+import { useAuth } from "@/context/AuthContext";
 
 const FreemiumGate = ({ userPlan, onUpgrade }) => {
   const plan = userPlan || "free";
+  const { user } = useAuth();
+  const link = (tier) => paymentLinkFor(tier, user?.email);
 
   return (
     <div className="widget-panel col-span-1 md:col-span-2 lg:col-span-6" data-testid="freemium-gate">
@@ -50,7 +54,7 @@ const FreemiumGate = ({ userPlan, onUpgrade }) => {
             {plan === "pro" ? (
               <span className="text-[0.55rem] text-[#FFCC00] font-bold">CURRENT</span>
             ) : (
-              <a href="/performance" className="text-[0.55rem] text-[#FFCC00] font-bold hover:underline">UPGRADE</a>
+              <a href={link("pro")} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[0.55rem] text-[#FFCC00] font-bold hover:underline" data-testid="upgrade-pro-link">UPGRADE <ExternalLink className="w-2.5 h-2.5" /></a>
             )}
           </div>
 
@@ -68,7 +72,7 @@ const FreemiumGate = ({ userPlan, onUpgrade }) => {
             {plan === "premium" ? (
               <span className="text-[0.55rem] text-[#BF5AF2] font-bold">CURRENT</span>
             ) : (
-              <a href="/performance" className="text-[0.55rem] text-[#BF5AF2] font-bold hover:underline">UPGRADE</a>
+              <a href={link("premium")} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[0.55rem] text-[#BF5AF2] font-bold hover:underline" data-testid="upgrade-premium-link">UPGRADE <ExternalLink className="w-2.5 h-2.5" /></a>
             )}
           </div>
 
@@ -86,7 +90,7 @@ const FreemiumGate = ({ userPlan, onUpgrade }) => {
             {plan === "elite" ? (
               <span className="text-[0.55rem] text-[#34C759] font-bold">CURRENT</span>
             ) : (
-              <a href="/performance" className="text-[0.55rem] text-[#34C759] font-bold hover:underline">UPGRADE</a>
+              <a href={link("elite")} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[0.55rem] text-[#34C759] font-bold hover:underline" data-testid="upgrade-elite-link">UPGRADE <ExternalLink className="w-2.5 h-2.5" /></a>
             )}
           </div>
         </div>

@@ -12,16 +12,17 @@ const API = `${BACKEND_URL}/api`;
 const formatPrice = (p) =>
   typeof p === "number" ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
 
+const DAILY_LIMIT = -100;
+const SL_TICKS = 40;
+const TP_TICKS = 60;
+const TICK_VALUE = 0.25; // MNQ tick size
+const DOLLAR_PER_TICK = 0.50; // $0.50 per tick for MNQ
+
 const ExecutionHub = ({ mnqPrice, safeMode }) => {
   const [trades, setTrades] = useState([]);
   const [sessionPnl, setSessionPnl] = useState(0);
   const [locked, setLocked] = useState(false);
   const [executing, setExecuting] = useState(null);
-  const DAILY_LIMIT = -100;
-  const SL_TICKS = 40;
-  const TP_TICKS = 60;
-  const TICK_VALUE = 0.25; // MNQ tick size
-  const DOLLAR_PER_TICK = 0.50; // $0.50 per tick for MNQ
 
   const fetchTrades = useCallback(async () => {
     try {
@@ -58,7 +59,12 @@ const ExecutionHub = ({ mnqPrice, safeMode }) => {
     if (locked) return;
     setExecuting(side);
 
-    const price = mnqPrice || 18500;
+    if (!mnqPrice) {
+      toast.error("No live price — execution blocked");
+      setExecuting(null);
+      return;
+    }
+    const price = mnqPrice;
     const slPoints = SL_TICKS * TICK_VALUE;
     const tpPoints = TP_TICKS * TICK_VALUE;
 

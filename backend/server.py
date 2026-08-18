@@ -592,7 +592,7 @@ async def get_indicators(symbol: str):
 async def scan_stocks(min_change: float = 3.0):
     """Scan for stocks with unusual activity"""
     # Default watchlist stocks
-    symbols = ["SOFI", "NIO", "RKLB", "PLUG", "SNAP", "F", "OPEN", "AMD", "PLTR", "RIVN"]
+    symbols = ["AMD", "PLTR", "NIO", "RKLB", "PLUG", "SNAP", "F", "OPEN", "RIVN"]
     results = []
     
     for symbol in symbols[:5]:  # Limit to conserve API calls
@@ -1468,13 +1468,9 @@ async def seed_data():
     if existing_watchlist > 0 and existing_checklist > 0:
         return {"message": "Data already seeded"}
     
-    # Default watchlist - stocks only, MNQ tracked separately
+    # Default watchlist — MNQ only (live CME feed is the sole tracked instrument)
     default_watchlist = [
-        {"symbol": "SOFI", "name": "SoFi Technologies", "category": "stock", "notes": "Fintech scaling fast"},
-        {"symbol": "NIO", "name": "NIO Inc", "category": "stock", "notes": "EV rebound play"},
-        {"symbol": "RKLB", "name": "Rocket Lab", "category": "stock", "notes": "Space/defense contracts"},
-        {"symbol": "PLUG", "name": "Plug Power", "category": "stock", "notes": "Hydrogen - risky but explosive"},
-        {"symbol": "SNAP", "name": "Snap Inc", "category": "stock", "notes": "Volatile, good swings"},
+        {"symbol": "MNQ", "name": "Micro E-mini Nasdaq-100", "category": "futures", "notes": "Primary instrument — live CME feed"},
     ]
     
     # Default checklist

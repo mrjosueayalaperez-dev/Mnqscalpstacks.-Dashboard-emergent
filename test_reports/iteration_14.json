@@ -1,0 +1,22 @@
+{
+  "summary": "Backend + frontend regression for MNQ cleanup / Premium tier / Stripe Payment Links wiring. Backend: 8/8 pytest passing (watchlist MNQ-only, seed MNQ-only, trades MNQ-only with no 18k-range stale prices, signals >=25k, active signals expired/clean, /api/checkout/create tier=premium returns url, /api/operator BUY+FLATTEN 200). Frontend: landing page shows all 4 tiers with correct prices ($0/$49/$99.99/$149), landing-risk-disclaimer present, selecting Pro + email + submit redirects to https://buy.stripe.com/bJe8wO0rB0un8rQ6oQ8so08?prefilled_email=... (verified via network intercept, NOT paid). Dashboard (admin login) shows correct panel order: execution-panel → LiveTerminalChart → SIGNAL ENGINE stats → checklist-panel (lg:col-span-6, prominent, not inside More Tools) + FreemiumGate 4 tiers with tier-premium containing '$99.99/mo'. upgrade-pro-link/upgrade-premium-link/upgrade-elite-link hrefs match the 3 payment link URLs exactly with target=_blank. No SOFI, no $28,275/$18,563/$18,506, no TEST_SIG strings anywhere on dashboard. more-tools-toggle expands cleanly and secondary panels (MNQ Scalp Punch, Dual-Gate, Simulation Temple, Execution Hub, Auto Signal Engine, Hydro-Pilot, Performance Engine, Alerts, Position Calculator, NinjaTrader) render without crash.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_iteration14_cleanup.py",
+    "/app/test_reports/pytest/iteration14.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "LandingPage handleCheckout uses window.location.href for the Stripe redirect but does NOT set loading=false before navigating; if the redirect is intercepted or blocked (adblock, CSP), the button stays in the loading state. Consider a small timeout or restoring loading in a beforeunload fallback.",
+    "FreemiumGate anchors use paymentLinkFor(tier) without email; that is correct for the header (no email context) but there is no prefill on the dashboard upgrade path — users have to re-type their email at Stripe even though they are logged in. Could pass user?.email if available."
+  ],
+  "updated_files": ["/app/backend/tests/test_iteration14_cleanup.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% on the flows requested"},
+  "test_credentials": "admin: operator@mnqscalpstacks.com / ScalpStacks!2026",
+  "seed_data_creation": "POST /api/seed executed once during backend tests — watchlist stays MNQ-only per new seed_data (verified via GET /api/watchlist after seed).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auth uses httpOnly cookie (login sets `token` cookie), NOT Bearer in response body. Use requests.Session() for backend tests. OperatorOrder requires 'action' field (BUY/SELL/CLOSE_LONG/CLOSE_SHORT/BREAK_EVEN), not 'side'. Active signals list is fetched via /api/signals?status=active (there is no /api/signals/active). Stripe payment link intercept works via page.route abort — never let a full navigation to buy.stripe.com complete. All new testids: landing-tier-{free,pro,premium,elite}, landing-risk-disclaimer, landing-email, landing-submit-btn, tier-premium, upgrade-{pro,premium,elite}-link, checklist-panel, execution-panel, more-tools-toggle.",
+  "rca of the issue": "N/A — no bugs found in this iteration; all requested items verified working."
+}

@@ -161,12 +161,25 @@
     - All numbers live/consistent (WS feed); verified via mobile screenshots @390px. Testing agent SKIPPED intentionally — user asked to conserve credits; self-tested via curl + screenshots
     - Stripe live key STILL PENDING (user stuck in Stripe reveal email loop; advised restricted-key creation)
 
+31. **Data cleanup + Stripe Payment Links + Premium everywhere** (2026-08-17, testing agent iteration_14: 100% pass):
+    - DB purge: 12 non-MNQ trades deleted (incl. SOFI open position), 9 stale 18k-era trades, 4 stale open positions, 120 stale signals (<25k), 12 stale operator orders, 5 stock watchlist docs; 8 stale "active" signals >24h marked expired
+    - server.py seed_data: watchlist now seeds MNQ-only (no more SOFI/NIO/etc); SOFI removed from scanner list; Dashboard no longer fetches/uses stock watchlist
+    - Hard-coded stale numbers removed: ExecutionHub `|| 18500` → live-price guard (blocks execution + toast), Dashboard AutoSignalEngine `|| 18500` → guard, MNQTracker `|| 27972` fallback removed, HydroPilot "27,972 Wall" → "Key Resistance", landing "27,972 resistance" copy → generic
+    - Dashboard home reorg: ExecutionPanel → LiveTerminalChart → SIGNAL ENGINE (prominent, row 1 after chart) → Daily Checklist (lg:col-span-6, prominent on main grid) + FreemiumGate. Everything else (MNQTracker, DualGate, Simulation, MarketSidebar, ExecutionHub, AutoSignalEngine, HydroPilot, PerformanceEngine, Alerts, PositionCalc, NinjaTrader, TradingView, SafetySentinel, AI, Vault) moved into More Tools
+    - **LIVE Stripe Payment Links wired** (lib/paymentLinks.js): pro→buy.stripe.com/bJe8wO0rB0un8rQ6oQ8so08, premium→5kQdR80rBb91gYmfZq8so01, elite→8x214mden6SLfUi5kM8so07. Landing paid checkout redirects to link with ?prefilled_email; FreemiumGate UPGRADE anchors (upgrade-{pro,premium,elite}-link) open links in new tab with logged-in user email prefilled. Server test-mode checkout kept as fallback
+    - LIMITATION: Payment Links can't auto-upgrade account tier (no sk_live webhook) — owner manually upgrades paying users from /admin until live secret/restricted key arrives
+    - Landing: Premium $99.99 added as 4th pricing tier (md 2-col / lg 4-col), CTA copy "Get {Tier} Access — Secure Checkout", trust line under form, futures risk disclaimer added to footer (backlog item closed)
+    - Lint fixes: DAILY_LIMIT hoisted to module scope in SafetySentinel + ExecutionHub — webpack compiles with zero warnings
+    - Regression file: /app/backend/tests/test_iteration14_cleanup.py (8/8)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
 - OpenAI: via Emergent LLM key
 
 ## Backlog
-- P1: Refactor App.js (1500+ lines) and server.py (2000+ lines) into modular files
+- P0: Stripe live secret/restricted key (sk_live_/rk_live_) → auto tier-upgrade webhook for Payment Link buyers (currently manual via /admin)
+- P1: Off-site marketing content (X/Reddit/Discord post copy + share assets) — user asked to "attract real customers"
+- P1: Refactor server.py (2000+ lines) into modular files (App.js already split)
 - P2: Live Broker API connection (replace simulator)
 - P2: Functional Google Pay via Stripe Payment Element

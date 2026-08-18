@@ -20,7 +20,7 @@ export const MoreTools = ({ children }) => {
         <span className="flex items-center gap-2 text-xs font-black tracking-wider text-white">
           <LayoutGrid className="w-4 h-4 text-[#007AFF]" />
           MORE TOOLS
-          <span className="text-[0.55rem] font-mono text-zinc-500 font-normal">NinjaTrader · TradingView · AI · Checklist · Vault · Health</span>
+          <span className="text-[0.55rem] font-mono text-zinc-500 font-normal">Tracker · Risk · NinjaTrader · TradingView · AI · Vault</span>
         </span>
         <ChevronDown className={`w-4 h-4 text-zinc-400 transition-transform duration-200 ${open ? "rotate-180" : ""}`} />
       </button>

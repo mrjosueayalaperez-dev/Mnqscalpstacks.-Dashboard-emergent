@@ -3,6 +3,7 @@ import axios from "axios";
 import { Toaster, toast } from "sonner";
 import ProofGallery from "./ProofGallery";
 import LiveCounters from "./LiveCounters";
+import { paymentLinkFor } from "@/lib/paymentLinks";
 import {
   Zap, TrendingUp, Target, Shield, ChevronRight, Check, X, Star, Crown,
   BarChart3, Clock, Activity, ArrowRight, Eye, Crosshair, Layers, Mail,
@@ -221,7 +222,7 @@ const HowItWorks = ({ sectionRef }) => (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
         {[
           { step: "01", title: "Load the System", desc: "Add MNQ Scalp Stacks v3 to your TradingView 1-min chart. One click." },
-          { step: "02", title: "Wave Validation", desc: "EMA 21 Spine + VWAP + 27,972 resistance — the system does the thinking." },
+          { step: "02", title: "Wave Validation", desc: "EMA 21 Spine + VWAP + live key-level resistance — the system does the thinking." },
           { step: "03", title: "Execute the Punch", desc: "BUY/SELL Punches fire to Discord + Dashboard. Trade with precision." },
         ].map((item) => (
           <div key={item.step} className="relative">
@@ -343,7 +344,8 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
   const tiers = [
     { id: "free", name: "Free", price: "$0", period: "", features: ["Basic signals (delayed)", "Public dashboard", "Discord community"], color: "border-white/10", accent: "text-[#007AFF]" },
     { id: "pro", name: "Pro", price: "$49", period: "/mo", popular: true, features: ["Real-time signals", "Discord Pro channel", "AI trade analysis", "Daily briefing"], color: "border-[#FFCC00]/40 ring-1 ring-[#FFCC00]/30", accent: "text-[#FFCC00]" },
-    { id: "elite", name: "Elite", price: "$149", period: "/mo", features: ["Everything in Pro", "Elite Discord", "1-on-1 review", "Priority signals", "Custom alerts"], color: "border-[#34C759]/30", accent: "text-[#34C759]" },
+    { id: "premium", name: "Premium", price: "$99.99", period: "/mo", features: ["Everything in Pro", "Operator bracket presets", "Live key-level alerts", "Weekly performance report"], color: "border-[#BF5AF2]/40 ring-1 ring-[#BF5AF2]/30", accent: "text-[#BF5AF2]" },
+    { id: "elite", name: "Elite", price: "$149", period: "/mo", features: ["Everything in Premium", "Elite Discord", "1-on-1 review", "Priority signals", "Custom alerts"], color: "border-[#34C759]/30", accent: "text-[#34C759]" },
   ];
 
   const handleSubmit = (e) => {
@@ -396,9 +398,9 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
         )}
 
         {/* Tier Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 mb-8 md:mb-10">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8 md:mb-10">
           {tiers.map((tier) => {
-            const Icon = tier.id === "elite" ? Crown : tier.id === "pro" ? Star : Zap;
+            const Icon = tier.id === "elite" ? Crown : tier.id === "pro" || tier.id === "premium" ? Star : Zap;
             return (
               <button key={tier.id} onClick={() => setSelectedTier(tier.id)}
                 className={`relative text-left p-4 md:p-5 bg-[#121212] border rounded-sm transition-all ${selectedTier === tier.id ? tier.color : "border-white/10 opacity-60 hover:opacity-80"}`}
@@ -423,12 +425,13 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
           </div>
           <button type="submit" disabled={loading || !email}
             className={`w-full py-3 rounded-sm font-black text-sm transition-all flex items-center justify-center gap-2 active:scale-[0.98] ${
-              selectedTier === "elite" ? "bg-[#34C759] text-black" : selectedTier === "pro" ? "bg-[#FFCC00] text-black" : "bg-[#007AFF] text-white"
+              selectedTier === "elite" ? "bg-[#34C759] text-black" : selectedTier === "premium" ? "bg-[#BF5AF2] text-white" : selectedTier === "pro" ? "bg-[#FFCC00] text-black" : "bg-[#007AFF] text-white"
             } hover:opacity-90 disabled:opacity-50`} data-testid="landing-submit-btn">
             {loading ? <Loader2 className="w-4 h-4 animate-spin" /> :
               selectedTier === "free" ? <>Start Free <ArrowRight className="w-4 h-4" /></> :
-              <>Start Using MNQ SCALP STACKS <ArrowRight className="w-4 h-4" /></>}
+              <>Get {tiers.find(t => t.id === selectedTier)?.name} Access — Secure Checkout <ArrowRight className="w-4 h-4" /></>}
           </button>
+          <p className="text-center text-[0.65rem] text-zinc-600">Secure payment by Stripe · Cancel anytime · Instant Discord access after payment</p>
         </form>
       </div>
     </section>
@@ -446,6 +449,9 @@ const Footer = () => (
       </div>
       <span className="text-[0.65rem] text-zinc-600">MNQ SCALP STACKS SaaS | Emergent.sh</span>
     </div>
+    <p className="max-w-5xl mx-auto mt-4 text-[0.55rem] leading-relaxed text-zinc-700 text-center" data-testid="landing-risk-disclaimer">
+      ⚠️ Trading futures involves substantial risk of loss and is not suitable for all investors. Past performance is not indicative of future results.
+    </p>
   </footer>
 );
 
@@ -526,7 +532,14 @@ const LandingPage = () => {
     try {
       // Create or get subscriber (idempotent)
       await axios.post(`${API}/subscribers`, { email, name, tier, referral_code: refCode });
-      // Always create checkout for paid tiers
+      // Live Stripe Payment Links for paid tiers (real payments)
+      const link = paymentLinkFor(tier, email);
+      if (link) {
+        setTimeout(() => setLoading(false), 4000);
+        window.location.href = link;
+        return;
+      }
+      // Fallback: server-side checkout session
       const res = await axios.post(`${API}/checkout/create`, { tier, origin_url: window.location.origin });
       if (res.data.url) {
         window.location.href = res.data.url;

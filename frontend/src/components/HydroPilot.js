@@ -131,7 +131,7 @@ const HydroPilot = () => {
             }`} data-testid="resistance-status">
               <div className="flex items-center gap-2">
                 <div className={`w-2.5 h-2.5 rounded-full ${mnqData?.in_resistance ? "bg-[#FF3B30] animate-pulse" : "bg-zinc-600"}`} />
-                <span className="text-xs font-bold text-white">27,972 Wall</span>
+                <span className="text-xs font-bold text-white">Key Resistance</span>
               </div>
               <span className={`text-xs font-black ${mnqData?.in_resistance ? "text-[#FF3B30]" : "text-zinc-500"}`}>
                 {mnqData?.in_resistance ? "BLOCKED" : "CLEAR"}
