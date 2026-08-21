@@ -179,13 +179,18 @@
     - Landing: WinStreakStrip.js between LiveCounters and ProofGallery — "LAST 10 SIGNALS — POSTED LIVE" W/L chips + summary + micro-disclaimer, hidden if <3 resolved signals (testids: win-streak-strip/-summary/-chips)
     - Dashboard: ReferralCard.js strip below FreemiumGate — personal ?ref= link, copy button, referred/credits stats (testids: referral-card/-link/-copy-btn/-stats)
 
+33. **Auto Tier Upgrade for Payment Links** (2026-08-21, 3/3 pytest pass — tests/test_payment_link_upgrade.py):
+    - POST /api/webhook/stripe-live: dormant until STRIPE_LIVE_SECRET_KEY set (backend/.env, currently empty). On checkout.session.completed: verifies via Stripe signature (STRIPE_LIVE_WEBHOOK_SECRET, optional) OR re-fetches session from Stripe API with live key (forged payloads can never upgrade). Maps amount→tier ($49=pro, $99.99=premium, $149=elite), upgrades users.tier + subscribers.tier (email lowercased), upserts payment_transactions (idempotent), fires Discord owner_alert. Unmapped amounts → manual-review Discord alert
+    - GET /api/webhook/stripe-live/status: public config check (configured/signature_verification/tier_map, no secrets)
+    - ACTIVATION (user steps): 1) create restricted key rk_live_ at dashboard.stripe.com/apikeys (Checkout Sessions: Read), 2) Stripe → Developers → Webhooks → add endpoint https://mnq-scalp-stack.emergent.host/api/webhook/stripe-live with event checkout.session.completed (optionally copy whsec_), 3) set STRIPE_LIVE_SECRET_KEY (+optional STRIPE_LIVE_WEBHOOK_SECRET) in deployment env vars + redeploy, 4) confirm via /api/webhook/stripe-live/status → configured:true
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
 - OpenAI: via Emergent LLM key
 
 ## Backlog
-- P0: Stripe live secret/restricted key (sk_live_/rk_live_) → auto tier-upgrade webhook for Payment Link buyers (currently manual via /admin)
+- P0: USER ACTION — add rk_live_/sk_live_ key as STRIPE_LIVE_SECRET_KEY + register Stripe webhook to activate auto tier-upgrade (pipeline built, dormant)
 - P1: Refactor server.py (2000+ lines) into modular files (App.js already split)
 - P2: Live Broker API connection (replace simulator)
 - P2: Functional Google Pay via Stripe Payment Element

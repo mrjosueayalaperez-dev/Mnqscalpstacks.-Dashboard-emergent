@@ -16,6 +16,8 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional, Dict, Any
 import uuid
+import re
+import json
 from datetime import datetime, timezone, timedelta
 import httpx
 import secrets
@@ -1979,6 +1981,124 @@ async def stripe_webhook(request: Request):
     except Exception as e:
         logger.error(f"Stripe webhook error: {e}")
         return {"status": "error", "detail": str(e)}
+
+
+# ============== LIVE Payment Link webhook (user's own Stripe account) ==============
+
+import asyncio as _asyncio
+import stripe as _stripe_sdk
+
+STRIPE_LIVE_SECRET_KEY = os.environ.get("STRIPE_LIVE_SECRET_KEY", "")
+STRIPE_LIVE_WEBHOOK_SECRET = os.environ.get("STRIPE_LIVE_WEBHOOK_SECRET", "")
+
+# Payment Link price (cents) → tier
+AMOUNT_TO_TIER = {4900: "pro", 9999: "premium", 14900: "elite"}
+
+
+async def _apply_tier_upgrade(email: str, tier: str, session_id: str, amount_cents: int) -> bool:
+    """Upgrade user + subscriber to tier; returns True if the user tier changed."""
+    email = email.lower()
+    upgraded = await db.users.update_one(
+        {"email": email, "tier": {"$ne": tier}}, {"$set": {"tier": tier}}
+    )
+    await db.subscribers.update_one(
+        {"email": {"$regex": f"^{re.escape(email)}$", "$options": "i"}},
+        {"$set": {"tier": tier, "stripe_session_id": session_id}},
+    )
+    await db.payment_transactions.update_one(
+        {"session_id": session_id},
+        {"$set": {
+            "session_id": session_id, "email": email, "tier": tier,
+            "amount": amount_cents / 100, "currency": "usd",
+            "source": "payment_link", "status": "completed", "payment_status": "paid",
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+        upsert=True,
+    )
+    if upgraded.modified_count:
+        notify.owner_alert(
+            "💰 PAYMENT LINK UPGRADE",
+            f"**{email}** auto-upgraded to **{tier.upper()}** — ${amount_cents / 100:.2f}",
+            15844367,
+        )
+    return bool(upgraded.modified_count)
+
+
+@api_router.get("/webhook/stripe-live/status")
+async def stripe_live_status() -> Dict[str, Any]:
+    """Config check for the live Payment Link auto-upgrade pipeline (no secrets exposed)."""
+    return {
+        "configured": bool(STRIPE_LIVE_SECRET_KEY),
+        "signature_verification": bool(STRIPE_LIVE_WEBHOOK_SECRET),
+        "tier_map": {f"${c / 100:.2f}": t for c, t in AMOUNT_TO_TIER.items()},
+    }
+
+
+@api_router.post("/webhook/stripe-live")
+async def stripe_live_webhook(request: Request) -> Dict[str, Any]:
+    """Auto tier-upgrade for LIVE Stripe Payment Link purchases.
+
+    Dormant until STRIPE_LIVE_SECRET_KEY is set. Authenticity: verifies the event
+    signature when STRIPE_LIVE_WEBHOOK_SECRET is set; otherwise re-fetches the
+    session from the Stripe API so a forged payload can never trigger an upgrade.
+    """
+    if not STRIPE_LIVE_SECRET_KEY:
+        return {"status": "not_configured"}
+    body = await request.body()
+
+    if STRIPE_LIVE_WEBHOOK_SECRET:
+        try:
+            event = _stripe_sdk.Webhook.construct_event(
+                body, request.headers.get("Stripe-Signature", ""), STRIPE_LIVE_WEBHOOK_SECRET
+            )
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid signature")
+        event_type = event["type"]
+        session_id = event["data"]["object"].get("id", "")
+    else:
+        try:
+            payload = json.loads(body)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid payload")
+        event_type = payload.get("type", "")
+        session_id = ((payload.get("data") or {}).get("object") or {}).get("id", "")
+
+    if event_type != "checkout.session.completed" or not session_id.startswith("cs_"):
+        return {"status": "ignored", "event_type": event_type}
+
+    # Idempotency: already processed?
+    existing = await db.payment_transactions.find_one(
+        {"session_id": session_id, "payment_status": "paid"}, {"_id": 1}
+    )
+    if existing:
+        return {"status": "already_processed"}
+
+    # Source of truth: fetch the session from Stripe with the live key
+    try:
+        session = await _asyncio.to_thread(
+            _stripe_sdk.checkout.Session.retrieve, session_id, api_key=STRIPE_LIVE_SECRET_KEY
+        )
+    except Exception as e:
+        logger.error(f"Stripe live session retrieve failed: {e}")
+        raise HTTPException(status_code=502, detail="Stripe verification failed")
+
+    if session.get("payment_status") != "paid":
+        return {"status": "not_paid"}
+
+    email = ((session.get("customer_details") or {}).get("email") or session.get("customer_email") or "")
+    amount = session.get("amount_total") or 0
+    tier = AMOUNT_TO_TIER.get(amount)
+    if not email or not tier:
+        logger.warning(f"Payment link session {session_id}: unmapped amount={amount} email={bool(email)}")
+        notify.owner_alert(
+            "⚠️ PAYMENT NEEDS MANUAL REVIEW",
+            f"Paid session `{session_id}` (${amount / 100:.2f}, {email or 'no email'}) didn't match a tier — upgrade manually in /admin.",
+            15105570,
+        )
+        return {"status": "unmapped", "amount": amount}
+
+    changed = await _apply_tier_upgrade(email, tier, session_id, amount)
+    return {"status": "upgraded" if changed else "already_current", "tier": tier}
 
 
 # ============== Auto-Trade Logging ==============
