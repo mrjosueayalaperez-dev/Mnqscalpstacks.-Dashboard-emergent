@@ -1085,6 +1085,59 @@ async def get_signals(limit: int = 50, status: Optional[str] = None):
     return signals
 
 
+@api_router.get("/signals/recent-results", tags=["public"])
+async def recent_signal_results(limit: int = 10) -> Dict[str, Any]:
+    """Last N resolved signals (win/loss) — public proof strip for the landing page."""
+    limit = max(1, min(limit, 20))
+    docs = await db.signals.find(
+        {"outcome": {"$in": ["win", "loss"]}},
+        {"_id": 0, "side": 1, "outcome": 1, "pnl_points": 1, "status": 1, "created_at": 1},
+    ).sort("created_at", -1).to_list(limit)
+    wins = sum(1 for d in docs if d.get("outcome") == "win")
+    net = round(sum(d.get("pnl_points") or 0 for d in docs), 1)
+    return {
+        "results": docs,
+        "wins": wins,
+        "losses": len(docs) - wins,
+        "win_rate": round(wins / len(docs) * 100, 1) if docs else 0,
+        "net_points": net,
+    }
+
+
+@api_router.get("/my/referral", tags=["public"])
+async def my_referral(request: Request) -> Dict[str, Any]:
+    """Referral code + stats for the logged-in user (creates subscriber record if missing)."""
+    user = await auth_module.get_current_user(request, db)
+    email = user["email"]
+    sub = await db.subscribers.find_one({"email": email}, {"_id": 0})
+    if not sub:
+        ref_code = hashlib.sha256(email.encode()).hexdigest()[:8].upper()
+        sub = {
+            "id": str(uuid.uuid4()),
+            "email": email,
+            "name": user.get("name", ""),
+            "tier": user.get("tier", "free"),
+            "status": "active",
+            "stripe_session_id": None,
+            "referral_code": ref_code,
+            "referred_by": None,
+            "referral_count": 0,
+            "referral_credits": 0,
+            "welcome_step": 0,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        await db.subscribers.insert_one(dict(sub))
+    elif not sub.get("referral_code"):
+        ref_code = hashlib.sha256(email.encode()).hexdigest()[:8].upper()
+        await db.subscribers.update_one({"email": email}, {"$set": {"referral_code": ref_code}})
+        sub["referral_code"] = ref_code
+    return {
+        "referral_code": sub["referral_code"],
+        "referral_count": sub.get("referral_count", 0),
+        "referral_credits": sub.get("referral_credits", 0),
+    }
+
+
 # Update signal outcome
 @api_router.patch("/signals/{signal_id}")
 async def update_signal(signal_id: str, status: str, pnl_points: Optional[float] = None):

@@ -172,6 +172,13 @@
     - Lint fixes: DAILY_LIMIT hoisted to module scope in SafetySentinel + ExecutionHub — webpack compiles with zero warnings
     - Regression file: /app/backend/tests/test_iteration14_cleanup.py (8/8)
 
+32. **Marketing kit + Win Streak Strip + Referral Card** (2026-08-21, self-tested via curl + screenshots):
+    - /app/MARKETING_PLAN_30_DAY.md — full 30-day plan (Week1 credibility/Q&A, Week2 daily proof + Risk Shield/Trade Quality spotlights + forums, Week3 demo videos/testimonials/warm outreach, Week4 referral push + closing; daily scoreboard = visits/signups/paid from /admin)
+    - /app/marketing/POST_PACK_WEEK1.md — ready-to-paste X/Discord/Reddit posts for Days 1-7 incl. win/loss proof templates with mandatory risk disclaimer
+    - Backend: GET /api/signals/recent-results (public, last N win/loss signals + wins/losses/win_rate/net_points), GET /api/my/referral (auth; find-or-create subscriber, returns referral_code/count/credits; backfills missing codes)
+    - Landing: WinStreakStrip.js between LiveCounters and ProofGallery — "LAST 10 SIGNALS — POSTED LIVE" W/L chips + summary + micro-disclaimer, hidden if <3 resolved signals (testids: win-streak-strip/-summary/-chips)
+    - Dashboard: ReferralCard.js strip below FreemiumGate — personal ?ref= link, copy button, referred/credits stats (testids: referral-card/-link/-copy-btn/-stats)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
@@ -179,7 +186,6 @@
 
 ## Backlog
 - P0: Stripe live secret/restricted key (sk_live_/rk_live_) → auto tier-upgrade webhook for Payment Link buyers (currently manual via /admin)
-- P1: Off-site marketing content (X/Reddit/Discord post copy + share assets) — user asked to "attract real customers"
 - P1: Refactor server.py (2000+ lines) into modular files (App.js already split)
 - P2: Live Broker API connection (replace simulator)
 - P2: Functional Google Pay via Stripe Payment Element

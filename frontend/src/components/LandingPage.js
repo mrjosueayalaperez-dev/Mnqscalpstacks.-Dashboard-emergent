@@ -3,6 +3,7 @@ import axios from "axios";
 import { Toaster, toast } from "sonner";
 import ProofGallery from "./ProofGallery";
 import LiveCounters from "./LiveCounters";
+import WinStreakStrip from "./WinStreakStrip";
 import { paymentLinkFor } from "@/lib/paymentLinks";
 import {
   Zap, TrendingUp, Target, Shield, ChevronRight, Check, X, Star, Crown,
@@ -584,6 +585,7 @@ const LandingPage = () => {
         <HowItWorks sectionRef={howRef} />
         <StatsBar stats={backtestStats} />
         <LiveCounters />
+        <WinStreakStrip />
         <ProofGallery />
         <Pricing ctaRef={ctaRef} onSignup={handleSignup} onCheckout={handleCheckout} loading={loading}
           signedUp={signedUp} discordInvite={discordInvite} referralCode={referralCode}

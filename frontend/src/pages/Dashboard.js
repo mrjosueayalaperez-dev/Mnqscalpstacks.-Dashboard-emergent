@@ -21,6 +21,7 @@ import { AIAnalysis } from "@/components/dashboard/AIAnalysis";
 import { PositionCalculator } from "@/components/dashboard/PositionCalculator";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { MoreTools, BottomNav, RiskDisclaimer } from "@/components/dashboard/MobileShell";
+import { ReferralCard } from "@/components/ReferralCard";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -207,6 +208,9 @@ export default function Dashboard() {
             onAdd={handleAddChecklist}
           />
           <FreemiumGate userPlan="free" />
+
+          {/* SHARE & EARN — referral link strip */}
+          <ReferralCard />
 
           {/* Plans anchor for bottom nav */}
           <div id="plans-section" className="col-span-1 md:col-span-4 lg:col-span-12 h-0" />
