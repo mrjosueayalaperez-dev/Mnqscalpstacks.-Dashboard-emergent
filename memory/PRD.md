@@ -184,6 +184,11 @@
     - GET /api/webhook/stripe-live/status: public config check (configured/signature_verification/tier_map, no secrets)
     - ACTIVATION (user steps): 1) create restricted key rk_live_ at dashboard.stripe.com/apikeys (Checkout Sessions: Read), 2) Stripe → Developers → Webhooks → add endpoint https://mnq-scalp-stack.emergent.host/api/webhook/stripe-live with event checkout.session.completed (optionally copy whsec_), 3) set STRIPE_LIVE_SECRET_KEY (+optional STRIPE_LIVE_WEBHOOK_SECRET) in deployment env vars + redeploy, 4) confirm via /api/webhook/stripe-live/status → configured:true
 
+34. **Blue-circle Chart Mode switcher + order-flow views** (2026-08-22, self-tested via mobile screenshots @390px — all 4 modes verified):
+    - ChartModeSwitcher.js: NinjaTrader-style solid blue circle (ArrowLeftRight, press animation) top-right of ExecutionPanel MNQ header next to risk pill; opens bottom sheet (mobile) / centered modal (desktop) titled CHART MODE with Standard/Footprint/Delta/Volume Profile, current mode highlighted, closes on select (testids: chart-mode-btn/-sheet/-{mode})
+    - OrderFlowChart.js: 3 new views from live /api/operator/candles 1m×60 (10s poll) — Delta (per-bar delta bars + cumulative dots + CUM Δ), Volume Profile (22 price buckets, buy/sell stacked bars, POC highlighted, current-price row blue), Footprint (last 8 bars, sell×buy cells, per-bar Δ). Buy/sell split approximated via close-in-range fraction; labeled "approximated from OHLCV, not exchange order flow"
+    - Dashboard chart-section swaps LiveTerminalChart (standard) ↔ OrderFlowChart; no trading logic touched
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

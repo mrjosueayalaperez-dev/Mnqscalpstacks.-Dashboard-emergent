@@ -22,6 +22,7 @@ import { PositionCalculator } from "@/components/dashboard/PositionCalculator";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { MoreTools, BottomNav, RiskDisclaimer } from "@/components/dashboard/MobileShell";
 import { ReferralCard } from "@/components/ReferralCard";
+import OrderFlowChart from "@/components/dashboard/OrderFlowChart";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -33,6 +34,7 @@ export default function Dashboard() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const [loading, setLoading] = useState({ mnq: false, ai: false });
   const [safeMode, setSafeMode] = useState(true);
+  const [chartMode, setChartMode] = useState("standard");
 
   // Fetch functions
   const fetchMNQData = useCallback(async () => {
@@ -188,13 +190,15 @@ export default function Dashboard() {
             <ExecutionPanel
               checklistDone={checklist.filter((i) => i.completed).length}
               checklistTotal={checklist.length}
+              chartMode={chartMode}
+              onChartMode={setChartMode}
             />
             <RiskDisclaimer />
           </div>
 
-          {/* ROW 0: LIVE TERMINAL CHART — official TradingView + live WS tape */}
+          {/* ROW 0: MAIN CHART — Standard (TradingView) or order-flow view via blue-circle switcher */}
           <div id="chart-section" className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
-            <LiveTerminalChart />
+            {chartMode === "standard" ? <LiveTerminalChart /> : <OrderFlowChart mode={chartMode} />}
           </div>
 
           {/* ROW 1: SIGNAL ENGINE — prominent stats + live feed */}

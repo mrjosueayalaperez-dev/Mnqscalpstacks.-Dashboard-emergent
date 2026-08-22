@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import { CheckSquare, Share2, Shield, XCircle, Zap } from "lucide-react";
 import useMnqLive from "@/components/operator/useMnqLive";
 import { shareTradeCard } from "@/lib/shareCard";
+import { ChartModeSwitcher } from "@/components/dashboard/ChartModeSwitcher";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 const QTYS = [1, 2, 3, 5, 10];
@@ -55,7 +56,7 @@ const SignalCard = ({ signal, onExecute, busy }) => {
  * Big live price, one-thumb BUY/SELL, risk pill, qty selector, graded signal card.
  * Orders route through the same server-side engine as the operator cockpit.
  */
-export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0 }) {
+export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, chartMode = "standard", onChartMode }) {
   const { tick, connected } = useMnqLive();
   const [qty, setQty] = useState(1);
   const [state, setState] = useState(null);
@@ -150,17 +151,20 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0 }
           </div>
         </div>
 
-        {/* Risk pill + checklist chip */}
+        {/* Risk pill + chart-mode switch + checklist chip */}
         <div className="flex flex-col items-end gap-1.5">
-          <span
-            className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[0.6rem] font-black tracking-wider border ${
-              risky ? "border-[#FF3B30]/50 text-[#FF3B30] bg-[#FF3B30]/10" : "border-[#34C759]/40 text-[#34C759] bg-[#34C759]/10"
-            }`}
-            data-testid="risk-pill"
-          >
-            <Shield className="w-3 h-3" />
-            {state?.kill_switch ? "LOCKED" : risky ? "AT RISK" : "SAFE"} · ${Math.abs(state?.max_daily_loss ?? 1000).toLocaleString()} limit · {state?.daily_trades ?? 0}/{state?.max_daily_trades ?? 20}
-          </span>
+          <div className="flex items-center gap-2">
+            <span
+              className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-[0.6rem] font-black tracking-wider border ${
+                risky ? "border-[#FF3B30]/50 text-[#FF3B30] bg-[#FF3B30]/10" : "border-[#34C759]/40 text-[#34C759] bg-[#34C759]/10"
+              }`}
+              data-testid="risk-pill"
+            >
+              <Shield className="w-3 h-3" />
+              {state?.kill_switch ? "LOCKED" : risky ? "AT RISK" : "SAFE"} · ${Math.abs(state?.max_daily_loss ?? 1000).toLocaleString()} limit · {state?.daily_trades ?? 0}/{state?.max_daily_trades ?? 20}
+            </span>
+            {onChartMode && <ChartModeSwitcher mode={chartMode} onChange={onChartMode} />}
+          </div>
           <div className="flex items-center gap-1.5">
             <button
               onClick={async () => {
