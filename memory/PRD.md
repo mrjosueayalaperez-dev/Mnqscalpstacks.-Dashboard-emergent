@@ -106,6 +106,7 @@
     - Landing page: "VERIFIED RESULTS — REAL TRADE PROOF" section (ProofGallery.js) with lightbox, hidden when empty
     - Admin panel: ProofManager.js — upload (file+caption), thumbnail grid, hover-delete
     - Seeded 2 real user proof collages (P&L receipts + closed MNQ Sep-26 positions)
+    - Gallery = 12 items (2026-08-24: added +$63.50 "8 trades, 1 day" branded collage as newest)
     - Testing agent iteration_9: 100% backend + frontend pass; regression suite now includes tests/test_proof_gallery.py
     - User has MORE proof shots to upload later via /admin
 
