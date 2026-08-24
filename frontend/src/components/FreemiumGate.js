@@ -4,8 +4,8 @@ import { paymentLinkFor } from "@/lib/paymentLinks";
 import { useAuth } from "@/context/AuthContext";
 
 const FreemiumGate = ({ userPlan, onUpgrade }) => {
-  const plan = userPlan || "free";
   const { user } = useAuth();
+  const plan = (userPlan || user?.tier || "free").toLowerCase();
   const link = (tier) => paymentLinkFor(tier, user?.email);
 
   return (

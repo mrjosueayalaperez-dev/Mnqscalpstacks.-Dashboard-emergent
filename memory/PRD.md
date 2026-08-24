@@ -190,6 +190,12 @@
     - OrderFlowChart.js: 3 new views from live /api/operator/candles 1m×60 (10s poll) — Delta (per-bar delta bars + cumulative dots + CUM Δ), Volume Profile (22 price buckets, buy/sell stacked bars, POC highlighted, current-price row blue), Footprint (last 8 bars, sell×buy cells, per-bar Δ). Buy/sell split approximated via close-in-range fraction; labeled "approximated from OHLCV, not exchange order flow"
     - Dashboard chart-section swaps LiveTerminalChart (standard) ↔ OrderFlowChart; no trading logic touched
 
+35. **TradingView affiliate link + real tier display fix** (2026-08-26, verified via curl + startup logs):
+    - AFFILIATE_URL_TRADINGVIEW set to user's affiliate link (aff_id=170075) — /api/r/tradingview 302s to it; all dashboard TradingView CTAs now earn affiliate credit
+    - USER-REPORTED BUG FIXED ("shows elite but I don't have it"): admin promotion no longer force-sets tier=elite (role=admin only); seed_admin creates operator with tier free; startup self-heal reverts any admin with tier=elite and no paid payment_transaction back to free (users + subscribers) — runs in production automatically after redeploy
+    - FreemiumGate now displays the logged-in user's REAL tier (user.tier from AuthContext) instead of hardcoded "free"
+    - NOTE FOR PROD: production proof gallery is EMPTY (0 items) — proof images live in Mongo per-environment; user must upload via production /admin
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

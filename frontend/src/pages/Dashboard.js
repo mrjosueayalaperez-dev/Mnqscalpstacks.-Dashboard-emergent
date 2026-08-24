@@ -211,7 +211,7 @@ export default function Dashboard() {
             onReset={handleResetChecklist}
             onAdd={handleAddChecklist}
           />
-          <FreemiumGate userPlan="free" />
+          <FreemiumGate />
 
           {/* SHARE & EARN — referral link strip */}
           <ReferralCard />

@@ -141,7 +141,7 @@ async def seed_admin(db: Any) -> None:
             "name": "Operator",
             "password_hash": hash_password(password),
             "role": "admin",
-            "tier": "elite",
+            "tier": "free",
             "created_at": datetime.now(timezone.utc).isoformat(),
         })
     elif not existing.get("password_hash") or not verify_password(password, existing["password_hash"]):
@@ -149,12 +149,21 @@ async def seed_admin(db: Any) -> None:
             {"email": email},
             {"$set": {"password_hash": hash_password(password), "role": "admin"}},
         )
-    # Promote any other configured admin emails WITHOUT touching their passwords
+    # Promote any other configured admin emails WITHOUT touching their passwords or paid tier
     for admin_email in _admin_emails():
         await db.users.update_one(
             {"email": admin_email, "role": {"$ne": "admin"}},
-            {"$set": {"role": "admin", "tier": "elite"}},
+            {"$set": {"role": "admin"}},
         )
+    # Self-heal: earlier versions force-set tier=elite on admins — revert unless actually paid
+    async for admin in db.users.find({"role": "admin", "tier": "elite"}, {"_id": 0, "email": 1}):
+        paid = await db.payment_transactions.find_one(
+            {"payment_status": "paid", "$or": [{"email": admin["email"]}, {"metadata.email": admin["email"]}]},
+            {"_id": 1},
+        )
+        if not paid:
+            await db.users.update_one({"email": admin["email"]}, {"$set": {"tier": "free"}})
+            await db.subscribers.update_one({"email": admin["email"]}, {"$set": {"tier": "free"}})
 
 
 async def _check_lockout(db: Any, identifier: str) -> None:
