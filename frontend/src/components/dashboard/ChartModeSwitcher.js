@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { ArrowLeftRight, Check, X, LineChart, Grid3x3, BarChart2, BarChart3 } from "lucide-react";
+import { Copy, Check, X, LineChart, Grid3x3, BarChart2, BarChart3 } from "lucide-react";
 
 export const CHART_MODES = [
   { id: "standard", label: "Standard", desc: "TradingView candles + live tape", icon: LineChart },
@@ -25,7 +25,7 @@ export const ChartModeSwitcher = ({ mode, onChange }) => {
         className="w-8 h-8 shrink-0 rounded-full bg-[#007AFF] hover:bg-[#0A84FF] flex items-center justify-center shadow-lg shadow-[#007AFF]/40 transition-transform duration-100 active:scale-90"
         data-testid="chart-mode-btn"
       >
-        <ArrowLeftRight className="w-4 h-4 text-white" />
+        <Copy className="w-4 h-4 text-white" />
       </button>
 
       {open && (

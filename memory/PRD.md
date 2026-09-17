@@ -211,6 +211,13 @@
     - (c) expected: auto-upgrade dormant without Stripe key + no manual editor existed → BUILT Tier Editor: PATCH /api/analytics/users/tier (admin-gated server-side, validates tier, updates users+subscribers) + tier <select> dropdown per row in admin UsersTable (testid tier-select-{user_id})
     - Webhook AMOUNT_TO_TIER extended for observed live prices: 4900→pro, 9900/9999→premium, 14900/14999→elite
 
+38. **Stale-signal source fix + chart lines + icon + $100 limit** (2026-09-17, self-tested: curl + screenshot):
+    - ROOT CAUSE of recurring 18k "fake" signals: TradingView webhook defaulted `price else 18500.0` when payload had no price → now anchors to live MNQ feed (422 if feed down). /signals/test already used live anchor
+    - Startup self-heal `purge_stale_market_data()` runs on every boot (removed 64 stale signals in preview; production cleans itself on redeploy): deletes signals/trades <25k, non-MNQ trades, stock watchlist, stale operator fills; expires active signals >24h
+    - Chart: tvEmbedUrl adds range=1D framing on 1m/5m + studies_overrides EMA length 21 (EMA21 spine + VWAP lines visible)
+    - Chart-mode switcher icon: ArrowLeftRight → Copy (iPhone-style two squares) per user request; same blue circle + bottom sheet
+    - Daily loss safeguard: -1000 → **-100** (operator state + ExecutionPanel pill now "SAFE · $100 limit"; in-memory, applies on restart/redeploy)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

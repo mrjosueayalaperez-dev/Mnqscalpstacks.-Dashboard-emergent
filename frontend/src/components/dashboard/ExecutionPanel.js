@@ -125,7 +125,7 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
 
   const up = (tick?.change ?? 0) >= 0;
   const pnl = state?.daily_pnl ?? 0;
-  const risky = state?.kill_switch || pnl <= (state?.max_daily_loss ?? -1000) * 0.8;
+  const risky = state?.kill_switch || pnl <= (state?.max_daily_loss ?? -100) * 0.8;
   const pos = state?.position;
 
   return (
@@ -161,7 +161,7 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
               data-testid="risk-pill"
             >
               <Shield className="w-3 h-3" />
-              {state?.kill_switch ? "LOCKED" : risky ? "AT RISK" : "SAFE"} · ${Math.abs(state?.max_daily_loss ?? 1000).toLocaleString()} limit · {state?.daily_trades ?? 0}/{state?.max_daily_trades ?? 20}
+              {state?.kill_switch ? "LOCKED" : risky ? "AT RISK" : "SAFE"} · ${Math.abs(state?.max_daily_loss ?? 100).toLocaleString()} limit · {state?.daily_trades ?? 0}/{state?.max_daily_trades ?? 20}
             </span>
             {onChartMode && <ChartModeSwitcher mode={chartMode} onChange={onChartMode} />}
           </div>

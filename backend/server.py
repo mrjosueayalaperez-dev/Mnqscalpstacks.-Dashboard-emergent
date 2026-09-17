@@ -1036,9 +1036,14 @@ async def receive_tradingview_webhook(payload: TradingViewWebhook, background_ta
         return {"status": "duplicate", "reason": "Signal already active"}
 
     try:
-        price = float(payload.price) if payload.price else 18500.0
+        price = float(payload.price) if payload.price else 0.0
     except (TypeError, ValueError):
         raise HTTPException(status_code=400, detail="Invalid price in webhook payload")
+    if not price:
+        live = get_last_mnq().get("price") or (await refresh_mnq()).get("price") or 0
+        if not live:
+            raise HTTPException(status_code=422, detail="No price in payload and live feed unavailable")
+        price = float(live)
 
     # Calculate entry/stop/tp
     if side == "long":
@@ -2271,7 +2276,7 @@ _operator_state = {
     "balance": 100000.00,
     "daily_pnl": 0.0,
     "daily_trades": 0,
-    "max_daily_loss": -1000.00,
+    "max_daily_loss": -100.00,
     "max_daily_trades": 20,
     "session_started_at": datetime.now(timezone.utc).isoformat(),
     "automation_paused": False,
@@ -2690,6 +2695,30 @@ async def seed_auth() -> None:
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
+    await purge_stale_market_data()
+
+
+async def purge_stale_market_data() -> None:
+    """Idempotent self-heal: drop pre-live-feed junk so prod cleans itself on redeploy."""
+    try:
+        r1 = await db.signals.delete_many({"entry_price": {"$lt": 25000}})
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        r2 = await db.signals.update_many(
+            {"status": "active", "created_at": {"$lt": cutoff}}, {"$set": {"status": "expired"}}
+        )
+        r3 = await db.trades.delete_many({"symbol": {"$nin": ["MNQ"]}})
+        r4 = await db.trades.delete_many({"entry_price": {"$lt": 25000}})
+        r5 = await db.watchlist.delete_many({"symbol": {"$ne": "MNQ"}})
+        r6 = await db.operator_orders.delete_many({"fill_price": {"$lt": 25000}})
+        total = r1.deleted_count + r3.deleted_count + r4.deleted_count + r5.deleted_count + r6.deleted_count
+        if total or r2.modified_count:
+            logger.info(
+                f"Stale-data purge: {r1.deleted_count} signals, {r2.modified_count} expired actives, "
+                f"{r3.deleted_count + r4.deleted_count} trades, {r5.deleted_count} watchlist, {r6.deleted_count} orders"
+            )
+    except Exception as e:
+        logger.error(f"Stale-data purge failed: {e}")
+
 
 app.add_middleware(
     CORSMiddleware,
