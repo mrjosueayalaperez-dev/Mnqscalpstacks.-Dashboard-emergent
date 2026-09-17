@@ -205,6 +205,12 @@
     - SEO: public/sitemap.xml (11 canonical prod URLs), robots.txt (disallow /dashboard /operator /admin /auth)
     - Package leftovers for user: founder photo/bio facts, refund policy wording, governing-law state, real member quotes for /reviews, custom domain purchase (mnqscalpstacks.com suggested in doc)
 
+37. **Stripe link mismatch discovery + Admin Tier Editor** (2026-09-18, self-tested via curl: 200/401/400 paths):
+    - USER-REPORTED PROD BUGS: (a) admin email login failed on production (unresolved — likely lockout or wrong password; needs user clarification), (b) clicked Elite $149 but Stripe charged the wrong amount, (c) dashboard shows no plan after paying
+    - ROOT CAUSE of (b): user's 3 payment links DON'T match site plans. Verified by rendering links: link1 (...so08)="Pro" $99 ONE-TIME, link2 (...so01)="Elite plan" $149.99/mo subscription, link3 (...so07)="Pro" $99 ONE-TIME. Site labels them Pro $49/Premium $99.99/Elite $149. USER MUST create 3 correct monthly-subscription payment links in Stripe and send them; then update lib/paymentLinks.js
+    - (c) expected: auto-upgrade dormant without Stripe key + no manual editor existed → BUILT Tier Editor: PATCH /api/analytics/users/tier (admin-gated server-side, validates tier, updates users+subscribers) + tier <select> dropdown per row in admin UsersTable (testid tier-select-{user_id})
+    - Webhook AMOUNT_TO_TIER extended for observed live prices: 4900→pro, 9900/9999→premium, 14900/14999→elite
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

@@ -1991,8 +1991,8 @@ import stripe as _stripe_sdk
 STRIPE_LIVE_SECRET_KEY = os.environ.get("STRIPE_LIVE_SECRET_KEY", "")
 STRIPE_LIVE_WEBHOOK_SECRET = os.environ.get("STRIPE_LIVE_WEBHOOK_SECRET", "")
 
-# Payment Link price (cents) → tier
-AMOUNT_TO_TIER = {4900: "pro", 9999: "premium", 14900: "elite"}
+# Payment Link price (cents) → tier (includes observed live-link variants)
+AMOUNT_TO_TIER = {4900: "pro", 9900: "premium", 9999: "premium", 14900: "elite", 14999: "elite"}
 
 
 async def _apply_tier_upgrade(email: str, tier: str, session_id: str, amount_cents: int) -> bool:

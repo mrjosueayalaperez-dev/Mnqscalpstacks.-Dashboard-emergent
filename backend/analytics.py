@@ -2,14 +2,23 @@
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, ConfigDict
+
+import auth as auth_module
+
+VALID_TIERS = {"free", "pro", "premium", "elite"}
 
 
 class VisitBody(BaseModel):
     model_config = ConfigDict(extra="ignore")
     visitor_id: str
     path: str = "/"
+
+
+class TierBody(BaseModel):
+    email: str
+    tier: str
 
 
 def build_analytics_router(db: Any) -> APIRouter:
@@ -27,6 +36,22 @@ def build_analytics_router(db: Any) -> APIRouter:
             upsert=True,
         )
         return {"ok": True}
+
+    @router.patch("/users/tier")
+    async def set_user_tier(body: TierBody, request: Request) -> Dict[str, Any]:
+        """Admin-only: manually set a user's plan tier (users + subscribers)."""
+        actor = await auth_module.get_current_user(request, db)
+        if actor.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="Admin only")
+        tier = body.tier.lower().strip()
+        if tier not in VALID_TIERS:
+            raise HTTPException(status_code=400, detail=f"Invalid tier. Use one of: {sorted(VALID_TIERS)}")
+        email = body.email.lower().strip()
+        res = await db.users.update_one({"email": email}, {"$set": {"tier": tier}})
+        if res.matched_count == 0:
+            raise HTTPException(status_code=404, detail="User not found")
+        await db.subscribers.update_one({"email": email}, {"$set": {"tier": tier}})
+        return {"ok": True, "email": email, "tier": tier}
 
     @router.get("/stats", tags=["admin"])
     async def analytics_stats() -> Dict[str, Any]:
