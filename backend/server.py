@@ -1145,6 +1145,106 @@ async def my_referral(request: Request) -> Dict[str, Any]:
     }
 
 
+# ============== AI Copilot — GPT-5.4 via Emergent universal key ==============
+
+from emergentintegrations.llm.chat import TextDelta, StreamDone
+from fastapi.responses import StreamingResponse
+
+
+class CopilotBody(BaseModel):
+    session_id: str
+    message: str
+
+
+async def _copilot_context() -> str:
+    tick = get_last_mnq() or {}
+    st = _operator_state
+    pos = st.get("position") or {}
+    active = await db.signals.find_one({"status": "active"}, {"_id": 0})
+    recent = await db.signals.find(
+        {"outcome": {"$in": ["win", "loss"]}}, {"_id": 0, "side": 1, "outcome": 1, "pnl_points": 1}
+    ).sort("created_at", -1).to_list(5)
+    lines = [
+        f"MNQ last price: {tick.get('price')} (change {tick.get('change')}, {tick.get('change_percent')}%)",
+        f"Session high/low: {tick.get('day_high')} / {tick.get('day_low')}",
+        f"Open position: {pos.get('side') or 'FLAT'} qty={pos.get('qty', 0)} avg_entry={pos.get('avg_entry', 0)}",
+        f"Daily P&L: ${st.get('daily_pnl', 0)} | trades today: {st.get('daily_trades', 0)}/{st.get('max_daily_trades', 20)} | loss limit: ${st.get('max_daily_loss', -100)}",
+        f"Kill switch: {st.get('kill_switch', False)}",
+    ]
+    if active:
+        lines.append(
+            f"ACTIVE SIGNAL: {active.get('side', '').upper()} entry {active.get('entry_price')} stop {active.get('stop_loss')} tp1 {active.get('tp1')} tp2 {active.get('tp2')} confluence {active.get('confluence_score')}"
+        )
+    else:
+        lines.append("ACTIVE SIGNAL: none")
+    if recent:
+        lines.append("Last resolved: " + ", ".join(f"{r['side']} {r['outcome']} {r.get('pnl_points', 0)}pts" for r in recent))
+    return "\n".join(lines)
+
+
+@api_router.post("/copilot/chat", tags=["ai"])
+async def copilot_chat(body: CopilotBody):
+    """Streaming AI trading copilot with live desk context. Plain-text token stream."""
+    msg = body.message.strip()
+    if not msg:
+        raise HTTPException(status_code=400, detail="Empty message")
+    history = await db.copilot_messages.find(
+        {"session_id": body.session_id}, {"_id": 0, "role": 1, "content": 1}
+    ).sort("created_at", 1).to_list(40)
+    transcript = "\n".join(f"{m['role'].upper()}: {m['content'][:600]}" for m in history[-12:]) or "(new conversation)"
+    context = await _copilot_context()
+    system = (
+        "You are Scalp Copilot, the in-dashboard assistant for MNQ Scalp Stacks — a practice and education "
+        "platform for MNQ futures scalpers using the five-step stack: session, location, trigger (EMA9/EMA21 "
+        "cross + VWAP + RSI14), risk, review.\n"
+        "Rules: be concise (under 120 words unless asked), plain text only — no markdown, no asterisks. Use the live desk context below, never guarantee "
+        "profits, never give personalized financial advice — frame everything as education. If asked about the "
+        "open position or active signal, use the exact numbers from context. Remind about the $100 daily loss "
+        "lockout when relevant.\n\n"
+        f"LIVE DESK CONTEXT (just fetched):\n{context}\n\n"
+        f"CONVERSATION SO FAR:\n{transcript}"
+    )
+    chat = LlmChat(
+        api_key=os.environ.get("EMERGENT_LLM_KEY", ""),
+        session_id=body.session_id,
+        system_message=system,
+    ).with_model("openai", "gpt-5.4")
+
+    await db.copilot_messages.insert_one({
+        "session_id": body.session_id, "role": "user", "content": msg,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+
+    async def gen():
+        parts = []
+        try:
+            async for ev in chat.stream_message(UserMessage(text=msg)):
+                if isinstance(ev, TextDelta):
+                    parts.append(ev.content)
+                    yield ev.content
+                elif isinstance(ev, StreamDone):
+                    break
+        except Exception as e:
+            logger.error(f"Copilot stream error: {e}")
+            yield "\n[Copilot hit an error — try again.]"
+        finally:
+            if parts:
+                await db.copilot_messages.insert_one({
+                    "session_id": body.session_id, "role": "assistant", "content": "".join(parts),
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                })
+
+    return StreamingResponse(gen(), media_type="text/plain",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@api_router.get("/copilot/history/{session_id}", tags=["ai"])
+async def copilot_history(session_id: str):
+    return await db.copilot_messages.find(
+        {"session_id": session_id}, {"_id": 0, "role": 1, "content": 1, "created_at": 1}
+    ).sort("created_at", 1).to_list(60)
+
+
 # Update signal outcome
 @api_router.patch("/signals/{signal_id}")
 async def update_signal(signal_id: str, status: str, pnl_points: Optional[float] = None):

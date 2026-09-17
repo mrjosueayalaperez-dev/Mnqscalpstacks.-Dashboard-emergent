@@ -22,6 +22,7 @@ import { PositionCalculator } from "@/components/dashboard/PositionCalculator";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { MoreTools, BottomNav, RiskDisclaimer } from "@/components/dashboard/MobileShell";
 import { ReferralCard } from "@/components/ReferralCard";
+import { CopilotChat } from "@/components/CopilotChat";
 import OrderFlowChart from "@/components/dashboard/OrderFlowChart";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -203,6 +204,9 @@ export default function Dashboard() {
 
           {/* ROW 1: SIGNAL ENGINE — prominent stats + live feed */}
           <SignalDashboard />
+
+          {/* AI COPILOT — streaming GPT chat with live desk context */}
+          <CopilotChat />
 
           {/* ROW 2: DAILY CHECKLIST (prominent) + SUBSCRIPTION PLANS */}
           <Checklist

@@ -228,6 +228,13 @@
     - live_signal_engine_loop() (60s): server-side Scalp Punch on live 1m MNQ candles — EMA9/EMA21 cross + VWAP alignment fires a real signal (RSI14 agreement → confluence 3/A+ else 2/B), stop ±8 / TP1 ±10 / TP2 ±20, source="live_engine", Discord notify, guards: kill switch, one active signal at a time, 10-min cooldown. Works with resolver (auto win/loss) + dashboard sound alerts = fully autonomous live signal pipeline, no TradingView required
     - Elite fix: tier editor + manual sets now write tier_manual=True; auth self-heal skips tier_manual users (owner keeps Elite through restarts). Both admin accounts set elite+manual in preview; verified persists after restart. PROD: after redeploy user sets own tier via /admin dropdown (now sticks)
 
+41. **Scalp Copilot — streaming GPT chat** (2026-09-17, self-tested: curl multi-turn + UI screenshot, both pass):
+    - POST /api/copilot/chat: streaming plain-text (X-Accel-Buffering: no), GPT-5.4 via EMERGENT_LLM_KEY (emergentintegrations LlmChat, new instance per request); system prompt injects LIVE desk context (price, session H/L, open position, daily P&L/limits, active signal, last 5 resolved) + last 12 conversation turns; history persisted in db.copilot_messages; GET /api/copilot/history/{session_id}
+    - Multi-turn verified: turn 2 recalled price from turn 1; UI streamed full session read via suggestion chip
+    - Frontend CopilotChat.js card on dashboard below Signal Engine: streaming bubbles, suggestion chips, session_id in localStorage (testids: copilot-chat/-messages/-input/-send-btn/-suggestion)
+    - Guardrails in prompt: education-only, no guarantees, plain text, mentions $100 lockout
+    - Grok deferred (needs user xAI key); Stripe links/key deferred by user ("do that later")
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
