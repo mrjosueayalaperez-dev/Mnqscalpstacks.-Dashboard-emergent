@@ -21,7 +21,7 @@ class TestBacktestCRUD:
         for bt_id in self.test_backtest_ids:
             try:
                 requests.delete(f"{BASE_URL}/api/backtests/{bt_id}")
-            except:
+            except Exception:
                 pass
     
     def test_get_backtests_returns_list(self):

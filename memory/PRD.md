@@ -196,6 +196,15 @@
     - FreemiumGate now displays the logged-in user's REAL tier (user.tier from AuthContext) instead of hardcoded "free"
     - NOTE FOR PROD: production proof gallery is EMPTY (0 items) — proof images live in Mongo per-environment; user must upload via production /admin
 
+36. **Education-first public site rebuild** (2026-09-17, testing agent iteration_15: pass, 1 bug found & fixed):
+    - 10 new public pages from user's "Website Rebuild Package" (.docx): /how-it-works, /academy (5 labs, options=Coming soon), /membership (real tiers $0/$49/$99.99/$149 + live payment links), /about (Josue founder story), /faq (12 Q&As + FAQPage JSON-LD), /reviews (honest empty state), /start (first-week checklist), /risk (CFTC 4.41 text), /terms, /privacy
+    - Shared PublicLayout: header nav (How It Works·Academy·Membership·About·FAQ·Get Access), mobile menu, footer (Reviews·Start·Risk·Terms·Privacy·Dashboard) + full education disclaimer on every page; usePageMeta sets title/meta/canonical
+    - Homepage repositioned education-first: new hero H1/copy per package, CTA "See Membership", nav/footer updated, Organization JSON-LD, meta description
+    - UNVERIFIED STATS REMOVED from public homepage per package §15: 77.3% hero chip, StatsBar (76.9%/2.14/$4,280/1.87) deleted (dead code removed), 77.3% in Wave Validation card (caught by testing agent, fixed + verified), ticker relabeled "traders on board"
+    - KEPT (real data): WinStreakStrip, ProofGallery, LiveCounters, home pricing with payment links
+    - SEO: public/sitemap.xml (11 canonical prod URLs), robots.txt (disallow /dashboard /operator /admin /auth)
+    - Package leftovers for user: founder photo/bio facts, refund policy wording, governing-law state, real member quotes for /reviews, custom domain purchase (mnqscalpstacks.com suggested in doc)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

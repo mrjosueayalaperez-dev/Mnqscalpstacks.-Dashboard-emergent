@@ -165,7 +165,7 @@ const Solution = () => {
       <p className="text-zinc-500 text-center text-sm max-w-lg mx-auto mb-8 md:mb-12">MNQ Scalp Stacks delivers precision futures intelligence:</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         {[
-          { icon: Target, title: "Wave Validation", desc: "High-probability entries backed by a 77.3% historical win rate", color: "#007AFF" },
+          { icon: Target, title: "Wave Validation", desc: "Location, alignment, and risk checked before any study idea counts — process over guesswork", color: "#007AFF" },
           { icon: Crosshair, title: "Institutional Guardrails", desc: "Automated detection of psychological levels and resistance zones", color: "#34C759" },
           { icon: Layers, title: "Full Stack Integration", desc: "Pine Script v3 synced with Python backend for zero-lag execution", color: "#FFCC00" },
         ].map((item) => (
@@ -236,25 +236,6 @@ const HowItWorks = ({ sectionRef }) => (
           </div>
         ))}
       </div>
-    </div>
-  </section>
-);
-
-// ======================== STATS BAR ========================
-const StatsBar = ({ stats }) => (
-  <section className="py-8 md:py-10 px-5 md:px-6 bg-[#121212] border-y border-white/5" data-testid="stats-bar">
-    <div className="max-w-5xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 text-center">
-      {[
-        { label: "Win Rate", value: `${stats?.win_rate || 76.9}%`, color: "text-[#34C759]" },
-        { label: "Profit Factor", value: stats?.profit_factor || "2.14", color: "text-white" },
-        { label: "Net Profit", value: `$${(stats?.net_profit || 4280).toLocaleString()}`, color: "text-[#34C759]" },
-        { label: "Sharpe Ratio", value: stats?.sharpe_ratio || "1.87", color: "text-[#007AFF]" },
-      ].map((s) => (
-        <div key={s.label}>
-          <span className="text-[0.55rem] md:text-[0.6rem] font-bold uppercase tracking-[0.2em] text-zinc-500 block mb-1">{s.label}</span>
-          <span className={`text-xl md:text-3xl font-mono font-bold ${s.color}`}>{s.value}</span>
-        </div>
-      ))}
     </div>
   </section>
 );
@@ -470,7 +451,6 @@ const Footer = () => (
 const LandingPage = () => {
   const ctaRef = useRef(null);
   const howRef = useRef(null);
-  const [backtestStats, setBacktestStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [signedUp, setSignedUp] = useState(false);
   const [discordInvite, setDiscordInvite] = useState("");
@@ -510,7 +490,6 @@ const LandingPage = () => {
 
   useEffect(() => {
     axios.post(`${API}/backtests/seed-demo`).catch((e) => console.error("Seed error:", e));
-    axios.get(`${API}/public/backtests`).then(r => { if (r.data.length > 0) setBacktestStats(r.data[0]); }).catch((e) => console.error("Backtest fetch error:", e));
   }, []);
 
   // Check for payment return

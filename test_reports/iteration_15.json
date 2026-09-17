@@ -1,0 +1,29 @@
+{
+  "summary": "Frontend-only regression for the Website Rebuild Package. Tested at 390x844 (mobile-first) plus 1920 desktop. All 10 new public routes render correctly (single H1, correct document.title, public-footer-disclaimer, 12–15 internal sibling links, zero horizontal overflow at 390). Homepage hero rewrite verified: H1 'Stop guessing entries. / Learn a structured MNQ process.', EDUCATION & PRACTICE PLATFORM badge, See Membership CTA, org-schema JSON-LD in <head>, meta description set, StatsBar not rendered (no 'Profit Factor'/'Net Profit'/'Sharpe'/'$4,280'/'76.9%'/'Win Rate' strings), LiveCounters says 'traders on board' (not 'joined this week'), footer contains all 10 sibling links. /faq renders faq-item-0..11 and injects script#faq-schema application/ld+json FAQPage with 12 entries. /membership renders 4 tier cards stacked vertically at 390 (all cards x≈20, y increasing 388→680→993→1283), paid CTAs href to correct Stripe Payment Links with target=_blank (pro→bJe8wO0rB0un8rQ6oQ8so08, premium→5kQdR80rBb91gYmfZq8so01, elite→8x214mden6SLfUi5kM8so07), free CTA→/start. PublicLayout mobile nav: menu btn visible at 390, opens mobile menu with 6 links (How It Works, Academy, Membership, About, FAQ + Get Access). Homepage pricing paid-tier submit → intercepted navigation to https://buy.stripe.com/bJe8wO0rB0un8rQ6oQ8so08?prefilled_email=test%40example.com (verified via page.route abort, NOT paid). Static: /sitemap.xml 200 XML with 11 URLs, /robots.txt 200 disallows /dashboard /operator /admin /auth. Regressions all pass: admin login → /dashboard OK, execution-panel rendered, /performance loads, unknown route redirects to /. ONE BUG FOUND: homepage still contains the string '77.3% historical win rate' inside the Solution section 'Wave Validation' card (LandingPage.js line 168) — this is an unverified performance stat that the review request explicitly demanded be removed from the public homepage.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "LandingPage — Solution section 'Wave Validation' card", "issue": "Homepage still displays '77.3% historical win rate' — this is an unverified/hardcoded performance stat that must be removed for the education-first repositioning. The StatsBar was removed from render but this stat leaked through the feature-card copy at LandingPage.js:168 (desc: 'High-probability entries backed by a 77.3% historical win rate').", "selector": "text=/77.3%/", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Rewrite LandingPage.js line 168 Wave Validation card copy to drop the '77.3% historical win rate' phrasing (e.g., 'Location + alignment + risk checked before every study entry — process over guesswork.'). Grep the repo one more time for any hardcoded win-rate/profit-factor/sharpe strings on public surfaces (LandingPage, LiveCounters, WinStreakStrip, ProofGallery). The StatsBar component (defined but unused in LandingPage.js:244) can also be deleted as dead code."
+  ],
+  "critical_code_review_comments": [
+    "StatsBar component is still defined in LandingPage.js (lines 244-254) but never rendered — dead code, delete to avoid confusion in future audits.",
+    "sitemap.xml and robots.txt hardcode the canonical host as https://mnq-scalp-stack.emergent.host/. That's the production host, but the preview host is mnq-scalp-stack.preview.emergentagent.com. Since <loc> should be the canonical production URL that's fine — just confirm the production domain matches emergent.host at launch.",
+    "PublicLayout usePageMeta appends a canonical <link> but never cleans up on unmount; navigating between public pages just overwrites href which is OK, but faq-schema is scoped correctly via cleanup — good pattern.",
+    "Free-tier membership CTA on /membership links to /start (correct) but the Getting Started page (GettingStarted.js, 31 lines) should be verified to route the visitor into /auth for account creation — flow not explicitly tested here."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only)", "frontend": "~95% (1 content bug: 77.3% on homepage)"},
+  "test_credentials": "admin: operator@mnqscalpstacks.com / ScalpStacks!2026",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 10 public routes and testids verified: public-h1, public-footer-disclaimer, public-nav-menu-btn, public-nav-mobile, public-nav-cta, faq-item-0..11, faq-schema (in head), org-schema (in head), membership-tier-{free,pro,premium,elite}, membership-{pro,premium,elite}-cta, membership-free-cta. Homepage checkout flow testids: landing-tier-{free,pro,premium,elite}, landing-email, landing-submit-btn — flow intercepts Stripe successfully. buy.stripe.com must ALWAYS be aborted via page.route to avoid real payment. To retest just the '77.3%' fix: page.goto('/') → assert '77.3' NOT in body inner_text. TradingView chart iframe on /dashboard does not paint headless (known).",
+  "rca of the issue": "Bug: '77.3% historical win rate' still on homepage. RCA: When StatsBar was removed from the render tree earlier, the same 77.3% number was also embedded in the Solution section's 'Wave Validation' feature-card description at LandingPage.js line 168. The refactor missed this second occurrence because it was inside a features array, not the StatsBar. Reproduction: goto /, scan body inner_text → contains '77.3%'. Mitigation: edit LandingPage.js line 168 desc to remove the win-rate claim; then grep the codebase for /\\d{2,3}\\.\\d%.*win/i to prevent recurrence."
+}
