@@ -78,7 +78,7 @@ const SocialProofTicker = () => {
     <div className="fixed bottom-4 left-4 z-40 animate-fade-in stagger-6 hidden md:flex items-center gap-2 px-4 py-2 bg-[#121212] border border-[#34C759]/30 rounded-sm shadow-lg" data-testid="social-proof-ticker">
       <div className="w-2 h-2 bg-[#34C759] rounded-full animate-pulse" />
       <span className="text-xs text-zinc-300">
-        <strong className="text-[#34C759]">{count}+ traders</strong> joined this week
+        <strong className="text-[#34C759]">{count} traders</strong> on board
       </span>
       <Flame className="w-3 h-3 text-[#FFCC00]" />
     </div>
@@ -97,28 +97,29 @@ const Hero = ({ onCTA, onLearn }) => (
     <div className="relative w-full max-w-5xl mx-auto px-5 md:px-6 py-16 md:py-20 text-center">
       <div className="inline-flex items-center gap-2 px-3 py-1 bg-[#34C759]/10 border border-[#34C759]/30 rounded-full mb-6 md:mb-8 animate-fade-in-up">
         <span className="w-2 h-2 bg-[#34C759] rounded-full animate-pulse" />
-        <span className="text-[0.65rem] md:text-xs font-bold text-[#34C759] uppercase tracking-wider">Live Signals Active</span>
+        <span className="text-[0.65rem] md:text-xs font-bold text-[#34C759] uppercase tracking-wider">Education & Practice Platform</span>
       </div>
       <h1 className="text-3xl sm:text-4xl md:text-6xl lg:text-7xl font-black tracking-tighter text-white leading-[0.95] mb-5 md:mb-6 animate-fade-in-up stagger-1">
-        Stop Guessing Entries.
+        Stop guessing entries.
         <br />
-        <span className="text-[#34C759]">Start Trading Structure.</span>
+        <span className="text-[#34C759]">Learn a structured MNQ process.</span>
       </h1>
       <p className="text-base md:text-xl text-zinc-400 max-w-2xl mx-auto mb-8 md:mb-10 leading-relaxed px-2 animate-fade-in-up stagger-2">
-        Precision Futures Intelligence. Take the guesswork out of the 1-minute chart with proprietary Wave Validation and institutional guardrails.
+        MNQ Scalp Stacks is a practice and education platform for Micro Nasdaq and Nasdaq-100 traders. You learn one
+        stack, drill it on the one-minute and five-minute charts, and review the work. Live study prompts and Discord
+        are there so you are not studying alone.
       </p>
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3 md:gap-4 animate-fade-in-up stagger-3">
         <button onClick={onCTA} className="group w-full sm:w-auto flex items-center justify-center gap-2 px-8 py-4 bg-[#34C759] text-black font-black text-base md:text-lg rounded-sm hover:bg-[#2DB84E] transition-all active:scale-95 animate-pulse-glow" data-testid="hero-cta-btn">
-          Get Access <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+          See Membership <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
         </button>
-        <button onClick={onLearn} className="flex items-center gap-2 px-6 py-3 text-zinc-400 hover:text-white transition-colors text-sm font-semibold" data-testid="hero-learn-btn">
-          See How It Works <ChevronDown className="w-4 h-4" />
-        </button>
+        <a href="/how-it-works" className="flex items-center gap-2 px-6 py-3 text-zinc-400 hover:text-white transition-colors text-sm font-semibold" data-testid="hero-learn-btn">
+          How the Stack Works <ChevronDown className="w-4 h-4" />
+        </a>
       </div>
       <div className="mt-10 md:mt-12 flex flex-wrap items-center justify-center gap-4 md:gap-6 text-zinc-500 text-[0.65rem] md:text-xs animate-fade-in-up stagger-4">
-        <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> <AnimatedCounter end={77} suffix=".3% Win Rate" /></span>
-        <span className="flex items-center gap-1"><BarChart3 className="w-3 h-3" /> Competition Tested</span>
-        <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Wave Validated</span>
+        <span className="flex items-center gap-1"><Activity className="w-3 h-3" /> Session · Location · Trigger · Risk · Review</span>
+        <span className="flex items-center gap-1"><Shield className="w-3 h-3" /> Process over guesswork</span>
       </div>
     </div>
   </section>
@@ -444,14 +445,23 @@ const Footer = () => (
   <footer className="py-6 md:py-8 px-5 md:px-6 border-t border-white/5 bg-[#0A0A0A]">
     <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
       <div className="flex items-center gap-2"><Zap className="w-5 h-5 text-[#FFCC00]" /><span className="font-black text-white text-sm">MNQ SCALP STACKS</span></div>
-      <div className="flex items-center gap-6 text-xs text-zinc-600">
-        <a href="/performance" className="hover:text-zinc-400 transition-colors">Performance</a>
+      <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-zinc-600">
+        <a href="/how-it-works" className="hover:text-zinc-400 transition-colors">How It Works</a>
+        <a href="/academy" className="hover:text-zinc-400 transition-colors">Academy</a>
+        <a href="/membership" className="hover:text-zinc-400 transition-colors">Membership</a>
+        <a href="/about" className="hover:text-zinc-400 transition-colors">About</a>
+        <a href="/faq" className="hover:text-zinc-400 transition-colors">FAQ</a>
+        <a href="/reviews" className="hover:text-zinc-400 transition-colors">Reviews</a>
+        <a href="/start" className="hover:text-zinc-400 transition-colors">Getting Started</a>
+        <a href="/risk" className="hover:text-zinc-400 transition-colors">Risk</a>
+        <a href="/terms" className="hover:text-zinc-400 transition-colors">Terms</a>
+        <a href="/privacy" className="hover:text-zinc-400 transition-colors">Privacy</a>
         <a href="/dashboard" className="hover:text-zinc-400 transition-colors">Dashboard</a>
       </div>
-      <span className="text-[0.65rem] text-zinc-600">MNQ SCALP STACKS SaaS | Emergent.sh</span>
+      <span className="text-[0.65rem] text-zinc-600">MNQ SCALP STACKS</span>
     </div>
     <p className="max-w-5xl mx-auto mt-4 text-[0.55rem] leading-relaxed text-zinc-700 text-center" data-testid="landing-risk-disclaimer">
-      ⚠️ Trading futures involves substantial risk of loss and is not suitable for all investors. Past performance is not indicative of future results.
+      Educational material only. Futures trading involves substantial risk of loss. MNQ Scalp Stacks is not a broker, not an investment adviser, and does not provide personalized financial advice. Past study results do not predict future results.
     </p>
   </footer>
 );
@@ -471,6 +481,24 @@ const LandingPage = () => {
 
   // Check for referral code in URL
   useEffect(() => {
+    document.title = "MNQ Scalp Stacks | Structured Practice for MNQ and NQ Traders";
+    let m = document.querySelector('meta[name="description"]');
+    if (!m) { m = document.createElement("meta"); m.name = "description"; document.head.appendChild(m); }
+    m.content = "Learn a repeatable MNQ scalp process: context, location, trigger, risk, and review. Practice labs, chart alignment, and member study tools. Education only — not financial advice.";
+    if (!document.getElementById("org-schema")) {
+      const s = document.createElement("script");
+      s.type = "application/ld+json";
+      s.id = "org-schema";
+      s.textContent = JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        name: "MNQ Scalp Stacks",
+        url: window.location.origin,
+        founder: { "@type": "Person", name: "Josue" },
+        description: "A structured practice system for MNQ and NQ traders who want process over guesswork.",
+      });
+      document.head.appendChild(s);
+    }
     const params = new URLSearchParams(window.location.search);
     const ref = params.get("ref");
     if (ref) {
@@ -569,11 +597,12 @@ const LandingPage = () => {
         <div className="max-w-6xl mx-auto px-4 md:px-6 h-12 md:h-14 flex items-center justify-between">
           <div className="flex items-center gap-2"><Zap className="w-4 md:w-5 h-4 md:h-5 text-[#FFCC00]" /><span className="font-black text-white text-xs md:text-sm tracking-tight">MNQ SCALP STACKS</span></div>
           <div className="flex items-center gap-2 md:gap-4">
-            <a href="/performance" className="hidden sm:inline text-xs text-zinc-500 hover:text-white transition-colors">Performance</a>
-            <a href="/dashboard" className="hidden sm:inline text-xs text-zinc-500 hover:text-white transition-colors">Dashboard</a>
-            <button onClick={scrollToCTA} className="px-3 md:px-4 py-1.5 bg-[#34C759] text-black text-xs font-black rounded-sm hover:bg-[#2DB84E] transition-colors" data-testid="nav-cta-btn">
+            <a href="/how-it-works" className="hidden sm:inline text-xs text-zinc-500 hover:text-white transition-colors">How It Works</a>
+            <a href="/academy" className="hidden sm:inline text-xs text-zinc-500 hover:text-white transition-colors">Academy</a>
+            <a href="/faq" className="hidden sm:inline text-xs text-zinc-500 hover:text-white transition-colors">FAQ</a>
+            <a href="/membership" className="px-3 md:px-4 py-1.5 bg-[#34C759] text-black text-xs font-black rounded-sm hover:bg-[#2DB84E] transition-colors" data-testid="nav-cta-btn">
               Get Access
-            </button>
+            </a>
           </div>
         </div>
       </nav>
@@ -583,7 +612,6 @@ const LandingPage = () => {
         <Solution />
         <BeforeAfter />
         <HowItWorks sectionRef={howRef} />
-        <StatsBar stats={backtestStats} />
         <LiveCounters />
         <WinStreakStrip />
         <ProofGallery />
