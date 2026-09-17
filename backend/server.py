@@ -2697,6 +2697,92 @@ async def seed_auth() -> None:
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
     _asyncio.create_task(signal_resolver_loop())
+    _asyncio.create_task(live_signal_engine_loop())
+
+
+async def live_signal_engine_loop() -> None:
+    """Server-side Scalp Punch engine: EMA9/EMA21 cross + VWAP alignment on live 1m MNQ candles."""
+    await _asyncio.sleep(20)  # let the feed warm up
+    while True:
+        try:
+            await evaluate_live_signal()
+        except Exception as e:
+            logger.error(f"Live signal engine error: {e}")
+        await _asyncio.sleep(60)
+
+
+async def evaluate_live_signal() -> Optional[str]:
+    if signal_engine_state.get("kill_switch"):
+        return None
+    if await db.signals.find_one({"status": "active"}, {"_id": 1}):
+        return None
+    # Cooldown: max one engine signal per 10 minutes
+    cooldown = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
+    if await db.signals.find_one({"source": "live_engine", "created_at": {"$gt": cooldown}}, {"_id": 1}):
+        return None
+
+    from market_feed import get_bars
+    bars = get_bars()
+    if not bars:
+        await refresh_mnq()
+        bars = get_bars()
+    agg = _aggregate_bars(bars, 60, 120) if bars else []
+    if len(agg) < 30:
+        return None
+
+    closes = [k["close"] for k in agg]
+    ema9 = _series_ema(closes, 9)
+    ema21 = _series_ema(closes, 21)
+    vwap = _series_vwap(agg)
+    if len(ema9) < 2 or len(ema21) < 2 or not vwap:
+        return None
+    e9_prev, e9_now = ema9[-2], ema9[-1]
+    e21_prev, e21_now = ema21[-2], ema21[-1]
+    if None in (e9_prev, e9_now, e21_prev, e21_now):
+        return None
+    price, vw = closes[-1], vwap[-1]
+
+    cross_up = e9_prev <= e21_prev and e9_now > e21_now
+    cross_down = e9_prev >= e21_prev and e9_now < e21_now
+    side = None
+    if cross_up and price > vw:
+        side = "long"
+    elif cross_down and price < vw:
+        side = "short"
+    if not side:
+        return None
+
+    # RSI 14 as a condition — boosts confluence when it agrees
+    gains = [max(closes[i] - closes[i - 1], 0) for i in range(len(closes) - 14, len(closes))]
+    losses = [max(closes[i - 1] - closes[i], 0) for i in range(len(closes) - 14, len(closes))]
+    avg_loss = sum(losses) / 14
+    rsi = 100.0 if avg_loss == 0 else 100 - 100 / (1 + (sum(gains) / 14) / avg_loss)
+    rsi_agrees = rsi > 50 if side == "long" else rsi < 50
+
+    stop = price - 8 if side == "long" else price + 8
+    tp1 = price + 10 if side == "long" else price - 10
+    tp2 = price + 20 if side == "long" else price - 20
+    signal_obj = Signal(
+        symbol="MNQ",
+        side=side,
+        entry_price=price,
+        stop_loss=round(stop, 2),
+        tp1=round(tp1, 2),
+        tp2=round(tp2, 2),
+        confluence_score=3 if rsi_agrees else 2,
+        components={"ema9_21_cross": True, "vwap_aligned": True, "rsi14": round(rsi, 1)},
+        trend_direction="bullish" if side == "long" else "bearish",
+        source="live_engine",
+    )
+    doc = signal_obj.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.signals.insert_one(doc)
+    signal_engine_state["total_signals"] += 1
+    signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
+    doc.pop("_id", None)
+    _asyncio.create_task(send_discord_signal(doc))
+    logger.info(f"LIVE ENGINE SIGNAL: {side.upper()} MNQ @ {price} (rsi={rsi:.1f})")
+    return signal_obj.id
 
 
 async def signal_resolver_loop() -> None:

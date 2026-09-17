@@ -47,7 +47,7 @@ def build_analytics_router(db: Any) -> APIRouter:
         if tier not in VALID_TIERS:
             raise HTTPException(status_code=400, detail=f"Invalid tier. Use one of: {sorted(VALID_TIERS)}")
         email = body.email.lower().strip()
-        res = await db.users.update_one({"email": email}, {"$set": {"tier": tier}})
+        res = await db.users.update_one({"email": email}, {"$set": {"tier": tier, "tier_manual": True}})
         if res.matched_count == 0:
             raise HTTPException(status_code=404, detail="User not found")
         await db.subscribers.update_one({"email": email}, {"$set": {"tier": tier}})

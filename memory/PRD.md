@@ -224,6 +224,10 @@
     - Open Position card in ExecutionPanel (open-position-card): side/qty badge, live unrealized P&L in $ (pts × $2 × qty) and points, AVG ENTRY / MARK / VALUE-PT, CLOSE POSITION button; renders whenever operator state has a position
     - PENDING USER DECISION: AI copilot — ChatGPT via Emergent key (no setup) vs Grok (needs user xAI key) vs both
 
+40. **Live Signal Engine + Elite tier restored** (2026-09-17, self-tested: curl + direct eval, zero errors):
+    - live_signal_engine_loop() (60s): server-side Scalp Punch on live 1m MNQ candles — EMA9/EMA21 cross + VWAP alignment fires a real signal (RSI14 agreement → confluence 3/A+ else 2/B), stop ±8 / TP1 ±10 / TP2 ±20, source="live_engine", Discord notify, guards: kill switch, one active signal at a time, 10-min cooldown. Works with resolver (auto win/loss) + dashboard sound alerts = fully autonomous live signal pipeline, no TradingView required
+    - Elite fix: tier editor + manual sets now write tier_manual=True; auth self-heal skips tier_manual users (owner keeps Elite through restarts). Both admin accounts set elite+manual in preview; verified persists after restart. PROD: after redeploy user sets own tier via /admin dropdown (now sticks)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

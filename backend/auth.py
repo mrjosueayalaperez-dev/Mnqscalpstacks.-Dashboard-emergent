@@ -156,7 +156,8 @@ async def seed_admin(db: Any) -> None:
             {"$set": {"role": "admin"}},
         )
     # Self-heal: earlier versions force-set tier=elite on admins — revert unless actually paid
-    async for admin in db.users.find({"role": "admin", "tier": "elite"}, {"_id": 0, "email": 1}):
+    # or manually assigned via the admin Tier Editor (tier_manual flag).
+    async for admin in db.users.find({"role": "admin", "tier": "elite", "tier_manual": {"$ne": True}}, {"_id": 0, "email": 1}):
         paid = await db.payment_transactions.find_one(
             {"payment_status": "paid", "$or": [{"email": admin["email"]}, {"metadata.email": admin["email"]}]},
             {"_id": 1},
