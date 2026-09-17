@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "sonner";
-import { CheckSquare, Share2, Shield, XCircle, Zap } from "lucide-react";
+import { CheckSquare, Share2, Shield, Volume2, VolumeX, XCircle, Zap } from "lucide-react";
 import useMnqLive from "@/components/operator/useMnqLive";
 import { shareTradeCard } from "@/lib/shareCard";
+import { playSignalSound } from "@/lib/signalSound";
 import { ChartModeSwitcher } from "@/components/dashboard/ChartModeSwitcher";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -62,7 +63,26 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
   const [state, setState] = useState(null);
   const [signal, setSignal] = useState(null);
   const [busy, setBusy] = useState(false);
+  const [soundOn, setSoundOn] = useState(() => localStorage.getItem("signal_sound") !== "off");
   const cooldownRef = useRef(0);
+  const lastSignalIdRef = useRef(null);
+
+  // Distinct chime when a NEW signal fires
+  useEffect(() => {
+    if (!signal?.id) return;
+    if (lastSignalIdRef.current && lastSignalIdRef.current !== signal.id && soundOn) {
+      playSignalSound(signal.side);
+      toast.info(`New ${signal.side.toUpperCase()} signal @ ${fmt(signal.entry_price)}`);
+    }
+    lastSignalIdRef.current = signal.id;
+  }, [signal?.id, signal?.side, signal?.entry_price, soundOn]);
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    localStorage.setItem("signal_sound", next ? "on" : "off");
+    if (next) playSignalSound("long");
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -164,6 +184,14 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
               {state?.kill_switch ? "LOCKED" : risky ? "AT RISK" : "SAFE"} · ${Math.abs(state?.max_daily_loss ?? 100).toLocaleString()} limit · {state?.daily_trades ?? 0}/{state?.max_daily_trades ?? 20}
             </span>
             {onChartMode && <ChartModeSwitcher mode={chartMode} onChange={onChartMode} />}
+            <button
+              onClick={toggleSound}
+              aria-label="Toggle signal sound"
+              className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center border transition-colors ${soundOn ? "border-[#FFCC00]/50 bg-[#FFCC00]/10 text-[#FFCC00]" : "border-white/15 bg-white/5 text-zinc-500"}`}
+              data-testid="signal-sound-toggle"
+            >
+              {soundOn ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4" />}
+            </button>
           </div>
           <div className="flex items-center gap-1.5">
             <button
@@ -252,6 +280,48 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
           </button>
         </div>
       </div>
+
+      {/* OPEN POSITION — live execution data for what you're holding */}
+      {pos?.side && (() => {
+        const dir = pos.side === "LONG" ? 1 : -1;
+        const live = tick?.price;
+        const pts = typeof live === "number" && pos.avg_entry ? (live - pos.avg_entry) * dir : null;
+        const usd = pts !== null ? pts * 2 * (pos.qty || 1) : null;
+        const winning = (usd ?? 0) >= 0;
+        return (
+          <div
+            className={`border rounded-sm p-2.5 ${pos.side === "LONG" ? "border-[#34C759]/40 bg-[#34C759]/5" : "border-[#FF3B30]/40 bg-[#FF3B30]/5"}`}
+            data-testid="open-position-card"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className={`text-xs font-black ${pos.side === "LONG" ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
+                {pos.side === "LONG" ? "▲" : "▼"} OPEN {pos.side} · {pos.qty} MNQ
+              </span>
+              <span className={`font-mono text-sm font-black ${winning ? "text-[#34C759]" : "text-[#FF3B30]"}`} data-testid="open-position-pnl">
+                {usd !== null ? `${winning ? "+" : "-"}$${Math.abs(usd).toFixed(2)}` : "—"}
+                <span className="text-[0.6rem] text-zinc-400 font-bold ml-1">
+                  ({pts !== null ? `${pts >= 0 ? "+" : ""}${pts.toFixed(2)} pts` : "—"})
+                </span>
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-1.5">
+              <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[0.6rem] font-mono text-zinc-400">
+                <span>AVG ENTRY <span className="text-white font-bold">{fmt(pos.avg_entry)}</span></span>
+                <span>MARK <span className="text-white font-bold">{fmt(live)}</span></span>
+                <span>VALUE/PT <span className="text-white font-bold">${(2 * (pos.qty || 1)).toFixed(0)}</span></span>
+              </div>
+              <button
+                onClick={closePosition}
+                disabled={busy}
+                className="px-3 py-1 text-[0.6rem] font-black tracking-wider rounded-sm bg-white/10 hover:bg-white/20 text-white transition-colors disabled:opacity-50"
+                data-testid="open-position-close-btn"
+              >
+                CLOSE POSITION
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       <SignalCard signal={signal} onExecute={placeOrder} busy={busy} />
     </div>

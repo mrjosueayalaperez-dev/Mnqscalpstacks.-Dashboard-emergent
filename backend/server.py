@@ -2696,6 +2696,47 @@ async def seed_auth() -> None:
     await db.login_attempts.create_index("identifier")
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
+    _asyncio.create_task(signal_resolver_loop())
+
+
+async def signal_resolver_loop() -> None:
+    """Auto-resolve active signals against the live MNQ price every 30s."""
+    while True:
+        try:
+            await resolve_active_signals()
+        except Exception as e:
+            logger.error(f"Signal resolver error: {e}")
+        await _asyncio.sleep(30)
+
+
+async def resolve_active_signals() -> int:
+    price = get_last_mnq().get("price") or (await refresh_mnq()).get("price")
+    if not price:
+        return 0
+    resolved = 0
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    async for s in db.signals.find({"status": "active"}):
+        entry, stop, tp1 = s.get("entry_price"), s.get("stop_loss"), s.get("tp1")
+        if not all(isinstance(v, (int, float)) for v in (entry, stop, tp1)):
+            continue
+        long = s.get("side") == "long"
+        update = None
+        if (long and price >= tp1) or (not long and price <= tp1):
+            pts = round((tp1 - entry) if long else (entry - tp1), 2)
+            update = {"status": "hit_tp1", "outcome": "win", "pnl_points": pts}
+        elif (long and price <= stop) or (not long and price >= stop):
+            pts = round((stop - entry) if long else (entry - stop), 2)
+            update = {"status": "stopped", "outcome": "loss", "pnl_points": pts}
+        elif (s.get("created_at") or "") < cutoff:
+            update = {"status": "expired"}
+        if update:
+            update["resolved_at"] = datetime.now(timezone.utc).isoformat()
+            update["resolved_price"] = price
+            await db.signals.update_one({"id": s["id"]}, {"$set": update})
+            resolved += 1
+    if resolved:
+        logger.info(f"Signal resolver: {resolved} signal(s) resolved at {price}")
+    return resolved
 
 
 async def purge_stale_market_data() -> None:

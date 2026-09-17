@@ -218,6 +218,12 @@
     - Chart-mode switcher icon: ArrowLeftRight → Copy (iPhone-style two squares) per user request; same blue circle + bottom sheet
     - Daily loss safeguard: -1000 → **-100** (operator state + ExecutionPanel pill now "SAFE · $100 limit"; in-memory, applies on restart/redeploy)
 
+39. **Sound alerts + Signal Resolver + Open Position display** (2026-09-17, self-tested: curl + mobile screenshot, session reset after test):
+    - Sound: lib/signalSound.js Web Audio chime (ascending=long, descending=short) fires when a NEW active signal id appears in ExecutionPanel; toggle button (signal-sound-toggle, localStorage "signal_sound", plays preview on enable). Browser requires one user interaction before audio plays
+    - Signal Resolver: signal_resolver_loop() background task (30s) auto-resolves active signals vs live price → hit_tp1/win, stopped/loss (pnl_points, resolved_at/resolved_price), expires >24h; feeds WinStreakStrip automatically. Verified: resolved 1 signal on first pass
+    - Open Position card in ExecutionPanel (open-position-card): side/qty badge, live unrealized P&L in $ (pts × $2 × qty) and points, AVG ENTRY / MARK / VALUE-PT, CLOSE POSITION button; renders whenever operator state has a position
+    - PENDING USER DECISION: AI copilot — ChatGPT via Emergent key (no setup) vs Grok (needs user xAI key) vs both
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
