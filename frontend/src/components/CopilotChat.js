@@ -15,18 +15,31 @@ const getSessionId = () => {
 
 const SUGGESTIONS = ["What's the current setup?", "Explain the active signal", "How's my session going?"];
 
+const GPT_MODELS = [
+  { id: "gpt-5.6-sol", label: "GPT-5.6 Sol" },
+  { id: "gpt-5.5", label: "GPT-5.5" },
+  { id: "gpt-5.4", label: "GPT-5.4" },
+  { id: "gpt-5.4-mini", label: "GPT-5.4 Mini" },
+];
+
 /** Scalp Copilot — streaming GPT chat with live desk context. */
 export const CopilotChat = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [provider, setProvider] = useState(() => localStorage.getItem("copilot_provider") || "gpt");
+  const [model, setModel] = useState(() => localStorage.getItem("copilot_model") || "gpt-5.4");
   const sessionId = useRef(getSessionId());
   const scrollRef = useRef(null);
 
   const pickProvider = (p) => {
     setProvider(p);
     localStorage.setItem("copilot_provider", p);
+  };
+
+  const pickModel = (m) => {
+    setModel(m);
+    localStorage.setItem("copilot_model", m);
   };
 
   useEffect(() => {
@@ -49,7 +62,7 @@ export const CopilotChat = () => {
       const res = await fetch(`${API}/copilot/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId.current, message: msg, provider }),
+        body: JSON.stringify({ session_id: sessionId.current, message: msg, provider, model }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
@@ -95,6 +108,18 @@ export const CopilotChat = () => {
             GROK
           </button>
         </div>
+        {provider === "gpt" && (
+          <select
+            value={model}
+            onChange={(e) => pickModel(e.target.value)}
+            className="bg-white/5 border border-white/10 rounded-sm px-1.5 py-0.5 text-[0.55rem] font-black text-[#007AFF] focus:outline-none focus:border-[#007AFF]/50 cursor-pointer"
+            data-testid="copilot-model-select"
+          >
+            {GPT_MODELS.map((m) => (
+              <option key={m.id} value={m.id} className="bg-[#0D0D0F] text-white">{m.label}</option>
+            ))}
+          </select>
+        )}
         <span className="text-[0.55rem] font-mono text-zinc-500">knows your live price, signal &amp; position</span>
       </div>
 

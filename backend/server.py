@@ -1352,10 +1352,14 @@ from emergentintegrations.llm.chat import TextDelta, StreamDone
 from fastapi.responses import StreamingResponse
 
 
+GPT_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"}
+
+
 class CopilotBody(BaseModel):
     session_id: str
     message: str
     provider: str = "gpt"
+    model: str = "gpt-5.4"
 
 
 async def _copilot_context() -> str:
@@ -1407,6 +1411,7 @@ async def copilot_chat(body: CopilotBody):
         f"CONVERSATION SO FAR:\n{transcript}"
     )
     use_grok = body.provider.lower() == "grok" and bool(os.environ.get("XAI_API_KEY"))
+    gpt_model = body.model if body.model in GPT_MODELS else "gpt-5.4"
 
     await db.copilot_messages.insert_one({
         "session_id": body.session_id, "role": "user", "content": msg,
@@ -1434,7 +1439,7 @@ async def copilot_chat(body: CopilotBody):
                     api_key=os.environ.get("EMERGENT_LLM_KEY", ""),
                     session_id=body.session_id,
                     system_message=system,
-                ).with_model("openai", "gpt-5.4")
+                ).with_model("openai", gpt_model)
                 async for ev in chat.stream_message(UserMessage(text=msg)):
                     if isinstance(ev, TextDelta):
                         parts.append(ev.content)
@@ -1449,6 +1454,7 @@ async def copilot_chat(body: CopilotBody):
                 await db.copilot_messages.insert_one({
                     "session_id": body.session_id, "role": "assistant", "content": "".join(parts),
                     "provider": "grok" if use_grok else "gpt",
+                    "model": "grok-4.6" if use_grok else gpt_model,
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
 

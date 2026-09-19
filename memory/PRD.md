@@ -254,6 +254,11 @@
     - CopilotChat header GPT/GROK pill toggle (localStorage copilot_provider; testids copilot-provider-toggle/-gpt/-grok)
     - Direct xAI smoke test passed ("OK"); Grok recalled price across turns (29917.25)
 
+45. **ChatGPT model selector in Scalp Copilot** (2026-09-22, self-tested: curl streamed gpt-5.4-mini + gpt-5.6-sol responses; screenshot verified dropdown show/hide/switch):
+    - CopilotBody now takes model (default gpt-5.4), whitelisted against GPT_MODELS in server.py (~1355): gpt-5.6-sol/-terra/-luna, gpt-5.5, gpt-5.4, gpt-5.4-mini; invalid values fall back to gpt-5.4; assistant msgs stored with model field
+    - CopilotChat.js: model dropdown (testid copilot-model-select) shown only when provider=gpt; labels GPT-5.6 Sol / GPT-5.5 / GPT-5.4 / GPT-5.4 Mini; persisted in localStorage copilot_model; sent in POST body
+    - All GPT models run on Emergent universal key; Grok path unchanged
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
