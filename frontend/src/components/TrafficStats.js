@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { BarChart3, DollarSign, Eye, Radio, TrendingUp, Users } from "lucide-react";
+import { ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -14,18 +15,56 @@ const Stat = ({ icon: Icon, label, value, accent = "text-white", testId }) => (
   </div>
 );
 
+const CHART_TOOLTIP = {
+  contentStyle: { background: "#121212", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 2, fontSize: 11 },
+  labelStyle: { color: "#a1a1aa" },
+};
+
+/** 14-day unique visitors (bars) + signups (line). */
+const DailyTrafficChart = ({ days }) => (
+  <div className="bg-[#121212] border border-white/10 rounded-sm p-3 mb-4" data-testid="traffic-daily-chart">
+    <span className="text-[0.55rem] uppercase tracking-wider text-zinc-500">Last 14 Days — Visitors &amp; Signups</span>
+    <div className="h-48 mt-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={days} margin={{ top: 5, right: 5, left: -25, bottom: 0 }}>
+          <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+          <XAxis
+            dataKey="date"
+            tickFormatter={(d) => d.slice(5).replace("-", "/")}
+            tick={{ fill: "#71717a", fontSize: 10 }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis allowDecimals={false} tick={{ fill: "#71717a", fontSize: 10 }} axisLine={false} tickLine={false} />
+          <Tooltip {...CHART_TOOLTIP} labelFormatter={(d) => d} cursor={{ fill: "rgba(255,255,255,0.04)" }} />
+          <Legend wrapperStyle={{ fontSize: 10 }} />
+          <Bar dataKey="visitors" name="Visitors" fill="#007AFF" radius={[2, 2, 0, 0]} maxBarSize={26} />
+          <Line dataKey="signups" name="Signups" stroke="#34C759" strokeWidth={2} dot={{ r: 2.5, fill: "#34C759" }} />
+        </ComposedChart>
+      </ResponsiveContainer>
+    </div>
+  </div>
+);
+
 /** Owner-only traffic + business KPIs (visitors, users, MRR, conversion). */
 export default function TrafficStats() {
   const [stats, setStats] = useState(null);
+  const [daily, setDaily] = useState(null);
 
   useEffect(() => {
     const load = () =>
       axios.get(`${API}/analytics/stats`)
         .then((r) => setStats(r.data))
         .catch((e) => console.error("Analytics stats error:", e));
+    const loadDaily = () =>
+      axios.get(`${API}/analytics/daily`, { params: { days: 14 } })
+        .then((r) => setDaily(r.data.days))
+        .catch(() => {});
     load();
+    loadDaily();
     const t = setInterval(load, 30000);
-    return () => clearInterval(t);
+    const td = setInterval(loadDaily, 120000);
+    return () => { clearInterval(t); clearInterval(td); };
   }, []);
 
   if (!stats) return null;
@@ -44,6 +83,7 @@ export default function TrafficStats() {
         <Stat icon={DollarSign} label="MRR" value={`$${stats.mrr.toLocaleString()}`} accent="text-[#34C759]" testId="stat-mrr" />
         <Stat icon={TrendingUp} label="Conversion" value={`${stats.conversion_rate}%`} testId="stat-conversion" />
       </div>
+      {daily && <DailyTrafficChart days={daily} />}
     </div>
   );
 }

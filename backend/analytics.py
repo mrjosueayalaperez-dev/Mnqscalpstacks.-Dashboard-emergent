@@ -95,6 +95,26 @@ def build_analytics_router(db: Any) -> APIRouter:
             "conversion_rate": conversion,
         }
 
+    @router.get("/daily", tags=["admin"])
+    async def analytics_daily(days: int = 14) -> Dict[str, Any]:
+        """Per-day unique visitors + signups for the admin traffic graph."""
+        days = max(1, min(days, 90))
+        today = datetime.now(timezone.utc).date()
+        dates = [(today - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(days - 1, -1, -1)]
+        visitors: Dict[str, int] = {}
+        pipeline = [
+            {"$match": {"date": {"$gte": dates[0]}}},
+            {"$group": {"_id": "$date", "v": {"$addToSet": "$visitor_id"}}},
+        ]
+        async for row in db.analytics_visits.aggregate(pipeline):
+            visitors[row["_id"]] = len(row["v"])
+        signups: Dict[str, int] = {}
+        async for u in db.users.find({}, {"_id": 0, "created_at": 1}):
+            d = str(u.get("created_at", ""))[:10]
+            if d >= dates[0]:
+                signups[d] = signups.get(d, 0) + 1
+        return {"days": [{"date": d, "visitors": visitors.get(d, 0), "signups": signups.get(d, 0)} for d in dates]}
+
     @router.get("/users", tags=["admin"])
     async def analytics_users() -> Dict[str, Any]:
         """Registered users list for the admin panel (no password hashes)."""

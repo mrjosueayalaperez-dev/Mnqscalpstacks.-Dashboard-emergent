@@ -269,6 +269,10 @@
     - Analytics presence: POST /api/analytics/heartbeat (60s ping from useVisitTracker) → db.presence; /api/analytics/stats returns online_now (last_seen within 2 min); TrafficStats shows green pulsing "Online Now" first cell (testid stat-online-now, grid now lg:grid-cols-9); verified showing 3
     - Deleted 9 test users + 3 test subscribers (regex ^test.*@example\.com) — Registered Users now 3 real accounts. NOTE: running tests/test_auth.py recreates a few; re-run cleanup if needed
 
+48. **14-day visitors & signups graph in admin** (2026-09-23, self-tested: curl 14-day payload + screenshot):
+    - GET /api/analytics/daily?days=14 (analytics.py) — per-day unique visitors (aggregate on analytics_visits.date) + signups (users.created_at prefix match)
+    - TrafficStats.js: DailyTrafficChart (recharts ComposedChart — blue visitor bars + green signup line, testid traffic-daily-chart) below the KPI grid; refreshes every 2 min
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
