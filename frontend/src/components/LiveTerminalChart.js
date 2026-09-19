@@ -4,6 +4,7 @@ import useMnqLive from "@/components/operator/useMnqLive";
 import { buildTvEmbedUrl } from "@/lib/tvEmbedUrl";
 
 const INTERVALS = [
+  { label: "5m+1m", tv: "stack" },
   { label: "1m", tv: "1" },
   { label: "5m", tv: "5" },
   { label: "15m", tv: "15" },
@@ -131,7 +132,11 @@ const SignalBar = ({ tick }) => {
  */
 export default function LiveTerminalChart() {
   const { tick, connected } = useMnqLive();
-  const [interval, setInterval_] = useState("1");
+  const [interval, setInterval_] = useState(() => localStorage.getItem("terminal_tf") || "stack");
+  const pickInterval = (tv) => {
+    setInterval_(tv);
+    localStorage.setItem("terminal_tf", tv);
+  };
 
   return (
     <div className="col-span-1 md:col-span-4 lg:col-span-12 bg-[#0D0D0F] border border-white/10 rounded-sm overflow-hidden" data-testid="live-terminal-chart">
@@ -163,7 +168,7 @@ export default function LiveTerminalChart() {
           {INTERVALS.map((iv) => (
             <button
               key={iv.tv}
-              onClick={() => setInterval_(iv.tv)}
+              onClick={() => pickInterval(iv.tv)}
               data-testid={`terminal-tf-${iv.label}`}
               className={`px-2 py-1 rounded-sm text-[0.6rem] font-mono font-bold tracking-wider transition-colors duration-150 ${
                 interval === iv.tv
@@ -195,13 +200,26 @@ export default function LiveTerminalChart() {
         </div>
       </div>
 
-      {/* Chart */}
-      <div className="relative w-full h-[420px] md:h-[560px] bg-[#0A0A0A]">
-        <TvEmbed interval={interval} />
-        <div className="absolute bottom-2 right-14 z-10 pointer-events-none select-none opacity-30">
-          <span className="text-[0.55rem] font-black tracking-widest text-white/40">MNQ • SCALP STACKS</span>
+      {/* Chart — stacked 5m over 1m (like the TV app) or a single timeframe */}
+      {interval === "stack" ? (
+        <div data-testid="terminal-chart-stack">
+          {[{ tv: "5", label: "5m · BIAS" }, { tv: "1", label: "1m · ENTRY" }].map((p) => (
+            <div key={p.tv} className="relative w-full h-[300px] md:h-[380px] bg-[#0A0A0A] border-b border-white/10 last:border-b-0">
+              <TvEmbed interval={p.tv} />
+              <div className="absolute bottom-8 left-14 z-10 pointer-events-none select-none px-1.5 py-0.5 rounded-sm bg-black/70 border border-white/10">
+                <span className="text-[0.55rem] font-black tracking-widest text-[#007AFF]">MNQ · {p.label}</span>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
+      ) : (
+        <div className="relative w-full h-[420px] md:h-[560px] bg-[#0A0A0A]">
+          <TvEmbed interval={interval} />
+          <div className="absolute bottom-2 right-14 z-10 pointer-events-none select-none opacity-30">
+            <span className="text-[0.55rem] font-black tracking-widest text-white/40">MNQ • SCALP STACKS</span>
+          </div>
+        </div>
+      )}
 
       <SignalBar tick={tick} />
     </div>

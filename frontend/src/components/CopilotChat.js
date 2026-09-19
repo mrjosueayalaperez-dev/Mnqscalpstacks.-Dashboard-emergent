@@ -44,7 +44,7 @@ export const CopilotChat = () => {
 
   useEffect(() => {
     axios.get(`${API}/copilot/history/${sessionId.current}`)
-      .then((r) => setMessages(r.data || []))
+      .then((r) => setMessages((r.data || []).map((m, idx) => ({ ...m, id: `h-${idx}-${m.created_at || ""}` }))))
       .catch(() => {});
   }, []);
 
@@ -57,7 +57,10 @@ export const CopilotChat = () => {
     if (!msg || busy) return;
     setInput("");
     setBusy(true);
-    setMessages((m) => [...m, { role: "user", content: msg }, { role: "assistant", content: "" }]);
+    setMessages((m) => {
+      const ts = Date.now();
+      return [...m, { id: `u-${ts}`, role: "user", content: msg }, { id: `a-${ts}`, role: "assistant", content: "" }];
+    });
     try {
       const res = await fetch(`${API}/copilot/chat`, {
         method: "POST",
@@ -130,7 +133,7 @@ export const CopilotChat = () => {
           </p>
         )}
         {messages.map((m, i) => (
-          <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+          <div key={m.id ?? `f-${i}`} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
             <div
               className={`max-w-[85%] px-2.5 py-1.5 rounded-sm text-xs leading-relaxed whitespace-pre-wrap ${
                 m.role === "user" ? "bg-[#007AFF] text-white" : "bg-white/5 border border-white/10 text-zinc-300"

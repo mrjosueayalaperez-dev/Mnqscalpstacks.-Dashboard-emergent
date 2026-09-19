@@ -22,8 +22,8 @@ export function buildTvEmbedUrl({ interval = "1", hideSideToolbar = true, withDa
     saveimage: "0",
     hideideas: "1",
   });
-  // Frame intraday intervals to the session so setup lines are in view
-  if (interval === "1" || interval === "5") params.set("range", "1D");
+  // Frame 5m to the session; leave 1m at default zoom (recent candles, like the TV app)
+  if (interval === "5") params.set("range", "1D");
   // Repeated `studies` params attach overlays (comma lists are ignored).
   params.append("studies", "MAExp@tv-basicstudies");
   params.append("studies", "VWAP@tv-basicstudies");

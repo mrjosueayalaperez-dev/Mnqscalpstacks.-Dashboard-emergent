@@ -27,6 +27,14 @@ import OrderFlowChart from "@/components/dashboard/OrderFlowChart";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+const TOAST_OPTIONS = {
+  style: {
+    background: "#121212",
+    border: "1px solid rgba(255,255,255,0.1)",
+    color: "#fff",
+  },
+};
+
 export default function Dashboard() {
   const [mnqData, setMnqData] = useState(null);
   const [checklist, setChecklist] = useState([]);
@@ -174,13 +182,7 @@ export default function Dashboard() {
     <div className="min-h-screen bg-[#0A0A0A]" data-testid="trading-app">
       <Toaster
         position="bottom-center"
-        toastOptions={{
-          style: {
-            background: "#121212",
-            border: "1px solid rgba(255,255,255,0.1)",
-            color: "#fff",
-          },
-        }}
+        toastOptions={TOAST_OPTIONS}
       />
       <Header onRefresh={handleRefreshAll} lastUpdate={lastUpdate} />
 

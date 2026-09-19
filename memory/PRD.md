@@ -259,6 +259,11 @@
     - CopilotChat.js: model dropdown (testid copilot-model-select) shown only when provider=gpt; labels GPT-5.6 Sol / GPT-5.5 / GPT-5.4 / GPT-5.4 Mini; persisted in localStorage copilot_model; sent in POST body
     - All GPT models run on Emergent universal key; Grok path unchanged
 
+46. **Stacked 5m+1m chart + code-review fixes** (2026-09-23, self-tested):
+    - LiveTerminalChart: new default "5m+1m" stacked view (5m BIAS top, 1m ENTRY bottom — matches user's TV app screenshot); tf choice persisted (localStorage terminal_tf); testid terminal-chart-stack; 1m no longer range=1D (default zoom = recent candles); badges bottom-left. NOTE: CME_MINI:MNQ1! re-verified BLOCKED in anonymous TV embeds ("only available on TradingView") — chart stays CAPITALCOM:US100 1:1 proxy; user's custom Pine "MNQ Scalp Punch v1" cannot load in embeds (EMA21+VWAP studies approximate it)
+    - Code review applied: admin creds in tests/test_auth.py + test_iteration14_cleanup.py now from backend/.env (21 tests pass); CopilotChat stable message keys (no index keys); AuthContext login/register/googleSession/logout in useCallback + provider value useMemo; Dashboard TOAST_OPTIONS hoisted; craco babel transform-remove-console (prod builds only, keeps console.error — verified 0 warn in bundle); signals_tradingview split into _parse_tv_alert + _resolve_punch_price helpers (re-verified: 401 bad secret, JSON punch created, loose-text+header created, 400 bad action; test signals cleaned)
+    - Review false positives documented: "72 missing hook deps" = 0 real ESLint exhaustive-deps violations (module consts/globals). Deferred (high regression risk on tested code): build_auth_router/analytics refactor, AdminPanel/ExecutionHub/AutoSignalEngine/HydroPilot component splits, type-hint backfill — see backlog
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
@@ -267,5 +272,6 @@
 ## Backlog
 - P0: USER ACTION — add rk_live_/sk_live_ key as STRIPE_LIVE_SECRET_KEY + register Stripe webhook to activate auto tier-upgrade (pipeline built, dormant)
 - P1: Refactor server.py (2000+ lines) into modular files (App.js already split)
+- P2: Code-review deferred items: build_auth_router (112 lines) + analytics router refactor; split AdminPanel/ExecutionHub/AutoSignalEngine/HydroPilot components; backend type hints (31% coverage)
 - P2: Live Broker API connection (replace simulator)
 - P2: Functional Google Pay via Stripe Payment Element

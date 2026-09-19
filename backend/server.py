@@ -1142,37 +1142,58 @@ async def _create_punch(side: str, price: float, interval: str = "1", source: st
     return {"status": "created", "signal_id": signal_obj.id, "side": side, "price": price, "is_test": is_test}
 
 
-@api_router.post("/signals/tradingview", tags=["signals"])
-async def signals_tradingview(request: Request):
-    """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
-    raw = (await request.body()).decode("utf-8", errors="ignore").strip()
-    action, symbol, interval, price, source, note = "", "MNQ1!", "1", None, "TradingView alert", ""
-    # Secret can also arrive via header or query (for plain-text TradingView alerts)
-    secret = request.headers.get("X-Webhook-Secret", "") or request.query_params.get("secret", "")
+def _parse_tv_alert(raw: str, fallback_secret: str) -> dict:
+    """Parse a TradingView alert body: strict JSON, else loose text ('BUY MNQ1! 29917.25')."""
+    out = {"action": "", "symbol": "MNQ1!", "interval": "1", "price": None,
+           "source": "TradingView alert", "note": "", "secret": fallback_secret}
     try:
         p = json.loads(raw)
-        secret = str(p.get("secret", "")) or secret
-        action = str(p.get("action", p.get("type", ""))).upper()
-        symbol = str(p.get("symbol", "MNQ1!")).upper()
-        interval = str(p.get("interval", "1"))
-        price = p.get("price")
-        source = str(p.get("source", "TradingView alert"))
-        note = str(p.get("note", ""))
+        out["secret"] = str(p.get("secret", "")) or fallback_secret
+        out["action"] = str(p.get("action", p.get("type", ""))).upper()
+        out["symbol"] = str(p.get("symbol", "MNQ1!")).upper()
+        out["interval"] = str(p.get("interval", "1"))
+        out["price"] = p.get("price")
+        out["source"] = str(p.get("source", "TradingView alert"))
+        out["note"] = str(p.get("note", ""))
     except (json.JSONDecodeError, AttributeError):
-        # Loose fallback: plain text like "BUY MNQ1! 29917.25"
         up = raw.upper()
-        action = "BUY" if "BUY" in up else "SELL" if "SELL" in up else "CLOSE" if "CLOSE" in up else ""
+        out["action"] = "BUY" if "BUY" in up else "SELL" if "SELL" in up else "CLOSE" if "CLOSE" in up else ""
         for tok in raw.replace(",", " ").split():
             try:
                 v = float(tok)
                 if v > 1000:
-                    price = v
+                    out["price"] = v
                     break
             except ValueError:
                 continue
-        note = raw[:120]
+        out["note"] = raw[:120]
+    return out
 
-    if SIGNAL_WEBHOOK_SECRET and secret != SIGNAL_WEBHOOK_SECRET:
+
+async def _resolve_punch_price(price, action: str, source: str) -> float:
+    """Coerce alert price to float, falling back to the live MNQ feed."""
+    try:
+        fp = float(price) if price else 0.0
+    except (TypeError, ValueError):
+        fp = 0.0
+    if not fp:
+        fp = get_last_mnq().get("price") or (await refresh_mnq()).get("price") or 0
+        if not fp:
+            await _log_signal_event(False, 422, "No price and live feed unavailable", action, source)
+            raise HTTPException(status_code=422, detail="No price available")
+    return float(fp)
+
+
+@api_router.post("/signals/tradingview", tags=["signals"])
+async def signals_tradingview(request: Request):
+    """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
+    raw = (await request.body()).decode("utf-8", errors="ignore").strip()
+    # Secret can also arrive via header or query (for plain-text TradingView alerts)
+    header_secret = request.headers.get("X-Webhook-Secret", "") or request.query_params.get("secret", "")
+    a = _parse_tv_alert(raw, header_secret)
+    action, symbol, interval, source, note = a["action"], a["symbol"], a["interval"], a["source"], a["note"]
+
+    if SIGNAL_WEBHOOK_SECRET and a["secret"] != SIGNAL_WEBHOOK_SECRET:
         await _log_signal_event(False, 401, "Bad or missing secret", action, source)
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
     if action not in ("BUY", "SELL", "CLOSE"):
@@ -1190,18 +1211,9 @@ async def signals_tradingview(request: Request):
         await _log_signal_event(True, 200, f"CLOSE: expired {r.modified_count} active", action, source)
         return {"status": "closed", "expired": r.modified_count}
 
-    try:
-        fp = float(price) if price else 0.0
-    except (TypeError, ValueError):
-        fp = 0.0
-    if not fp:
-        fp = get_last_mnq().get("price") or (await refresh_mnq()).get("price") or 0
-        if not fp:
-            await _log_signal_event(False, 422, "No price and live feed unavailable", action, source)
-            raise HTTPException(status_code=422, detail="No price available")
-
+    fp = await _resolve_punch_price(a["price"], action, source)
     side = "long" if action == "BUY" else "short"
-    result = await _create_punch(side, float(fp), interval, "webhook", note, f"{source} · {symbol} {interval}m", False)
+    result = await _create_punch(side, fp, interval, "webhook", note, f"{source} · {symbol} {interval}m", False)
     await _log_signal_event(result["status"] == "created", 200, f"{result['status']}: {action} @ {fp}", action, source)
     return result
 

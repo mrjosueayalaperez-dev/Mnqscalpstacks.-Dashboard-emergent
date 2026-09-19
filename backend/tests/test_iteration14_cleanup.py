@@ -2,11 +2,14 @@
 import os
 import requests
 import pytest
+from dotenv import load_dotenv
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://mnq-scalp-stack.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
-ADMIN_EMAIL = "operator@mnqscalpstacks.com"
-ADMIN_PASSWORD = "ScalpStacks!2026"
+_ENV = os.path.join(os.path.dirname(__file__), "..", ".env")
+load_dotenv(_ENV)
+ADMIN_EMAIL = os.environ["ADMIN_EMAIL"]
+ADMIN_PASSWORD = os.environ["ADMIN_PASSWORD"]
 
 
 @pytest.fixture(scope="session")

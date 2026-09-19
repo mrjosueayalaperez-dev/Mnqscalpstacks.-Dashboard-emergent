@@ -5,11 +5,13 @@ import subprocess
 import json
 import httpx
 import pytest
+from dotenv import load_dotenv
 
 BASE = os.environ["REACT_APP_BACKEND_URL"].rstrip("/")
 API = f"{BASE}/api"
-ADMIN_EMAIL = "operator@mnqscalpstacks.com"
-ADMIN_PASS = "ScalpStacks!2026"
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+ADMIN_EMAIL = os.environ["ADMIN_EMAIL"]
+ADMIN_PASS = os.environ["ADMIN_PASSWORD"]
 
 
 def _fresh_email(prefix="testauth"):

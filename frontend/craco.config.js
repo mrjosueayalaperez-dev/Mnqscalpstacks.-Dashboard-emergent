@@ -23,6 +23,9 @@ if (config.enableHealthCheck) {
 }
 
 let webpackConfig = {
+  babel: {
+    plugins: isDevServer ? [] : [["transform-remove-console", { exclude: ["error"] }]],
+  },
   eslint: {
     configure: {
       extends: ["plugin:react-hooks/recommended"],
