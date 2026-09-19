@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import axios from "axios";
-import { BarChart3, DollarSign, Eye, TrendingUp, Users } from "lucide-react";
+import { BarChart3, DollarSign, Eye, Radio, TrendingUp, Users } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -33,7 +33,8 @@ export default function TrafficStats() {
   return (
     <div data-testid="traffic-stats">
       <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-2">Traffic & Growth</h3>
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-2 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-9 gap-2 mb-4">
+        <Stat icon={Radio} label="Online Now" value={stats.online_now ?? 0} accent="text-[#34C759] animate-pulse" testId="stat-online-now" />
         <Stat icon={Eye} label="Unique Visitors" value={stats.visitors_total} testId="stat-visitors-total" />
         <Stat icon={Eye} label="Visitors Today" value={stats.visitors_today} accent="text-[#34C759]" testId="stat-visitors-today" />
         <Stat icon={BarChart3} label="Page Views" value={stats.page_views} testId="stat-page-views" />

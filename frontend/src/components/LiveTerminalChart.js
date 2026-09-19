@@ -204,7 +204,7 @@ export default function LiveTerminalChart() {
       {interval === "stack" ? (
         <div data-testid="terminal-chart-stack">
           {[{ tv: "5", label: "5m · BIAS" }, { tv: "1", label: "1m · ENTRY" }].map((p) => (
-            <div key={p.tv} className="relative w-full h-[300px] md:h-[380px] bg-[#0A0A0A] border-b border-white/10 last:border-b-0">
+            <div key={p.tv} className="relative w-full h-[340px] md:h-[430px] bg-[#0A0A0A] border-b border-white/10 last:border-b-0">
               <TvEmbed interval={p.tv} />
               <div className="absolute bottom-8 left-14 z-10 pointer-events-none select-none px-1.5 py-0.5 rounded-sm bg-black/70 border border-white/10">
                 <span className="text-[0.55rem] font-black tracking-widest text-[#007AFF]">MNQ · {p.label}</span>

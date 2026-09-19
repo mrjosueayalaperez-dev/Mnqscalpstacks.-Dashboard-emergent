@@ -24,10 +24,16 @@ export function buildTvEmbedUrl({ interval = "1", hideSideToolbar = true, withDa
   });
   // Frame 5m to the session; leave 1m at default zoom (recent candles, like the TV app)
   if (interval === "5") params.set("range", "1D");
-  // Repeated `studies` params attach overlays (comma lists are ignored).
-  params.append("studies", "MAExp@tv-basicstudies");
-  params.append("studies", "VWAP@tv-basicstudies");
-  // Stack spine: EMA length 21
-  params.set("studies_overrides", JSON.stringify({ "moving average exponential.length": 21 }));
+  // JSON studies array supports per-instance inputs (repeated params can't set two EMA lengths)
+  params.set("studies", JSON.stringify([
+    { id: "MAExp@tv-basicstudies", inputs: { length: 9 } },
+    { id: "MAExp@tv-basicstudies", inputs: { length: 21 } },
+    { id: "VWAP@tv-basicstudies" },
+    { id: "RSI@tv-basicstudies", inputs: { length: 14 } },
+  ]));
+  params.set("studies_overrides", JSON.stringify({
+    "moving average exponential.0.plot.color": "#FFCC00",
+    "moving average exponential.1.plot.color": "#FFFFFF",
+  }));
   return `https://www.tradingview-widget.com/widgetembed/?${params.toString()}`;
 }

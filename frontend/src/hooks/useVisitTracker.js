@@ -24,4 +24,13 @@ export default function useVisitTracker() {
     axios.post(`${API}/analytics/visit`, { visitor_id: visitorId(), path: location.pathname })
       .catch(() => sessionStorage.removeItem(key));
   }, [location.pathname]);
+
+  // Presence heartbeat — powers the admin "Online Now" counter
+  useEffect(() => {
+    const ping = () =>
+      axios.post(`${API}/analytics/heartbeat`, { visitor_id: visitorId(), path: window.location.pathname }).catch(() => {});
+    ping();
+    const t = setInterval(ping, 60000);
+    return () => clearInterval(t);
+  }, []);
 }

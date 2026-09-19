@@ -264,6 +264,11 @@
     - Code review applied: admin creds in tests/test_auth.py + test_iteration14_cleanup.py now from backend/.env (21 tests pass); CopilotChat stable message keys (no index keys); AuthContext login/register/googleSession/logout in useCallback + provider value useMemo; Dashboard TOAST_OPTIONS hoisted; craco babel transform-remove-console (prod builds only, keeps console.error — verified 0 warn in bundle); signals_tradingview split into _parse_tv_alert + _resolve_punch_price helpers (re-verified: 401 bad secret, JSON punch created, loose-text+header created, 400 bad action; test signals cleaned)
     - Review false positives documented: "72 missing hook deps" = 0 real ESLint exhaustive-deps violations (module consts/globals). Deferred (high regression risk on tested code): build_auth_router/analytics refactor, AdminPanel/ExecutionHub/AutoSignalEngine/HydroPilot component splits, type-hint backfill — see backlog
 
+47. **All indicators on charts + Online Now + test-user cleanup** (2026-09-23, self-tested via curl + screenshots):
+    - tvEmbedUrl.js: studies now JSON array with per-instance inputs — EMA9 (#FFCC00), EMA21 (#FFF), VWAP, RSI14 pane on every chart (repeated-param format couldn't set two EMA lengths); stacked panels grown to 340/430px for RSI pane; verified in legend on both 5m+1m mobile charts
+    - Analytics presence: POST /api/analytics/heartbeat (60s ping from useVisitTracker) → db.presence; /api/analytics/stats returns online_now (last_seen within 2 min); TrafficStats shows green pulsing "Online Now" first cell (testid stat-online-now, grid now lg:grid-cols-9); verified showing 3
+    - Deleted 9 test users + 3 test subscribers (regex ^test.*@example\.com) — Registered Users now 3 real accounts. NOTE: running tests/test_auth.py recreates a few; re-run cleanup if needed
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

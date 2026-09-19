@@ -1,5 +1,5 @@
 """Lightweight first-party analytics — unique visitors, page views, user counts."""
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, HTTPException, Request
@@ -37,6 +37,18 @@ def build_analytics_router(db: Any) -> APIRouter:
         )
         return {"ok": True}
 
+    @router.post("/heartbeat")
+    async def track_heartbeat(body: VisitBody) -> Dict[str, Any]:
+        """Presence ping (every 60s from the frontend) — powers the Online Now counter."""
+        if not body.visitor_id or len(body.visitor_id) > 64:
+            return {"ok": False}
+        await db.presence.update_one(
+            {"visitor_id": body.visitor_id},
+            {"$set": {"last_seen": datetime.now(timezone.utc).isoformat(), "path": body.path[:100]}},
+            upsert=True,
+        )
+        return {"ok": True}
+
     @router.patch("/users/tier")
     async def set_user_tier(body: TierBody, request: Request) -> Dict[str, Any]:
         """Admin-only: manually set a user's plan tier (users + subscribers)."""
@@ -67,7 +79,10 @@ def build_analytics_router(db: Any) -> APIRouter:
         paying = pro + elite
         mrr = pro * 49 + elite * 149
         conversion = round(min((paying / visitors_total) * 100, 100.0), 2) if visitors_total else 0.0
+        online_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=2)).isoformat()
+        online_now = await db.presence.count_documents({"last_seen": {"$gte": online_cutoff}})
         return {
+            "online_now": online_now,
             "total_users": total_users,
             "total_subscribers": total_subscribers,
             "visitors_total": visitors_total,
