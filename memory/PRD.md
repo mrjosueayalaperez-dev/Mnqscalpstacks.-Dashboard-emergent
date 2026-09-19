@@ -245,6 +245,9 @@
     - Verified: bad secret 401 + logged, curl BUY→LIVE punch, test-punch→PAPER card in UI immediately, receiver badge green, session-closed explanation visible
     - NOTE: engine signal source is Yahoo NQ=F futures (not Capital.com CFD — that's only the TV chart display)
 
+43. **Full regression (iteration_16) + hardening** (2026-09-21): Backend 17/17 pytest (tests/test_signal_pipeline_regression.py) + all curl probes pass; frontend ~98% (all testids/flows verified desktop+mobile; copilot streaming confirmed manually — agent used wrong selector). CLEARED FOR DEPLOY. Post-report fixes: loose-text webhook now accepts secret via X-Webhook-Secret header or ?secret= query (verified created); /api/signals/session-filter admin-gated (401 unauthed, works with admin cookie); regression test punches cleaned from DB. Deferred code-review notes: split server.py (3100+ lines) into routers; unify created_at representation in signals collection; admin-cookie variant of /api/operator/control/*.
+    - User pasted an external "scalp_copilot" CLI snippet (OPENAI_API_KEY/XAI_API_KEY local repo) — not related to this codebase; copilot here is server-side via Emergent key; Grok still awaits user's xai- key
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

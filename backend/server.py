@@ -1147,10 +1147,11 @@ async def signals_tradingview(request: Request):
     """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
     raw = (await request.body()).decode("utf-8", errors="ignore").strip()
     action, symbol, interval, price, source, note = "", "MNQ1!", "1", None, "TradingView alert", ""
-    secret = ""
+    # Secret can also arrive via header or query (for plain-text TradingView alerts)
+    secret = request.headers.get("X-Webhook-Secret", "") or request.query_params.get("secret", "")
     try:
         p = json.loads(raw)
-        secret = str(p.get("secret", ""))
+        secret = str(p.get("secret", "")) or secret
         action = str(p.get("action", p.get("type", ""))).upper()
         symbol = str(p.get("symbol", "MNQ1!")).upper()
         interval = str(p.get("interval", "1"))
@@ -1275,7 +1276,10 @@ class SessionFilterBody(BaseModel):
 
 
 @api_router.post("/signals/session-filter", tags=["signals"])
-async def signals_session_filter(body: SessionFilterBody):
+async def signals_session_filter(body: SessionFilterBody, request: Request):
+    actor = await auth_module.get_current_user(request, db)
+    if actor.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
     if body.session_filter is not None:
         signal_engine_state["session_filter"] = body.session_filter
     if body.globex is not None:
