@@ -28,19 +28,86 @@ const formatPrice = (p) =>
     ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
     : "0.00";
 
+// ===================== Receiver / Setup Panel =====================
+const etTime = (iso) => {
+  try { return new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", second: "2-digit" }) + " ET"; }
+  catch { return "—"; }
+};
+
+const ReceiverPanel = ({ rs, onTest, testing }) => {
+  const [copied, setCopied] = useState("");
+  if (!rs) return null;
+  const copy = (label, text) => {
+    navigator.clipboard.writeText(text);
+    setCopied(label);
+    toast.success(`${label} copied`);
+    setTimeout(() => setCopied(""), 1500);
+  };
+  const publicWebhookUrl = `${BACKEND_URL}/api/signals/tradingview`;
+  const eng = rs.engine || {};
+  return (
+    <div className="mb-3 p-3 bg-white/[0.03] border border-white/10 rounded-sm space-y-2" data-testid="receiver-panel">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[0.6rem] font-black border ${
+          rs.receiver_live ? "border-[#34C759]/50 text-[#34C759] bg-[#34C759]/10" : "border-[#FF3B30]/50 text-[#FF3B30] bg-[#FF3B30]/10"
+        }`} data-testid="receiver-live-badge">
+          <span className={`w-1.5 h-1.5 rounded-full ${rs.receiver_live ? "bg-[#34C759] animate-pulse" : "bg-[#FF3B30]"}`} />
+          {rs.receiver_live ? "RECEIVER LIVE" : "NO ALERTS RECEIVED"}
+        </span>
+        <span className={`text-[0.6rem] font-mono ${eng.session_open ? "text-[#34C759]" : "text-[#FFCC00]"}`} data-testid="session-status">
+          {eng.session_open ? `SESSION OPEN · ${eng.now_et}` : `SESSION CLOSED — signals paused · ${eng.now_et}`}
+        </span>
+      </div>
+
+      {rs.never_received && (
+        <p className="text-[0.65rem] text-zinc-400">No TradingView alerts have hit this server yet. Copy the webhook URL + alert message below into a TradingView alert to go live.</p>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        <button onClick={() => copy("Webhook URL", publicWebhookUrl)} className="flex items-center gap-1 px-2 py-1 text-[0.6rem] font-bold bg-[#007AFF]/15 text-[#007AFF] rounded-sm hover:bg-[#007AFF]/25" data-testid="copy-webhook-url-btn">
+          {copied === "Webhook URL" ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />} Webhook URL
+        </button>
+        <button onClick={() => copy("Alert message", rs.alert_template)} className="flex items-center gap-1 px-2 py-1 text-[0.6rem] font-bold bg-[#007AFF]/15 text-[#007AFF] rounded-sm hover:bg-[#007AFF]/25" data-testid="copy-alert-template-btn">
+          {copied === "Alert message" ? <CheckCircle className="w-3 h-3" /> : <Copy className="w-3 h-3" />} Alert Message
+        </button>
+        <button onClick={() => onTest("buy")} disabled={testing} className="px-2 py-1 text-[0.6rem] font-black bg-[#34C759]/15 text-[#34C759] rounded-sm hover:bg-[#34C759]/25 disabled:opacity-40" data-testid="test-buy-btn">
+          SEND TEST BUY
+        </button>
+        <button onClick={() => onTest("sell")} disabled={testing} className="px-2 py-1 text-[0.6rem] font-black bg-[#FF3B30]/15 text-[#FF3B30] rounded-sm hover:bg-[#FF3B30]/25 disabled:opacity-40" data-testid="test-sell-btn">
+          SEND TEST SELL
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-0.5 text-[0.55rem] font-mono text-zinc-500">
+        <span>Last inbound: <span className="text-zinc-300">{rs.last_inbound ? etTime(rs.last_inbound.ts) : "never"}</span></span>
+        <span>Last punch: <span className="text-[#34C759]">{rs.last_success ? etTime(rs.last_success.ts) : "none"}</span></span>
+        <span>Last failure: <span className="text-[#FF3B30]">{rs.last_failure ? `${rs.last_failure.status} ${rs.last_failure.detail}` : "none"}</span></span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-[0.55rem] font-mono text-zinc-500 border-t border-white/5 pt-1.5">
+        <span data-testid="engine-last-eval">ENGINE: <span className="text-zinc-300">{eng.last_eval ? eng.last_eval.reason : "waiting for first evaluation"}</span></span>
+        {eng.cooldown_remaining_sec > 0 && <span className="text-[#FFCC00]">cooldown {Math.ceil(eng.cooldown_remaining_sec / 60)}m</span>}
+        {!rs.discord_configured && <span className="text-[#FFCC00]">Discord not configured</span>}
+        {rs.secret_configured ? <span className="text-[#34C759]">secret ✓</span> : <span className="text-[#FFCC00]">no secret set</span>}
+      </div>
+    </div>
+  );
+};
+
 // ===================== Signal Feed =====================
 const SignalFeed = ({ signals, onUpdateSignal }) => {
   if (!signals.length)
     return (
       <div className="text-center text-zinc-500 py-10">
         <Radio className="w-8 h-8 mx-auto mb-2 opacity-40" />
-        <p className="text-sm">No signals yet — generate a test or connect TradingView</p>
+        <p className="text-sm">No signals yet — use SEND TEST BUY above or connect TradingView</p>
       </div>
     );
 
+  const sorted = [...signals].sort((a, b) => (a.is_test === b.is_test ? 0 : a.is_test ? 1 : -1));
   return (
     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-      {signals.map((sig) => {
+      {sorted.map((sig) => {
         const isLong = sig.side === "long";
         return (
           <div
@@ -62,17 +129,18 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
                   <TrendingDown className="w-5 h-5 text-[#FF3B30]" />
                 )}
                 <span className={`font-bold text-sm uppercase ${isLong ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
-                  {sig.side} {sig.symbol}
+                  {isLong ? "BUY" : "SELL"} MNQ1!
                 </span>
                 <span className="text-xs text-zinc-500 font-mono">
-                  Score: {sig.confluence_score}/3
+                  {sig.interval || "1"}m · {etTime(sig.created_at)}
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                {sig.source === "test" && (
-                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#FFCC00]/20 text-[#FFCC00] rounded">TEST</span>
-                )}
-                {sig.source === "webhook" && (
+                {sig.is_test || sig.source === "test" ? (
+                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#FFCC00]/20 text-[#FFCC00] rounded">PAPER TEST</span>
+                ) : sig.source === "live_engine" ? (
+                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#BF5AF2]/20 text-[#BF5AF2] rounded">ENGINE</span>
+                ) : (
                   <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#007AFF]/20 text-[#007AFF] rounded">LIVE</span>
                 )}
                 <span className={`text-[0.6rem] px-1.5 py-0.5 rounded ${
@@ -104,6 +172,11 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
                 <span className="text-[#34C759] glow-green">${formatPrice(sig.tp2)}</span>
               </div>
             </div>
+
+            {/* Reason line */}
+            {(sig.reason || sig.note) && (
+              <p className="mt-1.5 text-[0.6rem] text-zinc-500 font-mono truncate">{sig.reason || sig.note}</p>
+            )}
 
             {/* Components */}
             {sig.components && Object.keys(sig.components).length > 0 && (
@@ -288,21 +361,24 @@ const SignalDashboard = () => {
   const [killSwitch, setKillSwitch] = useState(false);
   const [pineData, setPineData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [receiverStatus, setReceiverStatus] = useState(null);
 
   const fetchAll = useCallback(async () => {
     try {
-      const [sigRes, statsRes, healthRes, killRes, pineRes] = await Promise.all([
+      const [sigRes, statsRes, healthRes, killRes, pineRes, rsRes] = await Promise.all([
         axios.get(`${API}/signals?limit=20`),
         axios.get(`${API}/signals/stats`),
         axios.get(`${API}/signals/health`),
         axios.get(`${API}/signals/kill-switch`),
         axios.get(`${API}/signals/pinescript`),
+        axios.get(`${API}/signals/receiver-status`),
       ]);
       setSignals(sigRes.data);
       setStats(statsRes.data);
       setHealth(healthRes.data);
       setKillSwitch(killRes.data.kill_switch);
       setPineData(pineRes.data);
+      setReceiverStatus(rsRes.data);
     } catch (e) {
       console.error("Signal fetch error:", e);
     }
@@ -310,9 +386,25 @@ const SignalDashboard = () => {
 
   useEffect(() => {
     fetchAll();
-    const interval = setInterval(fetchAll, 10000);
+    const interval = setInterval(fetchAll, 5000);
     return () => clearInterval(interval);
   }, [fetchAll]);
+
+  const handleTestPunch = async (side) => {
+    setLoading(true);
+    try {
+      const res = await axios.post(`${API}/signals/test-punch`, { side });
+      if (res.data.status === "created") {
+        toast.success(`PAPER ${side.toUpperCase()} punch injected`);
+        await fetchAll();
+      } else {
+        toast.error(res.data.reason || "Punch blocked");
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.detail || "Test punch failed");
+    }
+    setLoading(false);
+  };
 
   const handleTestSignal = async () => {
     setLoading(true);
@@ -385,6 +477,8 @@ const SignalDashboard = () => {
           </div>
         </div>
         <div className="widget-content">
+          <ReceiverPanel rs={receiverStatus} onTest={handleTestPunch} testing={loading} />
+
           {/* Stats row */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
             <div className="stat-box">

@@ -67,15 +67,16 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
   const cooldownRef = useRef(0);
   const lastSignalIdRef = useRef(null);
 
-  // Distinct chime when a NEW signal fires
+  // Distinct chime when a NEW LIVE signal fires (paper tests stay silent)
   useEffect(() => {
     if (!signal?.id) return;
-    if (lastSignalIdRef.current && lastSignalIdRef.current !== signal.id && soundOn) {
+    const isTest = signal.is_test || signal.source === "test";
+    if (lastSignalIdRef.current && lastSignalIdRef.current !== signal.id && soundOn && !isTest) {
       playSignalSound(signal.side);
       toast.info(`New ${signal.side.toUpperCase()} signal @ ${fmt(signal.entry_price)}`);
     }
     lastSignalIdRef.current = signal.id;
-  }, [signal?.id, signal?.side, signal?.entry_price, soundOn]);
+  }, [signal?.id, signal?.side, signal?.entry_price, signal?.is_test, signal?.source, soundOn]);
 
   const toggleSound = () => {
     const next = !soundOn;

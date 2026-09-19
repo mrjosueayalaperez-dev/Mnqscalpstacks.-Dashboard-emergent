@@ -235,6 +235,16 @@
     - Guardrails in prompt: education-only, no guarantees, plain text, mentions $100 lockout
     - Grok deferred (needs user xAI key); Stripe links/key deferred by user ("do that later")
 
+42. **Signal pipeline repair — full punch pipeline** (2026-09-19, self-tested against user's acceptance list: all pass):
+    - POST /api/signals/tradingview (primary inbound): strict JSON (secret/action/symbol/interval/price/time/source/note) + loose text fallback ("SELL MNQ1! 29900"); SIGNAL_WEBHOOK_SECRET in backend/.env (generated 2b2d...) validated → 401 logged on bad auth; symbols MNQ1!/NQ1!/CME_MINI:* mapped to MNQ; CLOSE expires actives; missing price → live feed; responds <2s (Discord via async task)
+    - Shared _create_punch(): dedupe (3-min same-side cooldown), persist (interval/note/reason/is_test fields), Discord fanout (PAPER tagged for tests); every inbound logged to db.signal_events (GET /api/signals/events)
+    - POST /api/signals/test-punch {side}: paper punch through same pipeline; startup seeds PAPER BUY+SELL if signals table empty
+    - GET /api/signals/receiver-status: receiver_live (15-min window), last inbound/success/failure, alert template, engine last_eval reason, cooldown countdown, session state, discord/secret configured; POST /api/signals/session-filter toggles RTH filter + Globex
+    - Engine upgraded: session window 9:30–16:00 ET (globex toggle), 5m EMA21 bias check, 3-min cooldown, per-minute no-trade reasons logged + surfaced ("no EMA9/21 cross", "against 5m bias", "no VWAP reclaim", "session closed")
+    - Signals tab: ReceiverPanel (live/idle badge, copy webhook URL [public REACT_APP_BACKEND_URL] + TradingView alert JSON, SEND TEST BUY/SELL, last-times, engine reason, cooldown); cards show BUY/SELL MNQ1!, timeframe, ET time, source badges (LIVE/ENGINE/PAPER TEST), reason line; LIVE sorted above tests; poll 5s; sound/toast only for non-test punches
+    - Verified: bad secret 401 + logged, curl BUY→LIVE punch, test-punch→PAPER card in UI immediately, receiver badge green, session-closed explanation visible
+    - NOTE: engine signal source is Yahoo NQ=F futures (not Capital.com CFD — that's only the TV chart display)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

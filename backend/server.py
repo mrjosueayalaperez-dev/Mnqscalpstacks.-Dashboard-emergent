@@ -73,6 +73,10 @@ signal_engine_state = {
     "errors": 0,
     "last_signal_time": None,
     "last_error": None,
+    "session_filter": True,
+    "globex": False,
+    "cooldown_min": 3,
+    "last_eval": None,
 }
 
 # Create the main app with a proper title (drives the OpenAPI spec Retool consumes)
@@ -1090,6 +1094,199 @@ async def get_signals(limit: int = 50, status: Optional[str] = None):
         query["status"] = status
     signals = await db.signals.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return signals
+
+
+# ============== Signal Punch Pipeline (webhook + engine + tests) ==============
+
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
+SIGNAL_WEBHOOK_SECRET = os.environ.get("SIGNAL_WEBHOOK_SECRET", "")
+SYMBOL_MAP = {"MNQ1!": "MNQ", "NQ1!": "MNQ", "MNQ": "MNQ", "NQ": "MNQ", "CME_MINI:MNQ1!": "MNQ", "CME_MINI:NQ1!": "MNQ"}
+
+
+async def _log_signal_event(ok: bool, status: int, detail: str, action: str = "", source: str = "") -> None:
+    await db.signal_events.insert_one({
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "ok": ok, "status": status, "detail": detail[:300], "action": action, "source": source,
+    })
+
+
+async def _create_punch(side: str, price: float, interval: str = "1", source: str = "webhook",
+                        note: str = "", reason: str = "", is_test: bool = False) -> Dict[str, Any]:
+    """Shared punch creator: dedupe, persist, fan out to Discord. Used by webhook, engine, and tests."""
+    if await check_duplicate_signal("MNQ", side, minutes=signal_engine_state["cooldown_min"]):
+        return {"status": "duplicate", "reason": f"Same-side signal within {signal_engine_state['cooldown_min']}m cooldown"}
+    stop = price - 8 if side == "long" else price + 8
+    tp1 = price + 10 if side == "long" else price - 10
+    tp2 = price + 20 if side == "long" else price - 20
+    signal_obj = Signal(
+        symbol="MNQ", side=side, entry_price=round(price, 2), stop_loss=round(stop, 2),
+        tp1=round(tp1, 2), tp2=round(tp2, 2),
+        confluence_score=2, components={"webhook": source == "webhook"},
+        trend_direction="bullish" if side == "long" else "bearish", source=source,
+    )
+    doc = signal_obj.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    doc["interval"] = interval
+    doc["note"] = note
+    doc["reason"] = reason or note
+    doc["is_test"] = is_test
+    await db.signals.insert_one(doc)
+    signal_engine_state["total_signals"] += 1
+    signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
+    doc.pop("_id", None)
+    if is_test:
+        doc["symbol"] = "MNQ (PAPER TEST)"
+    _asyncio.create_task(send_discord_signal(doc))
+    return {"status": "created", "signal_id": signal_obj.id, "side": side, "price": price, "is_test": is_test}
+
+
+@api_router.post("/signals/tradingview", tags=["signals"])
+async def signals_tradingview(request: Request):
+    """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
+    raw = (await request.body()).decode("utf-8", errors="ignore").strip()
+    action, symbol, interval, price, source, note = "", "MNQ1!", "1", None, "TradingView alert", ""
+    secret = ""
+    try:
+        p = json.loads(raw)
+        secret = str(p.get("secret", ""))
+        action = str(p.get("action", p.get("type", ""))).upper()
+        symbol = str(p.get("symbol", "MNQ1!")).upper()
+        interval = str(p.get("interval", "1"))
+        price = p.get("price")
+        source = str(p.get("source", "TradingView alert"))
+        note = str(p.get("note", ""))
+    except (json.JSONDecodeError, AttributeError):
+        # Loose fallback: plain text like "BUY MNQ1! 29917.25"
+        up = raw.upper()
+        action = "BUY" if "BUY" in up else "SELL" if "SELL" in up else "CLOSE" if "CLOSE" in up else ""
+        for tok in raw.replace(",", " ").split():
+            try:
+                v = float(tok)
+                if v > 1000:
+                    price = v
+                    break
+            except ValueError:
+                continue
+        note = raw[:120]
+
+    if SIGNAL_WEBHOOK_SECRET and secret != SIGNAL_WEBHOOK_SECRET:
+        await _log_signal_event(False, 401, "Bad or missing secret", action, source)
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    if action not in ("BUY", "SELL", "CLOSE"):
+        await _log_signal_event(False, 400, f"Unknown action: {action or raw[:60]}", action, source)
+        raise HTTPException(status_code=400, detail="action must be BUY, SELL, or CLOSE")
+    if symbol not in SYMBOL_MAP:
+        await _log_signal_event(False, 400, f"Unsupported symbol: {symbol}", action, source)
+        raise HTTPException(status_code=400, detail=f"Unsupported symbol {symbol} — use MNQ1! or NQ1!")
+    if signal_engine_state["kill_switch"]:
+        await _log_signal_event(False, 200, "Blocked: kill switch active", action, source)
+        return {"status": "blocked", "reason": "Kill switch active"}
+
+    if action == "CLOSE":
+        r = await db.signals.update_many({"status": "active"}, {"$set": {"status": "expired"}})
+        await _log_signal_event(True, 200, f"CLOSE: expired {r.modified_count} active", action, source)
+        return {"status": "closed", "expired": r.modified_count}
+
+    try:
+        fp = float(price) if price else 0.0
+    except (TypeError, ValueError):
+        fp = 0.0
+    if not fp:
+        fp = get_last_mnq().get("price") or (await refresh_mnq()).get("price") or 0
+        if not fp:
+            await _log_signal_event(False, 422, "No price and live feed unavailable", action, source)
+            raise HTTPException(status_code=422, detail="No price available")
+
+    side = "long" if action == "BUY" else "short"
+    result = await _create_punch(side, float(fp), interval, "webhook", note, f"{source} · {symbol} {interval}m", False)
+    await _log_signal_event(result["status"] == "created", 200, f"{result['status']}: {action} @ {fp}", action, source)
+    return result
+
+
+class TestPunchBody(BaseModel):
+    side: str = "long"
+
+
+@api_router.post("/signals/test-punch", tags=["signals"])
+async def signals_test_punch(body: TestPunchBody):
+    """Inject a PAPER test punch through the same pipeline (dashboard + Discord)."""
+    side = "long" if body.side.lower() in ("long", "buy") else "short"
+    price = get_last_mnq().get("price") or (await refresh_mnq()).get("price")
+    if not price:
+        raise HTTPException(status_code=422, detail="Live feed unavailable")
+    result = await _create_punch(side, float(price), "1", "test", "PAPER / SYSTEM TEST", "Manual pipeline test", True)
+    await _log_signal_event(result["status"] == "created", 200, f"test punch {side}: {result['status']}", side.upper(), "test-button")
+    return result
+
+
+@api_router.get("/signals/receiver-status", tags=["signals"])
+async def signals_receiver_status(request: Request) -> Dict[str, Any]:
+    """Everything the Signals tab needs to explain itself: receiver, engine, session, cooldown."""
+    base = str(request.base_url).rstrip("/")
+    if base.startswith("http://") and "localhost" not in base:
+        base = "https://" + base[len("http://"):]
+    last_in = await db.signal_events.find_one({}, {"_id": 0}, sort=[("ts", -1)])
+    last_ok = await db.signal_events.find_one({"ok": True}, {"_id": 0}, sort=[("ts", -1)])
+    last_fail = await db.signal_events.find_one({"ok": False}, {"_id": 0}, sort=[("ts", -1)])
+    live_cutoff = (datetime.now(timezone.utc) - timedelta(minutes=15)).isoformat()
+    cd = signal_engine_state["cooldown_min"]
+    cd_cut = (datetime.now(timezone.utc) - timedelta(minutes=cd)).isoformat()
+    recent = await db.signals.find_one({"created_at": {"$gt": cd_cut}}, {"_id": 0, "created_at": 1})
+    cooldown_remaining = 0
+    if recent:
+        elapsed = (datetime.now(timezone.utc) - datetime.fromisoformat(recent["created_at"])).total_seconds()
+        cooldown_remaining = max(0, int(cd * 60 - elapsed))
+    now_et = datetime.now(ET)
+    in_rth = now_et.weekday() < 5 and (9, 30) <= (now_et.hour, now_et.minute) < (16, 0)
+    session_open = True if (signal_engine_state["globex"] or not signal_engine_state["session_filter"]) else in_rth
+    alert_template = json.dumps({
+        "secret": SIGNAL_WEBHOOK_SECRET or "<set SIGNAL_WEBHOOK_SECRET>",
+        "action": "{{strategy.order.action}}", "symbol": "MNQ1!", "interval": "{{interval}}",
+        "price": "{{close}}", "time": "{{timenow}}", "source": "MNQ Scalp Punch v1",
+    }, indent=2)
+    return {
+        "webhook_url": f"{base}/api/signals/tradingview",
+        "secret_configured": bool(SIGNAL_WEBHOOK_SECRET),
+        "alert_template": alert_template,
+        "receiver_live": bool(last_in and last_in["ts"] > live_cutoff),
+        "last_inbound": last_in,
+        "last_success": last_ok,
+        "last_failure": last_fail,
+        "never_received": last_in is None,
+        "engine": {
+            "kill_switch": signal_engine_state["kill_switch"],
+            "last_eval": signal_engine_state.get("last_eval"),
+            "cooldown_min": cd,
+            "cooldown_remaining_sec": cooldown_remaining,
+            "session_filter": signal_engine_state["session_filter"],
+            "globex": signal_engine_state["globex"],
+            "session_open": session_open,
+            "now_et": now_et.strftime("%H:%M ET"),
+        },
+        "discord_configured": bool(os.environ.get("DISCORD_WEBHOOK_URL")),
+    }
+
+
+class SessionFilterBody(BaseModel):
+    session_filter: Optional[bool] = None
+    globex: Optional[bool] = None
+
+
+@api_router.post("/signals/session-filter", tags=["signals"])
+async def signals_session_filter(body: SessionFilterBody):
+    if body.session_filter is not None:
+        signal_engine_state["session_filter"] = body.session_filter
+    if body.globex is not None:
+        signal_engine_state["globex"] = body.globex
+    return {"session_filter": signal_engine_state["session_filter"], "globex": signal_engine_state["globex"]}
+
+
+@api_router.get("/signals/events", tags=["signals"])
+async def signals_events(limit: int = 30):
+    """Inbound webhook / pipeline event log."""
+    return await db.signal_events.find({}, {"_id": 0}).sort("ts", -1).to_list(min(limit, 100))
 
 
 @api_router.get("/signals/recent-results", tags=["public"])
@@ -2796,6 +2993,13 @@ async def seed_auth() -> None:
     await db.login_attempts.create_index("identifier")
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
+    # Prove the pipeline: seed one PAPER BUY + SELL if no signals exist at all
+    if await db.signals.count_documents({}) == 0:
+        price = get_last_mnq().get("price") or (await refresh_mnq()).get("price")
+        if price:
+            await _create_punch("long", float(price), "1", "test", "PAPER / SYSTEM TEST", "Startup pipeline check", True)
+            await _create_punch("short", float(price), "1", "test", "PAPER / SYSTEM TEST", "Startup pipeline check", True)
+            logger.info("Seeded PAPER test punches (empty signal table)")
     _asyncio.create_task(signal_resolver_loop())
     _asyncio.create_task(live_signal_engine_loop())
 
@@ -2812,14 +3016,23 @@ async def live_signal_engine_loop() -> None:
 
 
 async def evaluate_live_signal() -> Optional[str]:
+    def _no(reason: str) -> None:
+        signal_engine_state["last_eval"] = {"time": datetime.now(timezone.utc).isoformat(), "reason": reason}
+        logger.info(f"Engine no-trade: {reason}")
+        return None
+
     if signal_engine_state.get("kill_switch"):
-        return None
+        return _no("kill switch active")
+    # Session window: 9:30–16:00 ET unless Globex toggle or filter off
+    if signal_engine_state["session_filter"] and not signal_engine_state["globex"]:
+        now_et = datetime.now(ET)
+        if now_et.weekday() >= 5 or not ((9, 30) <= (now_et.hour, now_et.minute) < (16, 0)):
+            return _no("session closed — signals paused (RTH 9:30–16:00 ET)")
     if await db.signals.find_one({"status": "active"}, {"_id": 1}):
-        return None
-    # Cooldown: max one engine signal per 10 minutes
-    cooldown = (datetime.now(timezone.utc) - timedelta(minutes=10)).isoformat()
-    if await db.signals.find_one({"source": "live_engine", "created_at": {"$gt": cooldown}}, {"_id": 1}):
-        return None
+        return _no("an active signal already exists")
+    cooldown = (datetime.now(timezone.utc) - timedelta(minutes=signal_engine_state["cooldown_min"])).isoformat()
+    if await db.signals.find_one({"created_at": {"$gt": cooldown}}, {"_id": 1}):
+        return _no(f"cooldown — last punch under {signal_engine_state['cooldown_min']}m ago")
 
     from market_feed import get_bars
     bars = get_bars()
@@ -2828,29 +3041,41 @@ async def evaluate_live_signal() -> Optional[str]:
         bars = get_bars()
     agg = _aggregate_bars(bars, 60, 120) if bars else []
     if len(agg) < 30:
-        return None
+        return _no(f"warming up — only {len(agg)} 1m candles buffered")
 
     closes = [k["close"] for k in agg]
     ema9 = _series_ema(closes, 9)
     ema21 = _series_ema(closes, 21)
     vwap = _series_vwap(agg)
     if len(ema9) < 2 or len(ema21) < 2 or not vwap:
-        return None
+        return _no("indicators not ready")
     e9_prev, e9_now = ema9[-2], ema9[-1]
     e21_prev, e21_now = ema21[-2], ema21[-1]
     if None in (e9_prev, e9_now, e21_prev, e21_now):
-        return None
+        return _no("indicators not ready")
     price, vw = closes[-1], vwap[-1]
 
     cross_up = e9_prev <= e21_prev and e9_now > e21_now
     cross_down = e9_prev >= e21_prev and e9_now < e21_now
-    side = None
-    if cross_up and price > vw:
-        side = "long"
-    elif cross_down and price < vw:
-        side = "short"
-    if not side:
-        return None
+    if not cross_up and not cross_down:
+        spine = "above" if e9_now > e21_now else "below"
+        return _no(f"no EMA9/21 cross on last 1m bar (EMA9 {spine} EMA21 spine)")
+    side = "long" if cross_up else "short"
+    if side == "long" and price <= vw:
+        return _no("cross up but no VWAP reclaim (price below session VWAP)")
+    if side == "short" and price >= vw:
+        return _no("cross down but price above VWAP")
+
+    # 5-minute bias: price must agree with EMA21 on 5m
+    agg5 = _aggregate_bars(bars, 300, 60)
+    if len(agg5) >= 21:
+        closes5 = [k["close"] for k in agg5]
+        ema21_5 = _series_ema(closes5, 21)
+        if ema21_5 and ema21_5[-1] is not None:
+            if side == "long" and closes5[-1] < ema21_5[-1]:
+                return _no("cross up but against 5m bias (below 5m EMA21)")
+            if side == "short" and closes5[-1] > ema21_5[-1]:
+                return _no("cross down but against 5m bias (above 5m EMA21)")
 
     # RSI 14 as a condition — boosts confluence when it agrees
     gains = [max(closes[i] - closes[i - 1], 0) for i in range(len(closes) - 14, len(closes))]
@@ -2859,30 +3084,13 @@ async def evaluate_live_signal() -> Optional[str]:
     rsi = 100.0 if avg_loss == 0 else 100 - 100 / (1 + (sum(gains) / 14) / avg_loss)
     rsi_agrees = rsi > 50 if side == "long" else rsi < 50
 
-    stop = price - 8 if side == "long" else price + 8
-    tp1 = price + 10 if side == "long" else price - 10
-    tp2 = price + 20 if side == "long" else price - 20
-    signal_obj = Signal(
-        symbol="MNQ",
-        side=side,
-        entry_price=price,
-        stop_loss=round(stop, 2),
-        tp1=round(tp1, 2),
-        tp2=round(tp2, 2),
-        confluence_score=3 if rsi_agrees else 2,
-        components={"ema9_21_cross": True, "vwap_aligned": True, "rsi14": round(rsi, 1)},
-        trend_direction="bullish" if side == "long" else "bearish",
-        source="live_engine",
-    )
-    doc = signal_obj.model_dump()
-    doc["created_at"] = doc["created_at"].isoformat()
-    await db.signals.insert_one(doc)
-    signal_engine_state["total_signals"] += 1
-    signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
-    doc.pop("_id", None)
-    _asyncio.create_task(send_discord_signal(doc))
+    reason = f"EMA9/21 {'bull' if side == 'long' else 'bear'} cross + VWAP aligned + 5m bias OK (RSI {rsi:.0f})"
+    result = await _create_punch(side, price, "1", "live_engine", "", reason, False)
+    if result["status"] != "created":
+        return _no(result.get("reason", "duplicate"))
+    signal_engine_state["last_eval"] = {"time": datetime.now(timezone.utc).isoformat(), "reason": f"PUNCH FIRED: {side.upper()} @ {price}"}
     logger.info(f"LIVE ENGINE SIGNAL: {side.upper()} MNQ @ {price} (rsi={rsi:.1f})")
-    return signal_obj.id
+    return result["signal_id"]
 
 
 async def signal_resolver_loop() -> None:
