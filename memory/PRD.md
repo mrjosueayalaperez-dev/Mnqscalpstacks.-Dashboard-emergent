@@ -248,6 +248,12 @@
 43. **Full regression (iteration_16) + hardening** (2026-09-21): Backend 17/17 pytest (tests/test_signal_pipeline_regression.py) + all curl probes pass; frontend ~98% (all testids/flows verified desktop+mobile; copilot streaming confirmed manually — agent used wrong selector). CLEARED FOR DEPLOY. Post-report fixes: loose-text webhook now accepts secret via X-Webhook-Secret header or ?secret= query (verified created); /api/signals/session-filter admin-gated (401 unauthed, works with admin cookie); regression test punches cleaned from DB. Deferred code-review notes: split server.py (3100+ lines) into routers; unify created_at representation in signals collection; admin-cookie variant of /api/operator/control/*.
     - User pasted an external "scalp_copilot" CLI snippet (OPENAI_API_KEY/XAI_API_KEY local repo) — not related to this codebase; copilot here is server-side via Emergent key; Grok still awaits user's xai- key
 
+44. **Grok added to Scalp Copilot** (2026-09-22, self-tested: Grok multi-turn memory + GPT regression via curl, both pass):
+    - XAI_API_KEY (user-provided) in backend/.env — server-side only, never exposed to React
+    - POST /api/copilot/chat accepts provider "gpt" (default, GPT-5.4 via Emergent key) or "grok" (grok-4.6 via api.x.ai OpenAI-compatible streaming); same live desk context + transcript system message; assistant msgs stored with provider field
+    - CopilotChat header GPT/GROK pill toggle (localStorage copilot_provider; testids copilot-provider-toggle/-gpt/-grok)
+    - Direct xAI smoke test passed ("OK"); Grok recalled price across turns (29917.25)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

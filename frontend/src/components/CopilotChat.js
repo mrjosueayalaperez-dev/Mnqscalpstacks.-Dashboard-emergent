@@ -20,8 +20,14 @@ export const CopilotChat = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  const [provider, setProvider] = useState(() => localStorage.getItem("copilot_provider") || "gpt");
   const sessionId = useRef(getSessionId());
   const scrollRef = useRef(null);
+
+  const pickProvider = (p) => {
+    setProvider(p);
+    localStorage.setItem("copilot_provider", p);
+  };
 
   useEffect(() => {
     axios.get(`${API}/copilot/history/${sessionId.current}`)
@@ -43,7 +49,7 @@ export const CopilotChat = () => {
       const res = await fetch(`${API}/copilot/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId.current, message: msg }),
+        body: JSON.stringify({ session_id: sessionId.current, message: msg, provider }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
@@ -70,10 +76,26 @@ export const CopilotChat = () => {
 
   return (
     <div className="col-span-1 md:col-span-4 lg:col-span-12 bg-[#0D0D0F] border border-[#007AFF]/25 rounded-sm p-3" data-testid="copilot-chat">
-      <div className="flex items-center gap-2 mb-2">
+      <div className="flex flex-wrap items-center gap-2 mb-2">
         <Bot className="w-4 h-4 text-[#007AFF]" />
         <span className="text-xs font-black tracking-wider text-white">SCALP COPILOT</span>
-        <span className="text-[0.55rem] font-mono text-zinc-500">GPT · knows your live price, signal & position</span>
+        <div className="flex rounded-sm border border-white/10 overflow-hidden" data-testid="copilot-provider-toggle">
+          <button
+            onClick={() => pickProvider("gpt")}
+            className={`px-2 py-0.5 text-[0.55rem] font-black transition-colors ${provider === "gpt" ? "bg-[#007AFF] text-white" : "text-zinc-500 hover:text-white"}`}
+            data-testid="copilot-provider-gpt"
+          >
+            GPT
+          </button>
+          <button
+            onClick={() => pickProvider("grok")}
+            className={`px-2 py-0.5 text-[0.55rem] font-black transition-colors ${provider === "grok" ? "bg-[#BF5AF2] text-white" : "text-zinc-500 hover:text-white"}`}
+            data-testid="copilot-provider-grok"
+          >
+            GROK
+          </button>
+        </div>
+        <span className="text-[0.55rem] font-mono text-zinc-500">knows your live price, signal &amp; position</span>
       </div>
 
       <div ref={scrollRef} className="max-h-72 overflow-y-auto space-y-2 mb-2 pr-1" data-testid="copilot-messages">

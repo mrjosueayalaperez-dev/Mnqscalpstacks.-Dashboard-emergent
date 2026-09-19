@@ -1355,6 +1355,7 @@ from fastapi.responses import StreamingResponse
 class CopilotBody(BaseModel):
     session_id: str
     message: str
+    provider: str = "gpt"
 
 
 async def _copilot_context() -> str:
@@ -1405,11 +1406,7 @@ async def copilot_chat(body: CopilotBody):
         f"LIVE DESK CONTEXT (just fetched):\n{context}\n\n"
         f"CONVERSATION SO FAR:\n{transcript}"
     )
-    chat = LlmChat(
-        api_key=os.environ.get("EMERGENT_LLM_KEY", ""),
-        session_id=body.session_id,
-        system_message=system,
-    ).with_model("openai", "gpt-5.4")
+    use_grok = body.provider.lower() == "grok" and bool(os.environ.get("XAI_API_KEY"))
 
     await db.copilot_messages.insert_one({
         "session_id": body.session_id, "role": "user", "content": msg,
@@ -1419,19 +1416,39 @@ async def copilot_chat(body: CopilotBody):
     async def gen():
         parts = []
         try:
-            async for ev in chat.stream_message(UserMessage(text=msg)):
-                if isinstance(ev, TextDelta):
-                    parts.append(ev.content)
-                    yield ev.content
-                elif isinstance(ev, StreamDone):
-                    break
+            if use_grok:
+                from openai import AsyncOpenAI
+                xai = AsyncOpenAI(api_key=os.environ["XAI_API_KEY"], base_url="https://api.x.ai/v1", timeout=120.0)
+                stream = await xai.chat.completions.create(
+                    model="grok-4.6",
+                    messages=[{"role": "system", "content": system}, {"role": "user", "content": msg}],
+                    stream=True, temperature=0.3,
+                )
+                async for chunk in stream:
+                    delta = chunk.choices[0].delta.content if chunk.choices else None
+                    if delta:
+                        parts.append(delta)
+                        yield delta
+            else:
+                chat = LlmChat(
+                    api_key=os.environ.get("EMERGENT_LLM_KEY", ""),
+                    session_id=body.session_id,
+                    system_message=system,
+                ).with_model("openai", "gpt-5.4")
+                async for ev in chat.stream_message(UserMessage(text=msg)):
+                    if isinstance(ev, TextDelta):
+                        parts.append(ev.content)
+                        yield ev.content
+                    elif isinstance(ev, StreamDone):
+                        break
         except Exception as e:
-            logger.error(f"Copilot stream error: {e}")
+            logger.error(f"Copilot stream error ({'grok' if use_grok else 'gpt'}): {e}")
             yield "\n[Copilot hit an error — try again.]"
         finally:
             if parts:
                 await db.copilot_messages.insert_one({
                     "session_id": body.session_id, "role": "assistant", "content": "".join(parts),
+                    "provider": "grok" if use_grok else "gpt",
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 })
 
