@@ -2,8 +2,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Activity, Wifi, WifiOff, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import useMnqLive from "@/components/operator/useMnqLive";
 import { buildTvEmbedUrl } from "@/lib/tvEmbedUrl";
+import SignalChart from "@/components/dashboard/SignalChart";
 
 const INTERVALS = [
+  { label: "SIGNAL", tv: "signal" },
   { label: "5m+1m", tv: "stack" },
   { label: "1m", tv: "1" },
   { label: "5m", tv: "5" },
@@ -200,8 +202,19 @@ export default function LiveTerminalChart() {
         </div>
       </div>
 
-      {/* Chart — stacked 5m over 1m (like the TV app) or a single timeframe */}
-      {interval === "stack" ? (
+      {/* Chart — SIGNAL (native candles + signal level lines), stacked 5m/1m TV, or single TV timeframe */}
+      {interval === "signal" ? (
+        <div data-testid="terminal-signal-stack">
+          {[{ tf: "5m", label: "5m · BIAS" }, { tf: "1m", label: "1m · ENTRY" }].map((p) => (
+            <div key={p.tf} className="relative w-full h-[340px] md:h-[430px] bg-[#0A0A0A] border-b border-white/10 last:border-b-0">
+              <SignalChart interval={p.tf} />
+              <div className="absolute bottom-8 left-2 z-10 pointer-events-none select-none px-1.5 py-0.5 rounded-sm bg-black/70 border border-white/10">
+                <span className="text-[0.55rem] font-black tracking-widest text-[#007AFF]">MNQ · {p.label}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : interval === "stack" ? (
         <div data-testid="terminal-chart-stack">
           {[{ tv: "5", label: "5m · BIAS" }, { tv: "1", label: "1m · ENTRY" }].map((p) => (
             <div key={p.tv} className="relative w-full h-[340px] md:h-[430px] bg-[#0A0A0A] border-b border-white/10 last:border-b-0">

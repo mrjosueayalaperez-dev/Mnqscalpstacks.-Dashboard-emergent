@@ -282,6 +282,13 @@
 50. **Free Community Lab section on landing page** (2026-09-24, screenshot-verified):
     - LandingPage.js: CommunityLabSection between HowItWorks and LiveCounters — teal (#5eead4) lab branding, "FREE · NO SIGNUP" badge, feature chips, expectancy-calc teaser card, "OPEN THE FREE LAB" CTA → /community-lab (testids community-lab-section/-cta)
 
+51. **Signal lines overlay — SIGNAL chart view** (2026-09-24, self-tested: test punch drawn + cleaned, screenshot verified):
+    - New "SIGNAL" option (first) in MNQ Live Terminal timeframes → stacked 5m BIAS / 1m ENTRY native charts (lightweight-charts v5, components/dashboard/SignalChart.js) fed by /api/operator/candles (real Yahoo NQ=F bars) with EMA9/EMA21/VWAP lines
+    - Active signal's ENTRY (blue solid) / STOP (red dashed) / TP1 (green dashed) / TP2 (green dotted) drawn as price lines with axis labels + status badge; falls back to latest punch labeled "(LAST)"; polls candles 20s / signal 12s; times shifted to ET
+    - market_feed.py: Yahoo range=1d empty on non-trading days → falls back to range=5d trimmed to last session (fixes empty /operator/candles)
+    - GOTCHA fixed: lightweight-charts crashes on invalid navigator locale (headless "en-US@posix") — must pass localization.locale "en-US" in createChart
+    - TV iframes remain for stack/single views (cannot draw inside cross-origin embeds — native SIGNAL view is the drawing surface)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

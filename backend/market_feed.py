@@ -103,7 +103,16 @@ async def _fetch_yahoo() -> Optional[Dict[str, Any]]:
         async with httpx.AsyncClient(timeout=8) as client:
             r = await client.get(YAHOO_URL, params={"range": "1d", "interval": "1m"}, headers=HEADERS)
             r.raise_for_status()
-            return _parse_yahoo_response(r.json())
+            data = _parse_yahoo_response(r.json())
+            if data and not data["bars"]:
+                # Non-trading day: 1d comes back empty — pull the last session instead
+                r2 = await client.get(YAHOO_URL, params={"range": "5d", "interval": "1m"}, headers=HEADERS)
+                r2.raise_for_status()
+                d2 = _parse_yahoo_response(r2.json())
+                if d2 and d2["bars"]:
+                    cutoff = d2["bars"][-1]["time"] - 86400
+                    data["bars"] = [b for b in d2["bars"] if b["time"] > cutoff]
+            return data
     except Exception as e:
         logger.warning(f"yahoo fetch failed: {e}")
         return None
