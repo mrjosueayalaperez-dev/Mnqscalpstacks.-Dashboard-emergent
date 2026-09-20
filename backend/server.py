@@ -3049,6 +3049,14 @@ api_router.include_router(ati.build_ati_router(db, require_write_key))
 api_router.include_router(proof.build_proof_router(db, require_write_key))
 api_router.include_router(auth_module.build_auth_router(db))
 api_router.include_router(analytics.build_analytics_router(db))
+@api_router.post("/signals/daily-recap", tags=["admin"])
+async def trigger_daily_recap(request: Request) -> Dict[str, Any]:
+    actor = await auth_module.get_current_user(request, db)
+    if actor.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return await send_daily_recap(force=True)
+
+
 app.include_router(api_router)
 
 
@@ -3073,6 +3081,7 @@ async def seed_auth() -> None:
             logger.info("Seeded PAPER test punches (empty signal table)")
     _asyncio.create_task(signal_resolver_loop())
     _asyncio.create_task(live_signal_engine_loop())
+    _asyncio.create_task(daily_recap_loop())
 
 
 async def live_signal_engine_loop() -> None:
@@ -3162,6 +3171,54 @@ async def evaluate_live_signal() -> Optional[str]:
     signal_engine_state["last_eval"] = {"time": datetime.now(timezone.utc).isoformat(), "reason": f"PUNCH FIRED: {side.upper()} @ {price}"}
     logger.info(f"LIVE ENGINE SIGNAL: {side.upper()} MNQ @ {price} (rsi={rsi:.1f})")
     return result["signal_id"]
+
+
+async def send_daily_recap(force: bool = False) -> Dict[str, Any]:
+    """Nightly Discord summary: punches, wins, losses, net points for the ET day."""
+    now_et = datetime.now(ET)
+    day_start = now_et.replace(hour=0, minute=0, second=0, microsecond=0)
+    start_iso = day_start.astimezone(timezone.utc).isoformat()
+    sigs = await db.signals.find(
+        {"created_at": {"$gte": start_iso}, "is_test": {"$ne": True}}, {"_id": 0}
+    ).to_list(500)
+    punches = [s for s in sigs if s.get("side") in ("long", "short")]
+    holds = [s for s in sigs if s.get("side") == "hold"]
+    wins = [s for s in punches if s.get("outcome") == "win"]
+    losses = [s for s in punches if s.get("outcome") == "loss"]
+    open_ = [s for s in punches if s.get("status") == "active"]
+    net_pts = round(sum(s.get("pnl_points") or 0 for s in punches), 2)
+    summary = {"date": now_et.strftime("%Y-%m-%d"), "punches": len(punches), "wins": len(wins),
+               "losses": len(losses), "open": len(open_), "holds": len(holds), "net_points": net_pts}
+    if not punches and not force:
+        return {**summary, "posted": False}
+    sign = "+" if net_pts >= 0 else ""
+    notify.owner_alert(
+        f"📊 Daily Recap — {now_et.strftime('%a %b %d')} · {sign}{net_pts} pts net",
+        f"Punches: **{len(punches)}** · Wins: **{len(wins)}** ✅ · Losses: **{len(losses)}** 🛑\n"
+        f"Still open: {len(open_)} · Holds: {len(holds)}\n"
+        f"Net: **{sign}{net_pts} points** — every punch on the record.",
+        3066993 if net_pts >= 0 else 15105570,
+    )
+    return {**summary, "posted": True}
+
+
+async def daily_recap_loop() -> None:
+    """Fires the recap once per day at 17:00 ET (after RTH close + resolution)."""
+    while True:
+        try:
+            now_et = datetime.now(ET)
+            if now_et.hour == 17 and now_et.minute < 5:
+                today = now_et.strftime("%Y-%m-%d")
+                saved = await db.settings.find_one({"_id": "daily_recap"})
+                if not saved or saved.get("last_sent") != today:
+                    await send_daily_recap()
+                    await db.settings.update_one(
+                        {"_id": "daily_recap"}, {"$set": {"last_sent": today}}, upsert=True
+                    )
+                    logger.info("Daily recap sent")
+        except Exception as e:
+            logger.warning(f"daily recap loop error: {e}")
+        await _asyncio.sleep(60)
 
 
 async def signal_resolver_loop() -> None:

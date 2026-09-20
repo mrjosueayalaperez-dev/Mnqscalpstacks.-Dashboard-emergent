@@ -312,6 +312,12 @@
     - Resolver loss alerts: 🛑 STOPPED red Discord embed (entry → stop @ resolve price) for non-test losses, alongside ✅ WIN; verified via monkeypatched notify._post, test docs cleaned
     - Community Lab gating (CommunityLab.jsx rewritten): same-origin iframe hash watched every 500ms; FREE = Home/Probability Lab/Coins to Markets/Learning Center; LOCKED for non-paid = edge/practice/stack/observe/journal/progress → overlay (testid community-lab-lock-overlay) with UNLOCK (→/membership), LOG IN (guests), Back-to-free (#home); paid = tier pro/premium/elite or role admin/owner. Verified: guest locked on Edge Lab + back works; elite sees no overlay
 
+56. **Proof post + gallery + Daily Recap ping** (2026-09-24, self-tested):
+    - /app/marketing/PROOF_POST_2026-09-20.md — X + Discord posts for the +$82.30 Globex win (LONG 29,944.50→29,986.50, +42 pts, 1 contract, 9/20 6:15 PM), numbers verified vs screenshot
+    - Proof uploaded to preview gallery (id 97d0ee2b…, caption with full trade detail) — NOTE: proofs live in Mongo per-environment; user must re-upload on LIVE site via Admin → Proof Manager
+    - send_daily_recap + daily_recap_loop (server.py ~3160): auto-post at 17:00 ET (once/day, skips zero-punch days, db.settings last_sent guard); POST /api/signals/daily-recap (admin, force) — verified 401 unauth / admin returns summary + posts embed; embed = punches/wins/losses/open/holds/net pts, green if net≥0
+    - GOTCHA: routes added to api_router AFTER app.include_router(api_router) return 405 — new endpoints must be defined above line ~3052
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
