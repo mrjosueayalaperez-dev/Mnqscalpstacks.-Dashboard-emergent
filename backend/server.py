@@ -74,7 +74,7 @@ signal_engine_state = {
     "last_signal_time": None,
     "last_error": None,
     "session_filter": True,
-    "globex": False,
+    "globex": True,
     "cooldown_min": 3,
     "last_eval": None,
 }
@@ -1319,6 +1319,11 @@ async def signals_session_filter(body: SessionFilterBody, request: Request):
         signal_engine_state["session_filter"] = body.session_filter
     if body.globex is not None:
         signal_engine_state["globex"] = body.globex
+    await db.settings.update_one(
+        {"_id": "signal_engine"},
+        {"$set": {"session_filter": signal_engine_state["session_filter"], "globex": signal_engine_state["globex"]}},
+        upsert=True,
+    )
     return {"session_filter": signal_engine_state["session_filter"], "globex": signal_engine_state["globex"]}
 
 
@@ -3050,6 +3055,10 @@ app.include_router(api_router)
 @app.on_event("startup")
 async def seed_auth() -> None:
     await auth_module.seed_admin(db)
+    saved = await db.settings.find_one({"_id": "signal_engine"})
+    if saved:
+        signal_engine_state["session_filter"] = saved.get("session_filter", signal_engine_state["session_filter"])
+        signal_engine_state["globex"] = saved.get("globex", signal_engine_state["globex"])
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
@@ -3190,13 +3199,20 @@ async def resolve_active_signals() -> int:
             update["resolved_price"] = price
             await db.signals.update_one({"id": s["id"]}, {"$set": update})
             resolved += 1
-            if update.get("outcome") == "win" and not s.get("is_test"):
+            if not s.get("is_test"):
                 side = (s.get("side") or "").upper()
-                notify.owner_alert(
-                    f"✅ WIN — {side} MNQ +{update['pnl_points']} pts",
-                    f"Entry {entry} → TP1 {tp1} hit @ {price}\nAuto-resolved by the signal resolver.",
-                    3066993,
-                )
+                if update.get("outcome") == "win":
+                    notify.owner_alert(
+                        f"✅ WIN — {side} MNQ +{update['pnl_points']} pts",
+                        f"Entry {entry} → TP1 {tp1} hit @ {price}\nAuto-resolved by the signal resolver.",
+                        3066993,
+                    )
+                elif update.get("outcome") == "loss":
+                    notify.owner_alert(
+                        f"🛑 STOPPED — {side} MNQ {update['pnl_points']} pts",
+                        f"Entry {entry} → stop {stop} hit @ {price}\nAuto-resolved by the signal resolver. Full transparency — every punch on record.",
+                        15105570,
+                    )
     if resolved:
         logger.info(f"Signal resolver: {resolved} signal(s) resolved at {price}")
     return resolved

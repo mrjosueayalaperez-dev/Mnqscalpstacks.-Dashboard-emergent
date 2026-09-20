@@ -307,6 +307,11 @@
     - Pre-open sweep all green: live feed 29917.25 yahoo:NQ=F, webhook secret ✓, Discord ✓, kill switch OFF, flat position, 0/20 trades, -$100 limit armed, 0 stray active signals, frontend 200, copilot 200
     - NOTE: engine session filter = RTH 9:30-16:00 ET (session_open false outside RTH; globex flag off) — TradingView WEBHOOK punches work 24/5 regardless; only the internal engine waits for RTH unless globex enabled via /api/signals/session-filter
 
+55. **Globex mode + loss alerts + tier-gated lab** (2026-09-24, all self-tested):
+    - Globex ON: signal_engine_state default globex=True (prod deploys come up correct); /api/signals/session-filter now persists to db.settings {_id:"signal_engine"} and startup restores it; verified session_open=True + persisted doc
+    - Resolver loss alerts: 🛑 STOPPED red Discord embed (entry → stop @ resolve price) for non-test losses, alongside ✅ WIN; verified via monkeypatched notify._post, test docs cleaned
+    - Community Lab gating (CommunityLab.jsx rewritten): same-origin iframe hash watched every 500ms; FREE = Home/Probability Lab/Coins to Markets/Learning Center; LOCKED for non-paid = edge/practice/stack/observe/journal/progress → overlay (testid community-lab-lock-overlay) with UNLOCK (→/membership), LOG IN (guests), Back-to-free (#home); paid = tier pro/premium/elite or role admin/owner. Verified: guest locked on Edge Lab + back works; elite sees no overlay
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
