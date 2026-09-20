@@ -140,6 +140,16 @@ export default function LiveTerminalChart() {
     localStorage.setItem("terminal_tf", tv);
   };
 
+  // Auto-flip to SIGNAL view the moment a new LIVE punch fires (event from ExecutionPanel)
+  useEffect(() => {
+    const flip = () => {
+      setInterval_("signal");
+      localStorage.setItem("terminal_tf", "signal");
+    };
+    window.addEventListener("mnq:new-live-signal", flip);
+    return () => window.removeEventListener("mnq:new-live-signal", flip);
+  }, []);
+
   return (
     <div className="col-span-1 md:col-span-4 lg:col-span-12 bg-[#0D0D0F] border border-white/10 rounded-sm overflow-hidden" data-testid="live-terminal-chart">
       {/* Header row */}

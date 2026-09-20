@@ -71,9 +71,10 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
   useEffect(() => {
     if (!signal?.id) return;
     const isTest = signal.is_test || signal.source === "test";
-    if (lastSignalIdRef.current && lastSignalIdRef.current !== signal.id && soundOn && !isTest) {
-      playSignalSound(signal.side);
+    if (lastSignalIdRef.current && lastSignalIdRef.current !== signal.id && !isTest) {
+      if (soundOn) playSignalSound(signal.side);
       toast.info(`New ${signal.side.toUpperCase()} signal @ ${fmt(signal.entry_price)}`);
+      window.dispatchEvent(new CustomEvent("mnq:new-live-signal", { detail: { id: signal.id, side: signal.side } }));
     }
     lastSignalIdRef.current = signal.id;
   }, [signal?.id, signal?.side, signal?.entry_price, signal?.is_test, signal?.source, soundOn]);
@@ -92,7 +93,10 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
         axios.get(`${API}/signals?limit=1&status=active`),
       ]);
       setState(s.data);
-      setSignal(Array.isArray(sig.data) && sig.data.length ? sig.data[0] : null);
+      const next = Array.isArray(sig.data) && sig.data.length ? sig.data[0] : null;
+      // Arm the new-punch detector even when there's no active signal yet
+      if (next === null && lastSignalIdRef.current === null) lastSignalIdRef.current = "none";
+      setSignal(next);
     } catch (e) {
       console.warn("[Exec] refresh failed:", e?.message || e);
     }
