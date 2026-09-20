@@ -289,6 +289,13 @@
     - GOTCHA fixed: lightweight-charts crashes on invalid navigator locale (headless "en-US@posix") — must pass localization.locale "en-US" in createChart
     - TV iframes remain for stack/single views (cannot draw inside cross-origin embeds — native SIGNAL view is the drawing surface)
 
+52. **HOLD signal support** (2026-09-24, all acceptance tests pass via curl + UI screenshot; test signals cleaned):
+    - /api/signals/tradingview accepts BUY | SELL | HOLD | CLOSE; action normalized (strip+upper — "hold"/" Hold " → HOLD → 200); loose-text "HOLD ..." parsed; genuinely invalid actions still 400
+    - HOLD routes to _record_hold (server.py ~1115) BEFORE any execution: inserts db.signals doc {side:"hold", status:"held", executed:false}, returns 200 {ok, action:HOLD, executed:false, status:"held", message:"HOLD accepted — no order placed."}; zero orders/position/P&L (operator state verified flat)
+    - _create_punch guard: non long/short side → 400 "HOLD cannot execute an order"
+    - /api/signals/test-punch side:"hold" → same held response; SEND TEST HOLD button (amber, testid test-hold-btn) beside TEST BUY/SELL in SignalDashboard; toast "HOLD accepted — no trade placed."
+    - Hold cards: amber HOLD/WAIT badge + "Waiting for confirmation — no trade placed." (testid signal-hold-note-{id}), no entry/stop/TP values, no resolve buttons; resolver ignores status "held"
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

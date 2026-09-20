@@ -15,6 +15,7 @@ import {
   XCircle,
   Clock,
   Radio,
+  Minus,
   Code,
   ChevronDown,
   ChevronUp,
@@ -76,6 +77,9 @@ const ReceiverPanel = ({ rs, onTest, testing }) => {
         <button onClick={() => onTest("sell")} disabled={testing} className="px-2 py-1 text-[0.6rem] font-black bg-[#FF3B30]/15 text-[#FF3B30] rounded-sm hover:bg-[#FF3B30]/25 disabled:opacity-40" data-testid="test-sell-btn">
           SEND TEST SELL
         </button>
+        <button onClick={() => onTest("hold")} disabled={testing} className="px-2 py-1 text-[0.6rem] font-black bg-[#FFCC00]/15 text-[#FFCC00] rounded-sm hover:bg-[#FFCC00]/25 disabled:opacity-40" data-testid="test-hold-btn">
+          SEND TEST HOLD
+        </button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-3 gap-y-0.5 text-[0.55rem] font-mono text-zinc-500">
@@ -109,11 +113,14 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
     <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
       {sorted.map((sig) => {
         const isLong = sig.side === "long";
+        const isHold = sig.side === "hold";
         return (
           <div
             key={sig.id}
             className={`p-3 rounded-sm border transition-colors ${
-              sig.status === "active"
+              isHold
+                ? "border-[#FFCC00]/30 bg-[#FFCC00]/5 opacity-80"
+                : sig.status === "active"
                 ? isLong
                   ? "border-[#34C759]/40 bg-[#34C759]/5"
                   : "border-[#FF3B30]/40 bg-[#FF3B30]/5"
@@ -123,13 +130,15 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                {isLong ? (
+                {isHold ? (
+                  <Minus className="w-5 h-5 text-[#FFCC00]" />
+                ) : isLong ? (
                   <TrendingUp className="w-5 h-5 text-[#34C759]" />
                 ) : (
                   <TrendingDown className="w-5 h-5 text-[#FF3B30]" />
                 )}
-                <span className={`font-bold text-sm uppercase ${isLong ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
-                  {isLong ? "BUY" : "SELL"} MNQ1!
+                <span className={`font-bold text-sm uppercase ${isHold ? "text-[#FFCC00]" : isLong ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
+                  {isHold ? "HOLD / WAIT" : isLong ? "BUY" : "SELL"} MNQ1!
                 </span>
                 <span className="text-xs text-zinc-500 font-mono">
                   {sig.interval || "1"}m · {etTime(sig.created_at)}
@@ -144,6 +153,7 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
                   <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#007AFF]/20 text-[#007AFF] rounded">LIVE</span>
                 )}
                 <span className={`text-[0.6rem] px-1.5 py-0.5 rounded ${
+                  sig.status === "held" ? "bg-[#FFCC00]/20 text-[#FFCC00]" :
                   sig.status === "active" ? "bg-[#34C759]/20 text-[#34C759]" :
                   sig.outcome === "win" ? "bg-[#34C759]/20 text-[#34C759]" :
                   sig.outcome === "loss" ? "bg-[#FF3B30]/20 text-[#FF3B30]" :
@@ -154,6 +164,11 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
               </div>
             </div>
 
+            {isHold ? (
+              <p className="text-xs font-mono text-[#FFCC00]/80" data-testid={`signal-hold-note-${sig.id}`}>
+                Waiting for confirmation — no trade placed.
+              </p>
+            ) : (
             <div className="grid grid-cols-4 gap-2 text-xs font-mono">
               <div>
                 <span className="text-zinc-500 block">Entry</span>
@@ -172,6 +187,7 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
                 <span className="text-[#34C759] glow-green">${formatPrice(sig.tp2)}</span>
               </div>
             </div>
+            )}
 
             {/* Reason line */}
             {(sig.reason || sig.note) && (
@@ -396,6 +412,9 @@ const SignalDashboard = () => {
       const res = await axios.post(`${API}/signals/test-punch`, { side });
       if (res.data.status === "created") {
         toast.success(`PAPER ${side.toUpperCase()} punch injected`);
+        await fetchAll();
+      } else if (res.data.status === "held") {
+        toast.success("HOLD accepted — no trade placed.");
         await fetchAll();
       } else {
         toast.error(res.data.reason || "Punch blocked");

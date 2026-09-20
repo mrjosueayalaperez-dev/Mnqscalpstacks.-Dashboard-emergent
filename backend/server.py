@@ -1112,9 +1112,23 @@ async def _log_signal_event(ok: bool, status: int, detail: str, action: str = ""
     })
 
 
+async def _record_hold(source: str, note: str, is_test: bool) -> Dict[str, Any]:
+    """HOLD signal: recorded for the feed, never executed. No order, no position, no P&L."""
+    await db.signals.insert_one({
+        "id": str(uuid.uuid4()), "symbol": "MNQ", "side": "hold", "status": "held",
+        "action": "HOLD", "executed": False, "source": source, "interval": "1",
+        "note": note, "reason": note or "Waiting for confirmation", "is_test": is_test,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"ok": True, "action": "HOLD", "executed": False, "status": "held",
+            "message": "HOLD accepted — no order placed."}
+
+
 async def _create_punch(side: str, price: float, interval: str = "1", source: str = "webhook",
                         note: str = "", reason: str = "", is_test: bool = False) -> Dict[str, Any]:
     """Shared punch creator: dedupe, persist, fan out to Discord. Used by webhook, engine, and tests."""
+    if side not in ("long", "short"):
+        raise HTTPException(status_code=400, detail="HOLD cannot execute an order")
     if await check_duplicate_signal("MNQ", side, minutes=signal_engine_state["cooldown_min"]):
         return {"status": "duplicate", "reason": f"Same-side signal within {signal_engine_state['cooldown_min']}m cooldown"}
     stop = price - 8 if side == "long" else price + 8
@@ -1149,7 +1163,7 @@ def _parse_tv_alert(raw: str, fallback_secret: str) -> dict:
     try:
         p = json.loads(raw)
         out["secret"] = str(p.get("secret", "")) or fallback_secret
-        out["action"] = str(p.get("action", p.get("type", ""))).upper()
+        out["action"] = str(p.get("action", p.get("type", ""))).strip().upper()
         out["symbol"] = str(p.get("symbol", "MNQ1!")).upper()
         out["interval"] = str(p.get("interval", "1"))
         out["price"] = p.get("price")
@@ -1157,7 +1171,7 @@ def _parse_tv_alert(raw: str, fallback_secret: str) -> dict:
         out["note"] = str(p.get("note", ""))
     except (json.JSONDecodeError, AttributeError):
         up = raw.upper()
-        out["action"] = "BUY" if "BUY" in up else "SELL" if "SELL" in up else "CLOSE" if "CLOSE" in up else ""
+        out["action"] = "BUY" if "BUY" in up else "SELL" if "SELL" in up else "CLOSE" if "CLOSE" in up else "HOLD" if "HOLD" in up else ""
         for tok in raw.replace(",", " ").split():
             try:
                 v = float(tok)
@@ -1196,12 +1210,16 @@ async def signals_tradingview(request: Request):
     if SIGNAL_WEBHOOK_SECRET and a["secret"] != SIGNAL_WEBHOOK_SECRET:
         await _log_signal_event(False, 401, "Bad or missing secret", action, source)
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
-    if action not in ("BUY", "SELL", "CLOSE"):
+    if action not in ("BUY", "SELL", "CLOSE", "HOLD"):
         await _log_signal_event(False, 400, f"Unknown action: {action or raw[:60]}", action, source)
-        raise HTTPException(status_code=400, detail="action must be BUY, SELL, or CLOSE")
+        raise HTTPException(status_code=400, detail="action must be BUY, SELL, HOLD, or CLOSE")
     if symbol not in SYMBOL_MAP:
         await _log_signal_event(False, 400, f"Unsupported symbol: {symbol}", action, source)
         raise HTTPException(status_code=400, detail=f"Unsupported symbol {symbol} — use MNQ1! or NQ1!")
+    if action == "HOLD":
+        result = await _record_hold(source, note or "HOLD — waiting for confirmation", False)
+        await _log_signal_event(True, 200, "HOLD accepted — no trade placed.", action, source)
+        return result
     if signal_engine_state["kill_switch"]:
         await _log_signal_event(False, 200, "Blocked: kill switch active", action, source)
         return {"status": "blocked", "reason": "Kill switch active"}
@@ -1225,7 +1243,12 @@ class TestPunchBody(BaseModel):
 @api_router.post("/signals/test-punch", tags=["signals"])
 async def signals_test_punch(body: TestPunchBody):
     """Inject a PAPER test punch through the same pipeline (dashboard + Discord)."""
-    side = "long" if body.side.lower() in ("long", "buy") else "short"
+    s = body.side.strip().lower()
+    if s in ("hold", "wait"):
+        result = await _record_hold("test", "PAPER / SYSTEM TEST — HOLD", True)
+        await _log_signal_event(True, 200, "HOLD accepted — no trade placed.", "HOLD", "test-button")
+        return result
+    side = "long" if s in ("long", "buy") else "short"
     price = get_last_mnq().get("price") or (await refresh_mnq()).get("price")
     if not price:
         raise HTTPException(status_code=422, detail="Live feed unavailable")
