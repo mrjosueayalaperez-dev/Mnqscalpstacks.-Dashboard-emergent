@@ -296,6 +296,12 @@
     - /api/signals/test-punch side:"hold" → same held response; SEND TEST HOLD button (amber, testid test-hold-btn) beside TEST BUY/SELL in SignalDashboard; toast "HOLD accepted — no trade placed."
     - Hold cards: amber HOLD/WAIT badge + "Waiting for confirmation — no trade placed." (testid signal-hold-note-{id}), no entry/stop/TP values, no resolve buttons; resolver ignores status "held"
 
+53. **Auto-Switch On Punch** (2026-09-24, testing_agent iteration_17: 100% pass, flip observed ~6s after punch, cleanup done):
+    - ExecutionPanel.js: new-live-signal detector (existing chime condition) now also dispatches window CustomEvent "mnq:new-live-signal"; detector armed via lastSignalIdRef="none" in refresh() when no active signal exists (first punch from empty fires too); toast now shows regardless of sound setting
+    - LiveTerminalChart.js: listens for the event → flips interval to "signal" + persists localStorage terminal_tf
+    - is_test punches (test buttons) intentionally do NOT auto-switch — verified
+    - TESTING LESSON: punch must fire MID browser session; delayed background curls scheduled before screenshot_tool always lose the race to tool-queue latency — use testing_agent for fire-during-session flows
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

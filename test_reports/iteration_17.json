@@ -1,0 +1,22 @@
+{
+  "summary": "E2E 'Auto-Switch On Punch' verified successfully mid-session. Login → set terminal_tf=stack → reload → confirmed [data-testid='terminal-chart-stack'] visible & signal-stack absent. Fetched active side (long) and fired opposite SELL webhook to /api/signals/tradingview → 200 {status:'created', side:'short', is_test:false}. Within 6 seconds the terminal flipped: [data-testid='terminal-signal-stack'] appeared, [data-testid='terminal-chart-stack'] disappeared, toast 'New SHORT signal @ 29,917.25' visible in screenshot, localStorage.terminal_tf='signal', [data-testid='signal-chart-1m'] rendered with 7 canvases and visible ENTRY/STOP/TP1/TP2 price-line labels. Negative check: reset to stack, fired /api/signals/test-punch (is_test=true) — view did NOT flip, terminal_tf remained 'stack'. All created signals + pre-existing 'auto-switch e2e' leftovers cleaned from MongoDB.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Toast text scan via body.textContent returned false while screenshot clearly shows the toast — likely rendered in a portal outside the body traversal window at check time; not a bug, DOM confirms functionality via testids."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "operator@mnqscalpstacks.com / ScalpStacks!2026",
+  "seed_data_creation": "None. Cleaned up: 3 'auto-switch e2e' signals (including 2 pre-existing 2026-09-20 leftovers + 1 new SHORT) and 1 is_test punch created during negative check. Verified GET /api/signals?limit=3 no longer contains any 'auto-switch e2e' entries.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Auto-switch flow works end-to-end. Detector in ExecutionPanel.js + listener in LiveTerminalChart.js correctly dispatches 'mnq:new-live-signal' only for live (non-test) signals, and only after the 'none' baseline is armed. Poll interval ~5s → flip observed at ~6s. Test-punch (is_test=true) correctly excluded from auto-switch.",
+  "rca of the issue": "N/A — feature works. Prior 4 failed attempts were due to firing curl BEFORE the browser session (punch landed as the initial signal, no transition). Firing the webhook mid-session from within the Playwright script resolves this deterministically."
+}
