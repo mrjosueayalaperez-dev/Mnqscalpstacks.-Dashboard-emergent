@@ -4,6 +4,30 @@ Attach: Screenshot_20260920_182027_Plus500.webp (closed position detail)
 
 ---
 
+## TRADE 2 UPDATE (6:43 PM) — session thread / follow-up post
+
+**X follow-up (reply to the first post):**
+
+Trade 2, same session. ✅
+
+LONG MNQ @ 30,011.00 → flat @ 30,016.75
++5.75 pts · +$9.80 net
+
+Small win, zero drama. Two punches, two greens, done for the night.
+Session total: **+$92.10** on micro contracts.
+
+The rules don't care if it's $9 or $90 — follow them and log off.
+
+**Discord follow-up:**
+
+**✅ CLOSED — LONG MNQ +5.75 pts (+$9.80 net) — Trade 2**
+> Entry **30,011.00** → Exit **30,016.75** · 1 micro · 6:43 PM ET
+> Session: **2 wins / 0 losses · +$92.10 net**. Flat, done, see you at the open.
+
+*Educational only — not financial advice. Futures involve substantial risk of loss.*
+
+---
+
 ## X / Twitter (copy-paste)
 
 Sunday Globex open. First punch of the week. ✅
