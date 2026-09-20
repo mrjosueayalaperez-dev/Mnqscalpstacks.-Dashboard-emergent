@@ -9,7 +9,7 @@ import {
   Zap, TrendingUp, Target, Shield, ChevronRight, Check, X, Star, Crown,
   BarChart3, Clock, Activity, ArrowRight, Eye, Crosshair, Layers, Mail,
   User, Loader2, ExternalLink, AlertTriangle, Copy, Gift, Share2, Users,
-  ChevronDown, Flame,
+  ChevronDown, Flame, FlaskConical,
 } from "lucide-react";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
@@ -239,6 +239,58 @@ const HowItWorks = ({ sectionRef }) => (
     </div>
   </section>
 );
+
+// ======================== FREE COMMUNITY LAB ========================
+const CommunityLabSection = () => {
+  const ref = useReveal();
+  return (
+    <section ref={ref} className="py-14 md:py-20 px-5 md:px-6 bg-[#0A0A0A] reveal" data-testid="community-lab-section">
+      <div className="max-w-5xl mx-auto">
+        <div className="relative overflow-hidden rounded-sm border border-[#5eead4]/25 bg-gradient-to-br from-[#0a1220] to-[#0c111b] p-6 md:p-10">
+          <div className="absolute -top-16 -right-16 w-56 h-56 rounded-full bg-[#5eead4]/10 blur-3xl pointer-events-none" />
+          <div className="flex flex-col md:flex-row md:items-center gap-8">
+            <div className="flex-1">
+              <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-sm bg-[#5eead4]/10 border border-[#5eead4]/30 text-[#5eead4] text-[0.6rem] font-black tracking-widest uppercase">
+                <FlaskConical className="w-3 h-3" /> Free · No signup
+              </span>
+              <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white mt-4 mb-3">
+                Community Lab. <span className="text-[#5eead4]">Learn the odds before you risk a dime.</span>
+              </h2>
+              <p className="text-sm md:text-base text-zinc-400 leading-relaxed mb-6 max-w-xl">
+                A free practice lab for probability, expectancy, risk, and market observation. Run thousands of
+                simulated trades, test win-rate assumptions, and build the decision process — all educational, zero cost.
+              </p>
+              <div className="flex flex-wrap gap-1.5 mb-6">
+                {["Probability Lab", "Edge Lab Simulator", "Trade Path Practice", "Journal & Progress"].map((f) => (
+                  <span key={f} className="px-2 py-1 text-[0.6rem] font-bold text-zinc-300 bg-white/5 border border-white/10 rounded-sm">
+                    {f}
+                  </span>
+                ))}
+              </div>
+              <a
+                href="/community-lab"
+                className="inline-flex items-center gap-2 px-5 py-3 bg-[#5eead4] text-[#04201b] text-sm font-black rounded-sm hover:bg-[#7ff0de] transition-colors"
+                data-testid="community-lab-cta"
+              >
+                OPEN THE FREE LAB <ArrowRight className="w-4 h-4" />
+              </a>
+            </div>
+            <div className="hidden md:block w-64 flex-shrink-0">
+              <div className="border border-white/10 rounded-sm bg-[#07090e] p-4">
+                <span className="text-[0.55rem] uppercase tracking-widest text-zinc-500">Live expectancy calc</span>
+                <p className="font-mono text-2xl font-black text-[#5eead4] mt-2 mb-1">+0.375R</p>
+                <p className="text-[0.65rem] text-zinc-500 leading-relaxed">
+                  55% win rate × 1.5R avg win − 45% × 1R avg loss. Positive expectancy ≠ next trade wins — the Lab
+                  teaches why.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+};
 
 // ======================== REFERRAL BANNER ========================
 const ReferralBanner = ({ referralCode, onCopy }) => {
@@ -591,6 +643,7 @@ const LandingPage = () => {
         <Solution />
         <BeforeAfter />
         <HowItWorks sectionRef={howRef} />
+        <CommunityLabSection />
         <LiveCounters />
         <WinStreakStrip />
         <ProofGallery />

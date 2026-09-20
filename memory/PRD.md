@@ -279,6 +279,9 @@
     - "Community Lab" added to PublicLayout NAV + sitemap.xml
     - Verified: iframe renders 10-item lab nav, Edge Lab simulator interactive
 
+50. **Free Community Lab section on landing page** (2026-09-24, screenshot-verified):
+    - LandingPage.js: CommunityLabSection between HowItWorks and LiveCounters — teal (#5eead4) lab branding, "FREE · NO SIGNUP" badge, feature chips, expectancy-calc teaser card, "OPEN THE FREE LAB" CTA → /community-lab (testids community-lab-section/-cta)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
