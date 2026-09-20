@@ -302,6 +302,11 @@
     - is_test punches (test buttons) intentionally do NOT auto-switch — verified
     - TESTING LESSON: punch must fire MID browser session; delayed background curls scheduled before screenshot_tool always lose the race to tool-queue latency — use testing_agent for fire-during-session flows
 
+54. **Win Notifications + market-open readiness sweep** (2026-09-24, self-tested):
+    - resolve_active_signals (server.py ~3170): when resolver marks outcome "win" (non-test only) → notify.owner_alert green Discord embed "✅ WIN — LONG/SHORT MNQ +X pts" with entry/TP/resolve price; verified by monkeypatched _post capture (embed title correct, no real Discord spam), test doc cleaned
+    - Pre-open sweep all green: live feed 29917.25 yahoo:NQ=F, webhook secret ✓, Discord ✓, kill switch OFF, flat position, 0/20 trades, -$100 limit armed, 0 stray active signals, frontend 200, copilot 200
+    - NOTE: engine session filter = RTH 9:30-16:00 ET (session_open false outside RTH; globex flag off) — TradingView WEBHOOK punches work 24/5 regardless; only the internal engine waits for RTH unless globex enabled via /api/signals/session-filter
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

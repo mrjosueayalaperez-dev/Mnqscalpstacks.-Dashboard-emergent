@@ -3190,6 +3190,13 @@ async def resolve_active_signals() -> int:
             update["resolved_price"] = price
             await db.signals.update_one({"id": s["id"]}, {"$set": update})
             resolved += 1
+            if update.get("outcome") == "win" and not s.get("is_test"):
+                side = (s.get("side") or "").upper()
+                notify.owner_alert(
+                    f"✅ WIN — {side} MNQ +{update['pnl_points']} pts",
+                    f"Entry {entry} → TP1 {tp1} hit @ {price}\nAuto-resolved by the signal resolver.",
+                    3066993,
+                )
     if resolved:
         logger.info(f"Signal resolver: {resolved} signal(s) resolved at {price}")
     return resolved
