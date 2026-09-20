@@ -21,6 +21,7 @@ import GettingStarted from "@/pages/public/GettingStarted";
 import Risk from "@/pages/public/Risk";
 import Terms from "@/pages/public/Terms";
 import Privacy from "@/pages/public/Privacy";
+import CommunityLab from "@/pages/CommunityLab";
 
 function AppRoutes() {
   const location = useLocation(); // read hash from here, not window.location.hash (not reactive)
@@ -42,6 +43,7 @@ function AppRoutes() {
       <Route path="/risk" element={<Risk />} />
       <Route path="/terms" element={<Terms />} />
       <Route path="/privacy" element={<Privacy />} />
+      <Route path="/community-lab" element={<CommunityLab />} />
       <Route path="/auth" element={<AuthPage />} />
       <Route path="/performance" element={<PerformancePage />} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

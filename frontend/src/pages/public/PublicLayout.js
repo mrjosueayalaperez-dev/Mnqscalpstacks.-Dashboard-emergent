@@ -5,6 +5,7 @@ import { Zap, Menu, X } from "lucide-react";
 const NAV = [
   { label: "How It Works", to: "/how-it-works" },
   { label: "Academy", to: "/academy" },
+  { label: "Community Lab", to: "/community-lab" },
   { label: "Membership", to: "/membership" },
   { label: "About", to: "/about" },
   { label: "FAQ", to: "/faq" },

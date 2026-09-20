@@ -273,6 +273,12 @@
     - GET /api/analytics/daily?days=14 (analytics.py) — per-day unique visitors (aggregate on analytics_visits.date) + signups (users.created_at prefix match)
     - TrafficStats.js: DailyTrafficChart (recharts ComposedChart — blue visitor bars + green signup line, testid traffic-daily-chart) below the KPI grid; refreshes every 2 min
 
+49. **Community Lab module integrated** (2026-09-24, self-tested via screenshots):
+    - User-provided single-file app (66KB, from htmldrop pack) saved to frontend/public/community-lab.html (htmldrop badge/og refs stripped); 10 sections: Home, Probability Lab, Coins to Markets, Edge Lab (expectancy sim), Trade Path, Stack Lab, Watch & Learn, Journal, Learning Center, Progress — all client-side, no backend
+    - New public route /community-lab (App.js) → pages/CommunityLab.jsx: slim top bar (logo → /, Back to site, JOIN MEMBERSHIP → /membership) + full-height iframe of /community-lab.html; testids community-lab-page/-iframe/-home-link/-back-btn/-join-btn
+    - "Community Lab" added to PublicLayout NAV + sitemap.xml
+    - Verified: iframe renders 10-item lab nav, Edge Lab simulator interactive
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

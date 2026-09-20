@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta property="og:title" content="MNQ Scalp Stacks Community Lab">
+<meta property="og:description" content="Free community lab for probability, expectancy, risk, and market observation.">
+
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+
+<meta name="twitter:title" content="MNQ Scalp Stacks Community Lab">
+
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MNQ Scalp Stacks Community Lab</title>
+  <meta name="application-name" content="MNQ Scalp Stacks">
+  <meta name="description" content="Free community lab for probability, expectancy, risk, and market observation. Educational simulation only.">
+  <style>
+    :root {
+      --bg: #07090e;
+      --navy: #0a1220;
+      --elev: #0c111b;
+      --surf: #121a28;
+      --surf2: #182234;
+      --fg: #e8eef8;
+      --muted: #8b97ab;
+      --subtle: #647084;
+      --line: #1e2a3d;
+      --brand: #5eead4;
+      --brand-fg: #04201b;
+      --win: #34d399;
+      --loss: #f87171;
+      --warn: #e7c37a;
+      --info: #7dd3fc;
+      --radius: 12px;
+      --font: Manrope, ui-sans-serif, system-ui, sans-serif;
+      --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font); }
+    button, [role="button"] { cursor: pointer; }
+    button:disabled { opacity: .4; cursor: not-allowed; }
+    a { color: var(--brand); text-decoration: none; }
+    h1,h2,h3 { text-wrap: balance; margin: 0 0 .4rem; }
+    p { line-height: 1.55; color: var(--muted); }
+    .app { display: flex; min-height: 100dvh; }
+    .rail {
+      width: 232px; flex-shrink: 0; background: var(--navy); border-right: 1px solid var(--line);
+      padding: 18px 12px; position: sticky; top: 0; height: 100dvh; overflow: auto;
+    }
+    .logo { display: flex; gap: 10px; align-items: center; padding: 4px 8px 18px; }
+    .mark { width: 28px; height: 28px; border-radius: 7px; background: var(--surf2); display: grid; place-items: center; }
+    .mark i { display: block; width: 16px; height: 3px; background: var(--brand); border-radius: 2px; margin: 2px 0; }
+    .mark i:nth-child(1) { width: 8px; }
+    .mark i:nth-child(2) { width: 12px; }
+    .word { font-size: 13px; font-weight: 650; }
+    .word small { display: block; font-size: 9px; letter-spacing: .14em; color: var(--muted); text-transform: uppercase; font-weight: 500; }
+    nav a.nav {
+      display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border-radius: 8px;
+      color: var(--muted); font-size: 13px;
+    }
+    nav a.nav:hover { background: var(--surf); color: var(--fg); }
+    nav a.nav.on { background: var(--surf); color: var(--fg); }
+    nav a.nav .dot { width: 6px; height: 6px; border-radius: 99px; background: var(--brand); opacity: 0; }
+    nav a.nav.on .dot { opacity: 1; }
+    .main { flex: 1; min-width: 0; padding: 28px 28px 80px; }
+    .wrap { max-width: 1120px; margin: 0 auto; }
+    .kicker { font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--brand); font-weight: 600; }
+    .hero {
+      background: var(--navy); border-radius: 20px; padding: 36px 32px; position: relative; overflow: hidden;
+      border: 1px solid var(--line);
+    }
+    .grid-bg {
+      position: absolute; inset: 0; opacity: .5; pointer-events: none;
+      background-image: linear-gradient(to right, rgba(232,238,248,.04) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(232,238,248,.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+    }
+    .card { background: var(--elev); border: 1px solid var(--line); border-radius: 16px; padding: 18px; }
+    .card h3 { font-size: 15px; }
+    .row { display: flex; flex-wrap: wrap; gap: 10px; }
+    .grid-2 { display: grid; gap: 16px; grid-template-columns: 1fr; }
+    .grid-3 { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); }
+    .grid-4 { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+    @media (min-width: 900px) { .grid-2 { grid-template-columns: 1.1fr .9fr; } }
+    label.f { display: flex; flex-direction: column; gap: 6px; font-size: 11px; color: var(--muted); font-weight: 600; }
+    input[type=number], input[type=text], input[type=date], input[type=time], select, textarea {
+      height: 42px; border-radius: 8px; border: 1px solid var(--line); background: var(--surf);
+      color: var(--fg); padding: 0 10px; font: 13px var(--font);
+    }
+    textarea { height: auto; min-height: 72px; padding: 8px 10px; }
+    .btn {
+      height: 42px; padding: 0 14px; border-radius: 8px; border: 0; font: 600 13px var(--font);
+      background: var(--brand); color: var(--brand-fg); display: inline-flex; align-items: center; gap: 6px;
+    }
+    .btn.sec { background: var(--surf); color: var(--fg); border: 1px solid var(--line); }
+    .btn.ghost { background: transparent; color: var(--muted); }
+    .chip {
+      height: 34px; padding: 0 10px; border-radius: 8px; border: 1px solid var(--line);
+      background: var(--surf); color: var(--muted); font: 600 12px var(--font);
+    }
+    .chip.on { background: var(--brand); color: var(--brand-fg); border-color: transparent; }
+    .stat { background: var(--surf); border-radius: 10px; padding: 10px 12px; }
+    .stat b { display: block; font: 600 16px/1.2 var(--mono); color: var(--fg); }
+    .stat span { font-size: 10px; letter-spacing: .08em; text-transform: uppercase; color: var(--subtle); }
+    .badge { display: inline-flex; align-items: center; border-radius: 99px; padding: 3px 8px; font-size: 11px; font-weight: 650; }
+    .pos { background: rgba(52,211,153,.15); color: var(--win); }
+    .neg { background: rgba(248,113,113,.15); color: var(--loss); }
+    .neu { background: rgba(231,195,122,.15); color: var(--warn); }
+    .brandb { background: rgba(94,234,212,.15); color: var(--brand); }
+    .mutedb { background: var(--surf2); color: var(--muted); }
+    .note { background: var(--navy); border-radius: 10px; padding: 12px 14px; font-size: 13px; color: var(--muted); }
+    .warnbox { background: rgba(248,113,113,.08); border: 1px solid rgba(248,113,113,.25); color: #f3b0b0; border-radius: 10px; padding: 12px; font-size: 13px; }
+    canvas { width: 100%; height: auto; display: block; background: var(--navy); border-radius: 10px; }
+    table.matrix { width: 100%; border-collapse: collapse; font-size: 11px; font-family: var(--mono); }
+    table.matrix th, table.matrix td { padding: 6px 4px; text-align: center; border: 1px solid var(--line); }
+    table.matrix td { cursor: pointer; }
+    table.matrix td:hover { outline: 1px solid var(--brand); }
+    .cell-neg { background: rgba(248,113,113,.16); color: #f5c2c2; }
+    .cell-neu { background: rgba(231,195,122,.14); color: #ead7a4; }
+    .cell-pos { background: rgba(52,211,153,.16); color: #b6f0d4; }
+    .hidden { display: none !important; }
+    .topbar { display: none; }
+    footer.site { margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 11px; color: var(--subtle); }
+    .mission { letter-spacing: .12em; text-transform: uppercase; color: var(--brand); font-weight: 650; font-size: 11px; }
+    .meter { height: 10px; background: var(--surf2); border-radius: 99px; overflow: hidden; position: relative; }
+    .meter > i { display: block; height: 100%; background: var(--brand); width: 0; }
+    .qopt { display: block; width: 100%; text-align: left; background: var(--surf); border: 1px solid var(--line); color: var(--fg);
+      border-radius: 8px; padding: 10px 12px; margin: 6px 0; font: 13px var(--font); }
+    .qopt.good { background: rgba(52,211,153,.15); color: var(--win); }
+    .qopt.bad { background: rgba(248,113,113,.15); color: var(--loss); }
+    .path { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+    .path a { background: var(--elev); border: 1px solid var(--line); border-radius: 14px; padding: 14px; color: var(--fg); min-height: 84px; display: flex; flex-direction: column; justify-content: space-between; }
+    .path a em { font-style: normal; font-family: var(--mono); font-size: 11px; color: var(--subtle); }
+    @media (max-width: 860px) {
+      .app { display: block; }
+      .rail { display: none; }
+      .topbar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: rgba(7,9,14,.92); z-index: 20; }
+      .main { padding: 16px 14px 96px; }
+      .mobnav { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: repeat(5, 1fr); background: rgba(12,17,27,.96); border-top: 1px solid var(--line); z-index: 30; }
+      .mobnav a { color: var(--muted); font-size: 10px; text-align: center; padding: 10px 2px 12px; }
+      .mobnav a.on { color: var(--brand); }
+    }
+    @media (min-width: 861px) { .mobnav { display: none; } }
+    .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail">
+      <div class="logo">
+        <div class="mark" aria-hidden="true"><i></i><i></i><i></i></div>
+        <div class="word">MNQ Scalp Stacks<small>Community Lab</small></div>
+      </div>
+      <nav id="rail-nav"></nav>
+      <p style="padding:12px 10px 0;font-size:10px;color:var(--subtle);line-height:1.4">Free community education. Not a brokerage.</p>
+    </aside>
+    <div style="flex:1;min-width:0">
+      <header class="topbar">
+        <button class="btn sec" id="menu-btn" type="button">Menu</button>
+        <div class="word">MNQ Scalp Stacks<small>Community Lab</small></div>
+      </header>
+      <main class="main"><div class="wrap" id="view"></div>
+        <footer class="site wrap">
+          <p class="mission">Free knowledge. Free practice. Stronger decisions.</p>
+          <p>MNQ Scalp Stacks Community Lab provides educational and simulation tools only. Nothing presented constitutes investment advice, a recommendation to buy or sell futures or securities, or a guarantee of performance. Futures trading involves substantial risk and may not be appropriate for everyone. Simulated, hypothetical, and historical results do not guarantee future performance.</p>
+          <p>MNQ Scalp Stacks SO.LLC — Learn the Odds. Practice the Process. Respect the Risk.</p>
+        </footer>
+      </main>
+    </div>
+  </div>
+  <nav class="mobnav" id="mob-nav"></nav>
+
+<script>
+const NAV = [
+  ["home", "Home"],
+  ["lab", "Probability Lab"],
+  ["markets", "Coins to Markets"],
+  ["edge", "Edge Lab"],
+  ["practice", "Trade Path"],
+  ["stack", "Stack Lab"],
+  ["observe", "Watch & Learn"],
+  ["journal", "Journal"],
+  ["learn", "Learning Center"],
+  ["progress", "Progress"],
+];
+
+const store = JSON.parse(localStorage.getItem("mnq-lab-v2") || "{}");
+function save() { localStorage.setItem("mnq-lab-v2", JSON.stringify(store)); }
+store.journal = store.journal || [];
+store.done = store.done || {};
+store.stats = store.stats || { coin: 0, dice: 0, paths: 0, edgeRuns: 0, riskCompares: 0, streakLab: 0, quizzes: 0, noTrade: 0, sameAssumptions: 0 };
+
+function el(html) {
+  const d = document.createElement("div");
+  d.innerHTML = html.trim();
+  return d.firstElementChild;
+}
+function fmt(n, d=2) { return Number(n).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }); }
+function usd(n) { const s = n < 0 ? "-" : ""; return s + "$" + fmt(Math.abs(n), 2); }
+function pct(n, d=1) { return fmt(n, d) + "%"; }
+
+function navTo(id) {
+  location.hash = id;
+  render();
+  window.scrollTo(0,0);
+}
+function current() { return (location.hash || "#home").slice(1) || "home"; }
+
+function renderNav() {
+  const id = current();
+  const links = NAV.map(([k,l]) => `<a class="nav ${k===id?"on":""}" href="#${k}"><span class="dot"></span>${l}</a>`).join("");
+  document.getElementById("rail-nav").innerHTML = links;
+  document.getElementById("mob-nav").innerHTML = [
+    ["home","Home"],["lab","Lab"],["edge","Edge"],["observe","Watch"],["learn","Learn"]
+  ].map(([k,l]) => `<a class="${k===id?"on":""}" href="#${k}">${l}</a>`).join("");
+}
+
+/* ---------- math ---------- */
+function expectancy(p, winR, lossR) {
+  return p * winR - (1 - p) * lossR;
+}
+function beWinRate(winR, lossR) {
+  return lossR / (winR + lossR);
+}
+function clamp(n,a,b){ return Math.max(a, Math.min(b, n)); }
+
+function runPath(cfg) {
+  const { start, p, winR, lossR, riskPct, trades, compound } = cfg;
+  const eq = [start];
+  let bal = start, peak = start, maxDD = 0, wins = 0, losses = 0;
+  let wS = 0, lS = 0, maxW = 0, maxL = 0;
+  let best = 0, worst = 0, netR = 0;
+  const results = [];
+  const lossLens = [];
+  let curLoss = 0;
+  for (let i = 0; i < trades; i++) {
+    if (bal <= 0) break;
+    const basis = compound ? bal : start;
+    const risk = basis * (riskPct / 100);
+    const win = Math.random() < p;
+    const r = win ? winR : -lossR;
+    const pnl = r * risk;
+    bal = Math.max(0, bal + pnl);
+    netR += r;
+    if (win) { wins++; wS++; lS = 0; maxW = Math.max(maxW, wS); if (curLoss) { lossLens.push(curLoss); curLoss = 0; } }
+    else { losses++; lS++; wS = 0; maxL = Math.max(maxL, lS); curLoss++; }
+    best = Math.max(best, r);
+    worst = Math.min(worst, r);
+    peak = Math.max(peak, bal);
+    maxDD = Math.max(maxDD, peak > 0 ? (peak - bal) / peak : 0);
+    eq.push(bal);
+    results.push({ win, r, pnl, bal });
+  }
+  if (curLoss) lossLens.push(curLoss);
+  return { eq, end: bal, wins, losses, maxDD, maxW, maxL, best, worst, netR, peak, low: Math.min(...eq), results, lossLens, n: results.length };
+}
+
+function manyPaths(cfg, n) {
+  const out = [];
+  for (let i = 0; i < n; i++) out.push(runPath(cfg));
+  return out;
+}
+
+/* ---------- charts ---------- */
+function drawLines(canvas, seriesList, colors, yFmt) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width = canvas.clientWidth * 2 || 800;
+  const H = canvas.height = 320;
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle = "#0a1220"; ctx.fillRect(0,0,W,H);
+  const pad = { l: 56, r: 16, t: 16, b: 28 };
+  let min = Infinity, max = -Infinity, maxN = 1;
+  seriesList.forEach(s => { s.forEach((v,i) => { if (v < min) min = v; if (v > max) max = v; maxN = Math.max(maxN, i); }); });
+  if (!isFinite(min)) return;
+  const span = Math.max(1e-6, max - min) * 1.08;
+  min -= span * 0.04;
+  const x = i => pad.l + (i / Math.max(1, maxN)) * (W - pad.l - pad.r);
+  const y = v => pad.t + (1 - (v - min) / span) * (H - pad.t - pad.b);
+  ctx.strokeStyle = "rgba(232,238,248,.06)"; ctx.lineWidth = 1;
+  for (let g = 0; g < 5; g++) {
+    const yy = pad.t + g * (H - pad.t - pad.b) / 4;
+    ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W-pad.r, yy); ctx.stroke();
+  }
+  ctx.fillStyle = "#8b97ab"; ctx.font = "18px IBM Plex Mono, monospace";
+  ctx.fillText(yFmt ? yFmt(max) : fmt(max,0), 6, pad.t + 14);
+  ctx.fillText(yFmt ? yFmt(min) : fmt(min,0), 6, H - pad.b);
+  seriesList.forEach((s, si) => {
+    ctx.beginPath();
+    s.forEach((v,i) => { const X = x(i), Y = y(v); i ? ctx.lineTo(X,Y) : ctx.moveTo(X,Y); });
+    ctx.strokeStyle = colors[si] || "#5eead4";
+    ctx.lineWidth = si === 0 ? 3 : 1.6;
+    ctx.globalAlpha = si === 0 ? 1 : 0.85;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  });
+}
+
+function drawHist(canvas, values, start) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width = canvas.clientWidth * 2 || 800;
+  const H = canvas.height = 260;
+  ctx.fillStyle = "#0a1220"; ctx.fillRect(0,0,W,H);
+  if (!values.length) return;
+  const bins = 18;
+  const mn = Math.min(...values), mx = Math.max(...values);
+  const span = Math.max(1, mx - mn);
+  const counts = Array(bins).fill(0);
+  values.forEach(v => {
+    let i = Math.floor(((v - mn) / span) * bins);
+    if (i === bins) i = bins - 1;
+    counts[i]++;
+  });
+  const maxC = Math.max(1, ...counts);
+  const pad = { l: 20, r: 20, t: 16, b: 28 };
+  const bw = (W - pad.l - pad.r) / bins;
+  counts.forEach((c, i) => {
+    const h = (c / maxC) * (H - pad.t - pad.b);
+    const x = pad.l + i * bw;
+    const mid = mn + (i + 0.5) / bins * span;
+    ctx.fillStyle = mid >= start ? "#34d399" : "#f87171";
+    ctx.globalAlpha = 0.85;
+    ctx.fillRect(x + 2, H - pad.b - h, bw - 4, h);
+  });
+  ctx.globalAlpha = 1;
+}
+
+/* ---------- views ---------- */
+function pageHome() {
+  return `
+    <section class="hero">
+      <div class="grid-bg"></div>
+      <div style="position:relative;max-width:640px">
+        <p class="kicker">MNQ Scalp Stacks SO.LLC</p>
+        <h1 style="font-size:clamp(28px,4vw,44px);margin-top:8px">Learn the odds. Practice the process. Respect the risk.</h1>
+        <p>A free community lab for probability, expectancy, risk, and market observation. We are not teaching people to predict the next outcome. We are teaching people how to decide under uncertainty.</p>
+        <p class="mission">Free knowledge. Free practice. Stronger decisions.</p>
+        <div class="row" style="margin-top:18px">
+          <button class="btn" data-go="edge">Open Edge Lab</button>
+          <button class="btn sec" data-go="lab">Probability Lab</button>
+        </div>
+      </div>
+    </section>
+    <h2 style="margin:28px 0 12px;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)">The path</h2>
+    <div class="path">
+      ${[
+        ["lab","01","Learn probability"],
+        ["markets","02","See coins vs markets"],
+        ["edge","03","Understand expectancy"],
+        ["edge","04","Respect variance & risk"],
+        ["stack","05","Read alignment, not certainty"],
+        ["observe","06","Observe without trading"],
+        ["journal","07","Review the process"],
+      ].map(([k,n,l]) => `<a href="#${k}"><em>${n}</em><strong>${l}</strong></a>`).join("")}
+    </div>
+    <div class="grid-2" style="margin-top:20px">
+      <div class="card">
+        <p class="kicker">New module</p>
+        <h2>The Edge Lab</h2>
+        <p>Win rate alone does not determine whether a process has positive mathematical expectancy. Change the assumptions. Run thousands of simulated trades. Watch probability, reward/risk, position risk, variance, and sample size interact.</p>
+        <button class="btn" data-go="edge">Enter Edge Lab</button>
+      </div>
+      <div class="card">
+        <p class="kicker">Core principle</p>
+        <p style="color:var(--fg);font-size:16px">You don't control the next outcome. You can control your risk, your process, and your decisions.</p>
+        <p class="note" style="margin-top:12px">Alignment score ≠ win probability. A stack of indicators is evidence, not a forecast.</p>
+      </div>
+    </div>`;
+}
+
+function pageLab() {
+  return `
+    <p class="kicker">Core module 01</p>
+    <h1>Probability Lab</h1>
+    <p>A fair coin is 50/50. A fair die is 1/6 per face. Probability describes tendency over many repetitions — not the next attempt.</p>
+    <div class="grid-2">
+      <div class="card">
+        <div class="row">
+          <button class="chip on" data-mode="coin" id="m-coin">Coin</button>
+          <button class="chip" data-mode="dice" id="m-dice">Dice</button>
+        </div>
+        <div id="lab-face" style="height:120px;display:grid;place-items:center;font:700 22px var(--mono);letter-spacing:.16em;color:var(--brand)">HEADS</div>
+        <div class="grid-4" id="lab-stats"></div>
+        <p style="margin:12px 0 6px;font-size:11px;color:var(--subtle)">TRIALS</p>
+        <div class="row" id="lab-n">${[10,50,100,500,1000,5000,10000].map(n=>`<button class="chip ${n===100?"on":""}" data-n="${n}">${n.toLocaleString()}</button>`).join("")}</div>
+        <p style="margin:12px 0 6px;font-size:11px;color:var(--subtle)">SPEED</p>
+        <div class="row" id="lab-spd">${["slow","normal","fast","instant"].map((s,i)=>`<button class="chip ${s==="normal"?"on":""}" data-spd="${s}">${s}</button>`).join("")}</div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="lab-start">Start</button>
+          <button class="btn sec" id="lab-pause">Pause</button>
+          <button class="btn sec" id="lab-step">Step</button>
+          <button class="btn ghost" id="lab-reset">Reset</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Live histogram</h3>
+        <canvas id="lab-hist" height="160"></canvas>
+        <p class="note" id="lab-note">Probability describes what tends to happen over many repetitions. It does not guarantee what happens on the next attempt.</p>
+      </div>
+    </div>`;
+}
+
+function pageMarkets() {
+  const items = [
+    ["Setup frequency","How often a defined idea appears."],
+    ["Win rate & loss rate","Incomplete without the size of each outcome."],
+    ["Average win & loss","Magnitude completes expectancy."],
+    ["Risk / reward","Payoff shape. Pair it with hit rate."],
+    ["Expectancy","Average result if the process is repeated."],
+    ["Sample size","Judge a setup across many occurrences."],
+    ["Drawdown","Peak-to-trough decline on the path."],
+    ["Streaks","Clusters are ordinary in independent trials."],
+    ["Risk of ruin","Size plus variance can end the sample."],
+    ["Probability vs certainty","Markets change. History is not a contract."],
+  ];
+  return `
+    <p class="kicker">Core module 02</p>
+    <h1>From Random Events to Market Decisions</h1>
+    <p>Coins and dice are independent, with a known model. Markets change. Evaluate a setup across many occurrences. Do not treat a historical rate as a future guarantee.</p>
+    <div class="grid-2">
+      <div class="card"><h3>A coin</h3><p>Known 50/50. Independent. Stationary. Your job is variance, not the next face.</p></div>
+      <div class="card"><h3>A market</h3><p>Changing regimes. Unknown true odds. You still count evidence. You still size for being wrong.</p></div>
+    </div>
+    <div class="grid-3" style="margin-top:14px">${items.map(([t,d])=>`<div class="card"><h3>${t}</h3><p>${d}</p></div>`).join("")}</div>
+    <div class="row" style="margin-top:16px"><button class="btn" data-go="edge">Continue to Edge Lab</button></div>`;
+}
+
+function pageEdge() {
+  const wr = [30,35,40,45,50,55,60,65,70];
+  const rr = [0.5,0.75,1,1.25,1.5,2,2.5,3];
+  const head = `<tr><th>WR \\ R</th>${rr.map(r=>`<th>${r}R</th>`).join("")}</tr>`;
+  const body = wr.map(w => `<tr><th>${w}%</th>${rr.map(r => {
+    const ev = expectancy(w/100, r, 1);
+    const cls = ev < -0.02 ? "cell-neg" : ev <= 0.02 ? "cell-neu" : "cell-pos";
+    return `<td class="${cls}" data-w="${w}" data-r="${r}">${ev>=0?"+":""}${ev.toFixed(2)}R</td>`;
+  }).join("")}</tr>`).join("");
+
+  return `
+    <p class="kicker">Core module — Edge Lab</p>
+    <h1>The Edge Lab</h1>
+    <p>Win rate alone does not determine whether a process has positive mathematical expectancy. These tools test <em>assumptions</em>. They do not forecast MNQ or any market.</p>
+
+    <div class="row" style="margin:8px 0 16px">
+      <button class="chip on" data-preset="base">Working defaults</button>
+      <button class="chip" data-preset="none">No-edge experiment</button>
+      <button class="chip" data-preset="trap">High win-rate trap</button>
+      <button class="chip" data-preset="low">Low win-rate edge</button>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Edge control panel</h3>
+        <div class="grid-3" style="margin-top:10px">
+          <label class="f">Starting balance ($)<input id="e-start" type="number" value="1000" min="100"></label>
+          <label class="f">Win probability (%)<input id="e-p" type="number" value="55" min="10" max="90"></label>
+          <label class="f">Average win (R)<input id="e-win" type="number" value="1.5" step="0.05" min="0.1"></label>
+          <label class="f">Average loss (R)<input id="e-loss" type="number" value="1" step="0.05" min="0.1"></label>
+          <label class="f">Risk per trade (%)<input id="e-risk" type="number" value="1" step="0.05" min="0.1" max="10"></label>
+          <label class="f">Trades<input id="e-trades" type="number" value="100" min="5" max="10000"></label>
+          <label class="f">Simulation paths
+            <select id="e-paths"><option>1</option><option>10</option><option selected>100</option><option>500</option><option>1000</option></select>
+          </label>
+        </div>
+        <p style="margin:10px 0 6px;font-size:11px;color:var(--subtle)">TRADE COUNT PRESETS</p>
+        <div class="row" id="e-tpres">${[10,25,50,100,250,500,1000,5000,10000].map(n=>`<button class="chip ${n===100?"on":""}" data-tr="${n}">${n.toLocaleString()}</button>`).join("")}</div>
+        <p style="margin:10px 0 6px;font-size:11px;color:var(--subtle)">SPEED</p>
+        <div class="row" id="e-spd">${["slow","normal","fast","instant"].map(s=>`<button class="chip ${s==="instant"?"on":""}" data-espd="${s}">${s}</button>`).join("")}</div>
+        <div class="row" style="margin-top:14px">
+          <button class="btn" id="e-start-btn">Start</button>
+          <button class="btn sec" id="e-pause">Pause</button>
+          <button class="btn sec" id="e-step">Step</button>
+          <button class="btn ghost" id="e-reset">Reset</button>
+        </div>
+        <div id="e-risk-warn"></div>
+      </div>
+      <div class="card">
+        <h3>Live expectancy calculator</h3>
+        <p id="e-formula" class="note"></p>
+        <p style="font:700 28px var(--mono);color:var(--fg)" id="e-ev">+0.375R</p>
+        <p id="e-evlabel"></p>
+        <p class="note">Positive expectancy does <strong>not</strong> mean the next trade will win. It means these assumptions produce a positive average over a sufficiently large number of independent trials. Real trading results may differ because market conditions and strategy performance can change.</p>
+        <div style="margin-top:14px">
+          <h3>Break-even win rate</h3>
+          <p id="e-be"></p>
+          <div class="meter" id="e-meter"><i></i></div>
+          <p class="note" style="margin-top:10px">A theoretical break-even calculation does not include commissions, fees, or slippage unless those costs are explicitly modeled.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Live results — primary path</h3>
+      <p class="note">SIMULATED — NOT A FORECAST. Possible outcomes under the selected assumptions.</p>
+      <div class="grid-4" id="e-dash"></div>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px">
+      <div class="card">
+        <h3>Equity curves</h3>
+        <p>Identical assumptions can produce very different short-term paths. Median / best / worst of the batch, plus the live primary path.</p>
+        <canvas id="e-eq"></canvas>
+        <div class="row" style="margin-top:8px;font-size:12px;color:var(--muted)">
+          <span style="color:#5eead4">● Median</span>
+          <span style="color:#34d399">● Best</span>
+          <span style="color:#f87171">● Worst</span>
+          <span style="color:#7dd3fc">● Primary</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Ending-balance distribution</h3>
+        <p>SIMULATED — NOT A FORECAST</p>
+        <canvas id="e-hist"></canvas>
+        <div class="grid-3" id="e-dist"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Win rate vs reward/risk explorer</h3>
+      <p>Each cell is theoretical expectancy in R, assuming average loss = 1R. Tap a cell to read why.</p>
+      <div style="overflow:auto"><table class="matrix">${head}${body}</table></div>
+      <p class="note" id="matrix-explain" style="margin-top:12px">A high win rate can still lose money when losses are too large. A lower win rate can have positive expectancy when average winners are sufficiently larger than average losers.</p>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px">
+      <div class="card" id="streak-card">
+        <h3>Streak Lab</h3>
+        <p>A losing streak does not automatically mean a process stopped working. A winning streak does not prove it will continue. In live markets, also re-evaluate whether the assumptions themselves changed.</p>
+        <div id="streak-out"></div>
+        <button class="btn sec" id="streak-run" style="margin-top:10px">Run streak census (1,000 trades)</button>
+      </div>
+      <div class="card">
+        <h3>Risk Lab</h3>
+        <p>Your edge determines expected direction. Your risk determines how violently the journey can affect the account. Same win/loss sequence; six risk levels.</p>
+        <canvas id="risk-eq"></canvas>
+        <div id="risk-note"></div>
+        <button class="btn sec" id="risk-run" style="margin-top:10px">Compare 0.25%–5% on one sequence</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Sample-size experiment — 10 vs 100 vs 1,000</h3>
+      <p>Small samples are noisy. A 55% theoretical probability does not mean every set of 100 trials contains exactly 55 wins.</p>
+      <button class="btn sec" id="sample-run">Run 10 / 100 / 1,000</button>
+      <div class="grid-3" id="sample-out" style="margin-top:12px"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Alignment score ≠ win probability</h3>
+      <p>EMA 9 / 21 / 200, VWAP, RSI, volume, and structure are pieces of market evidence. The Probability Stack Score measures <strong>condition alignment</strong>. It does not automatically equal 55%, 70%, or 90% win probability. Never convert an alignment score into a statistical win rate unless real historical data and a validated method support that calculation.</p>
+      <p class="mission" style="margin-top:8px">ALIGNMENT SCORE ≠ WIN PROBABILITY</p>
+      <button class="btn sec" data-go="stack">Open Stack Lab</button>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <h3>Build your hypothesis</h3>
+      <p>Toggle conditions as evidence. Then enter what you <em>believe</em> the win probability might be. The simulator tests that assumption. It does not prove the market setup has that win rate.</p>
+      <div class="grid-3" id="hyp-toggles"></div>
+      <div class="grid-3" style="margin-top:10px">
+        <label class="f">Hypothesized win probability (%)<input id="hyp-p" type="number" value="55" min="10" max="90"></label>
+        <label class="f">Assumed avg win (R)<input id="hyp-w" type="number" value="1.5" step="0.1"></label>
+        <label class="f">Assumed avg loss (R)<input id="hyp-l" type="number" value="1" step="0.1"></label>
+      </div>
+      <p class="note" id="hyp-read" style="margin-top:10px"></p>
+      <button class="btn" id="hyp-run" style="margin-top:10px">Simulate this assumption (200 trades × 100 paths)</button>
+      <div id="hyp-out"></div>
+    </div>
+
+    <div class="grid-2" style="margin-top:16px">
+      <div class="card" id="q1-card"></div>
+      <div class="card" id="q2-card"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <p class="mission">You don't control the next outcome.</p>
+      <h2 style="margin-top:8px">You can control your risk, your process, and your decisions.</h2>
+      <p>MNQ SCALP STACKS COMMUNITY LAB — Learn the Odds. Practice the Process. Respect the Risk.</p>
+    </div>`;
+}
+
+function pagePractice() {
+  return `
+    <p class="kicker">Core module 03</p>
+    <h1>Trade Path</h1>
+    <p>A compact sequence runner. For multi-path expectancy work, use Edge Lab. Identical settings can still produce different short-term paths.</p>
+    <div class="card">
+      <div class="grid-3">
+        <label class="f">Starting balance<input id="t-start" type="number" value="1000"></label>
+        <label class="f">Risk %<input id="t-risk" type="number" value="1" step="0.1"></label>
+        <label class="f">Win %<input id="t-p" type="number" value="55"></label>
+        <label class="f">Reward : risk<input id="t-rr" type="number" value="1.5" step="0.1"></label>
+        <label class="f">Trades<input id="t-n" type="number" value="100"></label>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn" id="t-run">Run sequence</button>
+        <button class="btn sec" id="t-again">Run again</button>
+      </div>
+    </div>
+    <div id="t-out" style="margin-top:14px"></div>`;
+}
+
+function pageStack() {
+  const w = [
+    ["Trend aligned", 20],
+    ["EMA 21 relationship", 20],
+    ["VWAP relationship", 15],
+    ["RSI confirmation", 15],
+    ["Volume confirmation", 15],
+    ["Support / resistance room", 15],
+  ];
+  return `
+    <p class="kicker">Core module 04</p>
+    <h1>MNQ Scalp Stacks Practice Lab</h1>
+    <p>More aligned evidence can strengthen a hypothesis. No combination guarantees a winning trade.</p>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Build a stack</h3>
+        <div id="stack-list">${w.map((x,i)=>`<label style="display:flex;justify-content:space-between;align-items:center;background:var(--surf);padding:8px 10px;border-radius:8px;margin:6px 0;font-size:13px"><span>${x[0]} <small style="color:var(--subtle)">${x[1]} pts</small></span><input type="checkbox" data-pts="${x[1]}" ${i<4?"checked":""}></label>`).join("")}</div>
+        <p style="font:700 40px var(--mono);margin:8px 0 0" id="stack-score">76</p>
+        <p id="stack-band"></p>
+        <p class="note">This score measures alignment of selected conditions. It is not the statistical probability that a trade will win.</p>
+        <p class="mission">ALIGNMENT SCORE ≠ WIN PROBABILITY</p>
+      </div>
+      <div class="card">
+        <h3>How to speak about it</h3>
+        <p>Use: Conditions aligned. Conditions mixed. Low evidence. Moderate evidence. Strong evidence.</p>
+        <p>Do not use: guaranteed buy, guaranteed sell, 100% signal, can't lose.</p>
+        <p>Take a hypothesized win rate into Edge Lab only as an <em>assumption to stress-test</em>, never as a claim the stack "is" that percentage.</p>
+        <button class="btn" data-go="edge">Test an assumption in Edge Lab</button>
+      </div>
+    </div>`;
+}
+
+function pageObserve() {
+  return `
+    <p class="kicker">Core module 05</p>
+    <h1>Watch & Learn</h1>
+    <p class="note">Educational replay of an MNQ-style tape. Not a live brokerage feed. Practice observing without placing an order.</p>
+    <div class="grid-2">
+      <div class="card">
+        <div class="row" style="justify-content:space-between;align-items:end">
+          <div><p class="kicker">Simulated MNQ</p><p style="font:700 28px var(--mono);color:var(--fg);margin:0" id="ob-px">—</p></div>
+          <div class="row"><button class="btn sec" id="ob-toggle">Pause</button><button class="btn ghost" id="ob-new">New session</button></div>
+        </div>
+        <canvas id="ob-chart" style="margin-top:10px;height:260px"></canvas>
+      </div>
+      <div class="card">
+        <h3>Educational checklist</h3>
+        <div id="ob-list"></div>
+        <p style="font:700 32px var(--mono);margin:12px 0 0" id="ob-score"></p>
+        <p id="ob-sum" class="note"></p>
+        <p class="mission">This score measures alignment. It is not win probability.</p>
+      </div>
+    </div>`;
+}
+
+function pageJournal() {
+  const j = store.journal;
+  const wins = j.filter(x => x.result === "Win").length;
+  const losses = j.filter(x => x.result === "Loss").length;
+  const none = j.filter(x => x.bias === "No Trade" || x.result === "No Trade").length;
+  const avgS = j.length ? j.reduce((s,x)=>s+Number(x.score||0),0)/j.length : 0;
+  const rVals = j.filter(x => x.result==="Win"||x.result==="Loss").map(x => Number(x.r || (x.result==="Win"?1.5:-1)));
+  const obsWR = (wins+losses) ? wins/(wins+losses)*100 : 0;
+  const avgR = rVals.length ? rVals.reduce((a,b)=>a+b,0)/rVals.length : 0;
+  return `
+    <p class="kicker">Core module 06</p>
+    <h1>Practice Journal</h1>
+    <p>Practice statistics — not validated strategy performance.</p>
+    <div class="grid-4">
+      <div class="stat"><span>Observations</span><b>${j.length}</b></div>
+      <div class="stat"><span>Simulated wins</span><b>${wins}</b></div>
+      <div class="stat"><span>Simulated losses</span><b>${losses}</b></div>
+      <div class="stat"><span>No-trade</span><b>${none}</b></div>
+      <div class="stat"><span>Observed win rate</span><b>${pct(obsWR)}</b></div>
+      <div class="stat"><span>Average R</span><b>${fmt(avgR,2)}</b></div>
+      <div class="stat"><span>Observed expectancy</span><b>${fmt(avgR,2)}R</b></div>
+      <div class="stat"><span>Avg stack score</span><b>${fmt(avgS,1)}</b></div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h3>Log an observation</h3>
+      <form id="j-form" class="grid-3">
+        <label class="f">Date<input name="date" type="date" required></label>
+        <label class="f">Time<input name="time" type="time"></label>
+        <label class="f">Market<input name="market" value="MNQ"></label>
+        <label class="f">Bias<select name="bias"><option>No Trade</option><option>Long</option><option>Short</option></select></label>
+        <label class="f">Stack score<input name="score" type="number" min="0" max="100" value="50"></label>
+        <label class="f">Result R<input name="r" type="number" step="0.1" placeholder="e.g. 1.5 or -1"></label>
+        <label class="f">Result<select name="result"><option>Open</option><option>Win</option><option>Loss</option><option>No Trade</option></select></label>
+        <label class="f" style="grid-column:1/-1">Hypothesis<textarea name="hyp" required></textarea></label>
+        <label class="f" style="grid-column:1/-1">Lesson learned<textarea name="lesson"></textarea></label>
+        <button class="btn" type="submit">Save observation</button>
+      </form>
+    </div>
+    <div id="j-list" style="margin-top:12px">${j.map(x => `<div class="card" style="margin-bottom:8px"><strong>${x.date} ${x.time||""} · ${x.market} · ${x.bias}</strong><p>${x.hyp||""}</p><p style="font-size:12px">Score ${x.score} · ${x.result} · R ${x.r||"—"}</p></div>`).join("") || "<p class='note'>No observations yet. A No Trade still counts as practice.</p>"}</div>`;
+}
+
+const LESSONS = [
+  ["What is probability?","Tendency over many repetitions, not a promise about the next event."],
+  ["Small samples mislead","Ten outcomes can look like a new truth and still be noise."],
+  ["Variance","The spread around expected value. Size so you can live through it."],
+  ["Streaks","Independent events cluster. The next trial does not owe a reversal."],
+  ["Expected value","(p × avg win) − ((1−p) × avg loss). One ticket does not measure it."],
+  ["Risk vs reward","Ratio is incomplete without hit rate."],
+  ["Win rate is not everything","70% small wins and 30% large losses can still lose."],
+  ["Position sizing","Converts an idea into a survival problem."],
+  ["Drawdown","Peak-to-trough. Positive EV still draws down."],
+  ["Psychology","Protect decision quality under uncertainty."],
+  ["Waiting is a decision","No-trade is an action with its own expected cost, often near zero."],
+  ["EMA","A weighted summary of recent prices — context, not a crystal ball."],
+  ["VWAP","Session volume-weighted anchor, not an entry command."],
+  ["RSI","Recent momentum. Extended is a description, not a timed reversal."],
+  ["Support and resistance","Zones of prior interest that can fail."],
+  ["Volume","Participation. Not a promise of the next candle."],
+  ["Trends vs ranges","Name the regime before you name the trade."],
+  ["Hypothesis","Conditions, invalidation, target — plus humility that it can fail."],
+  ["Backtesting basics","History educates. It does not underwrite the future."],
+  ["Simulation first","Practice the process before real capital is at stake."],
+];
+
+function pageLearn() {
+  return `
+    <p class="kicker">Core module 07</p>
+    <h1>Learning Center</h1>
+    <p>Short lessons. Progress is awarded for completing work — never for making money.</p>
+    <div class="grid-2">${LESSONS.map((L,i)=>`<div class="card"><p class="kicker">${String(i+1).padStart(2,"0")}</p><h3>${L[0]}</h3><p>${L[1]}</p></div>`).join("")}</div>`;
+}
+
+function pageProgress() {
+  const a = [
+    ["Probability Explorer", store.stats.coin + store.stats.dice >= 1000, "Complete 1,000 probability trials."],
+    ["Variance Student", store.stats.sameAssumptions >= 10, "Run the same assumptions 10 times."],
+    ["Risk Observer", store.stats.riskCompares >= 1, "Compare six different risk levels."],
+    ["Streak Survivor", store.stats.streakLab >= 1, "Complete the Streak Lab."],
+    ["Edge Analyst", store.stats.quizzes >= 2, "Complete the expectancy exercises."],
+    ["Disciplined Observer", store.journal.length >= 20, "Log 20 simulated observations."],
+    ["No-Trade Discipline", store.stats.noTrade >= 10, "Log 10 no-trade decisions when conditions are mixed."],
+  ];
+  return `
+    <p class="kicker">Educational progression</p>
+    <h1>Progress</h1>
+    <p>Achievements are for learning, practice, consistency, risk awareness, and discipline — never for simulated profit.</p>
+    ${a.map(([n,ok,r]) => `<div class="card" style="margin-bottom:8px;opacity:${ok?1:.55}"><h3>${n} ${ok?"· unlocked":""}</h3><p>${r}</p></div>`).join("")}`;
+}
+
+/* ---------- bind pages ---------- */
+function render() {
+  renderNav();
+  const id = current();
+  const view = document.getElementById("view");
+  const pages = { home: pageHome, lab: pageLab, markets: pageMarkets, edge: pageEdge, practice: pagePractice, stack: pageStack, observe: pageObserve, journal: pageJournal, learn: pageLearn, progress: pageProgress };
+  view.innerHTML = (pages[id] || pageHome)();
+  view.querySelectorAll("[data-go]").forEach(b => b.onclick = () => navTo(b.dataset.go));
+  if (id === "lab") bindLab();
+  if (id === "edge") bindEdge();
+  if (id === "practice") bindPractice();
+  if (id === "stack") bindStack();
+  if (id === "observe") bindObserve();
+  if (id === "journal") bindJournal();
+}
+
+window.addEventListener("hashchange", render);
+
+/* LAB */
+function bindLab() {
+  const S = { mode: "coin", n: 100, spd: "normal", run: false, done: 0, heads: 0, tails: 0, faces: [0,0,0,0,0,0] };
+  const ms = { slow: 420, normal: 140, fast: 40, instant: 0 };
+  const face = document.getElementById("lab-face");
+  const stats = document.getElementById("lab-stats");
+  const note = document.getElementById("lab-note");
+  const canvas = document.getElementById("lab-hist");
+  function paint() {
+    const tot = S.done;
+    if (S.mode === "coin") {
+      face.textContent = S.done ? (S._last || "HEADS") : "HEADS";
+      stats.innerHTML = [
+        ["Completed", S.done],["Remaining", S.n-S.done],
+        ["Heads", S.heads + " · " + (tot?pct(S.heads/tot*100,1):"—")],
+        ["Tails", S.tails + " · " + (tot?pct(S.tails/tot*100,1):"—")],
+      ].map(([k,v])=>`<div class="stat"><span>${k}</span><b>${v}</b></div>`).join("");
+    } else {
+      face.textContent = S._last || "1";
+      stats.innerHTML = S.faces.map((c,i)=>`<div class="stat"><span>Face ${i+1}</span><b>${c} · ${tot?pct(c/tot*100,1):"—"}</b></div>`).join("");
+    }
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width = canvas.clientWidth * 2 || 600, H = canvas.height = 220;
+    ctx.fillStyle = "#0a1220"; ctx.fillRect(0,0,W,H);
+    const bins = S.mode==="coin" ? [["H",S.heads],["T",S.tails]] : S.faces.map((c,i)=>[String(i+1),c]);
+    const max = Math.max(1, ...bins.map(b=>b[1]), tot/(S.mode==="coin"?2:6));
+    bins.forEach((b,i) => {
+      const bw = (W-40)/bins.length;
+      const h = (b[1]/max)*(H-40);
+      ctx.fillStyle = "#5eead4";
+      ctx.fillRect(20+i*bw+8, H-24-h, bw-16, h);
+      ctx.fillStyle = "#8b97ab"; ctx.font = "16px sans-serif";
+      ctx.fillText(b[0], 20+i*bw+bw/2-6, H-8);
+    });
+    if (tot < 30) note.textContent = "Small samples wander. A lopsided start is ordinary randomness.";
+    else if (tot >= 200) note.textContent = "With more trials, observed rates usually settle nearer the theoretical rate. The next event is still uncertain.";
+  }
+  function step() {
+    if (S.done >= S.n) { S.run = false; return; }
+    if (S.mode==="coin") {
+      const h = Math.random() < .5;
+      if (h) S.heads++; else S.tails++;
+      S._last = h ? "HEADS" : "TAILS";
+    } else {
+      const d = 1 + Math.floor(Math.random()*6);
+      S.faces[d-1]++; S._last = String(d);
+    }
+    S.done++;
+    if (S.mode==="coin") store.stats.coin++; else store.stats.dice++;
+    save();
+    paint();
+    if (S.done >= S.n) S.run = false;
+  }
+  function loop() {
+    if (!S.run) return;
+    if (S.spd === "instant") { while (S.done < S.n) step(); return; }
+    step();
+    if (S.run) S.tid = setTimeout(loop, ms[S.spd]);
+  }
+  document.getElementById("m-coin").onclick = () => { S.mode="coin"; document.getElementById("m-coin").classList.add("on"); document.getElementById("m-dice").classList.remove("on"); };
+  document.getElementById("m-dice").onclick = () => { S.mode="dice"; document.getElementById("m-dice").classList.add("on"); document.getElementById("m-coin").classList.remove("on"); };
+  document.getElementById("lab-n").onclick = e => { const b=e.target.closest("[data-n]"); if(!b)return; S.n=+b.dataset.n; [...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b)); };
+  document.getElementById("lab-spd").onclick = e => { const b=e.target.closest("[data-spd]"); if(!b)return; S.spd=b.dataset.spd; [...e.currentTarget.children].forEach(x=>x.classList.toggle("on",x===b)); };
+  document.getElementById("lab-start").onclick = () => { if (S.done>=S.n) { S.done=0;S.heads=0;S.tails=0;S.faces=[0,0,0,0,0,0]; } S.run=true; loop(); };
+  document.getElementById("lab-pause").onclick = () => { S.run=false; clearTimeout(S.tid); };
+  document.getElementById("lab-step").onclick = () => step();
+  document.getElementById("lab-reset").onclick = () => { S.run=false; S.done=0;S.heads=0;S.tails=0;S.faces=[0,0,0,0,0,0]; paint(); };
+  paint();
+}
+
+/* EDGE */
+function bindEdge() {
+  const cfgFrom = () => ({
+    start: +document.getElementById("e-start").value,
+    p: clamp(+document.getElementById("e-p").value, 10, 90) / 100,
+    winR: +document.getElementById("e-win").value,
+    lossR: +document.getElementById("e-loss").value,
+    riskPct: +document.getElementById("e-risk").value,
+    trades: clamp(+document.getElementById("e-trades").value, 5, 10000),
+    paths: +document.getElementById("e-paths").value,
+    compound: true,
+  });
+  function paintCalc() {
+    const c = cfgFrom();
+    const ev = expectancy(c.p, c.winR, c.lossR);
+    const be = beWinRate(c.winR, c.lossR);
+    document.getElementById("e-formula").innerHTML =
+      `Expectancy = (${pct(c.p*100,0)} × ${c.winR}R) − (${pct((1-c.p)*100,0)} × ${c.lossR}R)`;
+    document.getElementById("e-ev").textContent = `${ev>=0?"+":""}${fmt(ev,3)}R per trade`;
+    const lab = ev > 0.02 ? ["Positive Expectancy","pos"] : ev < -0.02 ? ["Negative Expectancy","neg"] : ["Break-Even Expectancy","neu"];
+    document.getElementById("e-evlabel").innerHTML = `<span class="badge ${lab[1]}">${lab[0]}</span>`;
+    const rel = c.p - be;
+    document.getElementById("e-be").innerHTML = `Break-even win rate for ${c.winR}R : ${c.lossR}R is <strong>${pct(be*100,1)}</strong>. Your assumed win rate is <strong>${pct(c.p*100,1)}</strong> — ${rel>0.005?"above":rel<-0.005?"below":"at"} break-even.`;
+    const meter = document.querySelector("#e-meter i");
+    meter.style.width = pct(clamp((c.p / Math.max(be*2, 0.01)) * 50, 4, 100), 0);
+    meter.style.background = rel>=0 ? "var(--win)" : "var(--loss)";
+    const warn = document.getElementById("e-risk-warn");
+    if (c.riskPct >= 3) warn.innerHTML = `<p class="warnbox" style="margin-top:12px">Larger position risk can produce severe drawdowns and faster capital loss. This control exists so you can <em>see</em> that violence — not so you copy it with real money.</p>`;
+    else warn.innerHTML = "";
+  }
+  ["e-start","e-p","e-win","e-loss","e-risk","e-trades"].forEach(id => {
+    document.getElementById(id).addEventListener("input", paintCalc);
+  });
+  document.getElementById("e-tpres").onclick = e => {
+    const b = e.target.closest("[data-tr]"); if (!b) return;
+    document.getElementById("e-trades").value = b.dataset.tr;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle("on", x===b));
+    paintCalc();
+  };
+  let spd = "instant";
+  document.getElementById("e-spd").onclick = e => {
+    const b = e.target.closest("[data-espd]"); if (!b) return;
+    spd = b.dataset.espd;
+    [...e.currentTarget.children].forEach(x => x.classList.toggle("on", x===b));
+  };
+  document.querySelectorAll("[data-preset]").forEach(b => b.onclick = () => {
+    document.querySelectorAll("[data-preset]").forEach(x => x.classList.remove("on"));
+    b.classList.add("on");
+    const map = {
+      base: [1000,55,1.5,1,1,100],
+      none: [1000,50,1,1,1,1000],
+      trap: [1000,70,0.5,2,1,200],
+      low: [1000,40,2,1,1,200],
+    };
+    const v = map[b.dataset.preset];
+    ["e-start","e-p","e-win","e-loss","e-risk","e-trades"].forEach((id,i)=> document.getElementById(id).value = v[i]);
+    paintCalc();
+  });
+
+  document.querySelectorAll("table.matrix td[data-w]").forEach(td => td.onclick = () => {
+    const w = +td.dataset.w, r = +td.dataset.r, ev = expectancy(w/100, r, 1);
+    const be = beWinRate(r, 1);
+    document.getElementById("matrix-explain").innerHTML =
+      `At ${w}% wins and +${r}R / −1R, expectancy is <strong>${ev>=0?"+":""}${fmt(ev,3)}R</strong> per trade. Break-even win rate is ${pct(be*100,1)}. ` +
+      (ev < 0
+        ? `This combination loses on average: wins are not large enough (or frequent enough) to pay for the losers. A high hit rate would not save it if R stays this small.`
+        : ev === 0
+        ? `This sits on the knife-edge. Add costs and it tilts negative.`
+        : `This combination has a positive average under these assumptions. It can still print ugly losing streaks.`);
+    document.getElementById("e-p").value = w;
+    document.getElementById("e-win").value = r;
+    document.getElementById("e-loss").value = 1;
+    paintCalc();
+  });
+
+  let batch = [], primary = null, playing = false, idx = 0, timer = 0;
+  function dash(p, ev) {
+    if (!p) { document.getElementById("e-dash").innerHTML = ""; return; }
+    const wr = p.n ? p.wins / p.n * 100 : 0;
+    const avg = p.n ? p.netR / p.n : 0;
+    document.getElementById("e-dash").innerHTML = [
+      ["Trades completed", p.n],
+      ["Wins / losses", `${p.wins} / ${p.losses}`],
+      ["Observed win rate", pct(wr,1)],
+      ["Theoretical win p", pct(cfgFrom().p*100,1)],
+      ["Current balance", usd(p.end)],
+      ["Net R", fmt(p.netR,2)],
+      ["Observed avg result", fmt(avg,3)+"R"],
+      ["Theoretical expectancy", fmt(ev,3)+"R"],
+      ["Max drawdown", pct(p.maxDD*100,1)],
+      ["Longest win / loss streak", `${p.maxW} / ${p.maxL}`],
+      ["Best / worst trade (R)", `${fmt(p.best,2)} / ${fmt(p.worst,2)}`],
+      ["Peak / low balance", `${usd(p.peak)} / ${usd(p.low)}`],
+    ].map(([k,v])=>`<div class="stat"><span>${k}</span><b>${v}</b></div>`).join("");
+  }
+  function paintCharts() {
+    if (!batch.length) return;
+    const ends = batch.map(p => p.end).sort((a,b)=>a-b);
+    const med = batch.slice().sort((a,b)=>a.end-b.end)[Math.floor(batch.length/2)];
+    const best = batch.reduce((a,b)=>a.end>b.end?a:b);
+    const worst = batch.reduce((a,b)=>a.end<b.end?a:b);
+    const lines = [med.eq, best.eq, worst.eq];
+    const cols = ["#5eead4","#34d399","#f87171"];
+    if (primary) { lines.push(primary.eq); cols.push("#7dd3fc"); }
+    drawLines(document.getElementById("e-eq"), lines, cols, v => usd(v));
+    drawHist(document.getElementById("e-hist"), ends, cfgFrom().start);
+    const avg = ends.reduce((a,b)=>a+b,0)/ends.length;
+    const above = ends.filter(v => v > cfgFrom().start).length / ends.length * 100;
+    const dds = batch.map(p => p.maxDD*100).sort((a,b)=>a-b);
+    document.getElementById("e-dist").innerHTML = [
+      ["Median end", usd(ends[Math.floor(ends.length/2)])],
+      ["Average end", usd(avg)],
+      ["Best / worst end", usd(ends[ends.length-1]) + " / " + usd(ends[0])],
+      ["Above start", pct(above,1)],
+      ["Below start", pct(100-above,1)],
+      ["Drawdown range (p25–p75)", pct(dds[Math.floor(dds.length*.25)],1) + " – " + pct(dds[Math.floor(dds.length*.75)],1)],
+    ].map(([k,v])=>`<div class="stat"><span>${k}</span><b>${v}</b></div>`).join("");
+  }
+  function finishBatch() {
+    playing = false;
+    store.stats.edgeRuns++;
+    store.stats.sameAssumptions++;
+    save();
+    paintCharts();
+  }
+  function startSim() {
+    const c = cfgFrom();
+    const ev = expectancy(c.p, c.winR, c.lossR);
+    batch = manyPaths(c, Math.min(c.paths, 1000));
+    primary = batch[0];
+    store.stats.sameAssumptions++;
+    save();
+    if (spd === "instant") { dash(primary, ev); finishBatch(); return; }
+    // animate primary rebuild trade-by-trade for teaching
+    const ms = { slow: 280, normal: 80, fast: 20 }[spd];
+    let live = { ...c, trades: 0 };
+    // reconstruct primary incrementally from stored results
+    const seq = primary.results;
+    let i = 0, bal = c.start, eq = [c.start], wins=0,losses=0,netR=0,peak=c.start,maxDD=0,maxW=0,maxL=0,wS=0,lS=0,best=0,worst=0;
+    playing = true;
+    function tick() {
+      if (!playing) return;
+      const stepN = spd === "fast" ? 3 : 1;
+      for (let k=0;k<stepN && i<seq.length;k++,i++) {
+        const t = seq[i];
+        bal = t.bal; eq.push(bal); netR += t.r;
+        if (t.win) { wins++; wS++; lS=0; maxW=Math.max(maxW,wS);} else { losses++; lS++; wS=0; maxL=Math.max(maxL,lS); }
+        best=Math.max(best,t.r); worst=Math.min(worst,t.r);
+        peak=Math.max(peak,bal); maxDD=Math.max(maxDD, peak>0?(peak-bal)/peak:0);
+      }
+      primary = { eq, end: bal, wins, losses, maxDD, maxW, maxL, best, worst, netR, peak, low: Math.min(...eq), n: i, results: seq };
+      dash(primary, ev);
+      drawLines(document.getElementById("e-eq"), [eq], ["#7dd3fc"], v => usd(v));
+      if (i >= seq.length) { dash(primary, ev); finishBatch(); return; }
+      timer = setTimeout(tick, ms);
+    }
+    tick();
+  }
+  document.getElementById("e-start-btn").onclick = startSim;
+  document.getElementById("e-pause").onclick = () => { playing = false; clearTimeout(timer); };
+  document.getElementById("e-reset").onclick = () => { playing=false; batch=[]; primary=null; dash(null,0); };
+  document.getElementById("e-step").onclick = () => { if (!primary) startSim(); };
+
+  document.getElementById("streak-run").onclick = () => {
+    const c = { ...cfgFrom(), trades: 1000, paths: 1 };
+    const p = runPath(c);
+    const freq = {2:0,3:0,5:0,7:0,10:0};
+    p.lossLens.forEach(L => {
+      if (L>=2) freq[2]++; if (L>=3) freq[3]++; if (L>=5) freq[5]++; if (L>=7) freq[7]++; if (L>=10) freq[10]++;
+    });
+    document.getElementById("streak-out").innerHTML = `
+      <div class="grid-3" style="margin-top:8px">
+        <div class="stat"><span>Longest win streak</span><b>${p.maxW}</b></div>
+        <div class="stat"><span>Longest loss streak</span><b>${p.maxL}</b></div>
+        <div class="stat"><span>Loss runs ≥2 / 3 / 5 / 7 / 10</span><b>${freq[2]} / ${freq[3]} / ${freq[5]} / ${freq[7]} / ${freq[10]}</b></div>
+      </div>
+      <p class="note">SIMULATED — NOT A FORECAST. Streaks appear even when the model never changes.</p>`;
+    store.stats.streakLab++; save();
+  };
+
+  document.getElementById("risk-run").onclick = () => {
+    const c = cfgFrom();
+    // one frozen sequence of win/loss, replayed at 6 risk levels
+    const seq = [];
+    for (let i=0;i<Math.min(c.trades,250);i++) seq.push(Math.random() < c.p);
+    const risks = [0.25,0.5,1,2,3,5];
+    const cols = ["#7dd3fc","#5eead4","#34d399","#e7c37a","#f0a0a0","#f87171"];
+    const series = risks.map(riskPct => {
+      let bal = c.start, eq=[c.start];
+      seq.forEach(win => {
+        const risk = bal * (riskPct/100);
+        bal = Math.max(0, bal + (win ? c.winR : -c.lossR) * risk);
+        eq.push(bal);
+      });
+      return eq;
+    });
+    drawLines(document.getElementById("risk-eq"), series, cols, v => usd(v));
+    document.getElementById("risk-note").innerHTML =
+      `<p class="note">Same wins and losses. Only the risk fraction changes. 0.25% (info) → 5% (loss color). Do not treat the 5% path as a suggestion.</p>
+       ${c.riskPct>=2 || true ? `<p class="warnbox">Larger position risk can produce severe drawdowns and faster capital loss.</p>` : ""}`;
+    store.stats.riskCompares++; save();
+  };
+
+  document.getElementById("sample-run").onclick = () => {
+    const base = cfgFrom();
+    const sizes = [10,100,1000];
+    document.getElementById("sample-out").innerHTML = sizes.map(n => {
+      const p = runPath({ ...base, trades: n });
+      const wr = p.n ? p.wins/p.n*100 : 0;
+      const avg = p.n ? p.netR/p.n : 0;
+      return `<div class="stat"><span>${n} trades</span><b>WR ${pct(wr,1)}</b><p style="margin:6px 0 0;font-size:12px">Avg ${fmt(avg,3)}R · theory ${fmt(expectancy(base.p,base.winR,base.lossR),3)}R</p></div>`;
+    }).join("");
+  };
+
+  /* hypothesis */
+  const flags = ["Trend aligned","EMA 9 / 21 aligned","Price testing EMA 21","Above VWAP","RSI confirms","Volume confirms","S/R room"];
+  const hypBox = document.getElementById("hyp-toggles");
+  hypBox.innerHTML = flags.map((f,i)=>`<label class="f" style="flex-direction:row;align-items:center;justify-content:space-between;background:var(--surf);padding:8px 10px;border-radius:8px"><span>${f}</span><input type="checkbox" class="hyp-c" ${i!==5?"checked":""}></label>`).join("");
+  function hypRead() {
+    const n = [...document.querySelectorAll(".hyp-c")].filter(x=>x.checked).length;
+    const band = n<=2 ? "Low evidence" : n<=4 ? "Mixed conditions" : n<=5 ? "Moderate alignment" : "Strong alignment";
+    document.getElementById("hyp-read").innerHTML =
+      `${n} of ${flags.length} conditions checked — <strong>${band}</strong>. Alignment is not a win rate. The number you type next is your hypothesis, not a measurement.`;
+  }
+  hypBox.onchange = hypRead; hypRead();
+  document.getElementById("hyp-run").onclick = () => {
+    const p = clamp(+document.getElementById("hyp-p").value,10,90)/100;
+    const w = +document.getElementById("hyp-w").value, l = +document.getElementById("hyp-l").value;
+    const ev = expectancy(p,w,l);
+    const batchH = manyPaths({ start: 1000, p, winR: w, lossR: l, riskPct: 1, trades: 200, compound: true }, 100);
+    const ends = batchH.map(x=>x.end).sort((a,b)=>a-b);
+    document.getElementById("hyp-out").innerHTML = `
+      <p class="note" style="margin-top:10px">The simulator is testing your assumption of ${pct(p*100,0)} win probability. It is <strong>not</strong> proving that the market setup actually has that win rate.</p>
+      <div class="grid-3">
+        <div class="stat"><span>Theoretical EV</span><b>${fmt(ev,3)}R</b></div>
+        <div class="stat"><span>Median simulated end</span><b>${usd(ends[50])}</b></div>
+        <div class="stat"><span>Worst / best end</span><b>${usd(ends[0])} / ${usd(ends[99])}</b></div>
+      </div>`;
+  };
+
+  /* quizzes */
+  function quiz(el, prompt, opts, ans, why) {
+    el.innerHTML = `<h3>Knowledge check</h3><p>${prompt}</p>` + opts.map((o,i)=>`<button class="qopt" data-i="${i}">${o}</button>`).join("") + `<p class="note hidden" data-why></p>`;
+    el.onclick = e => {
+      const b = e.target.closest(".qopt"); if (!b) return;
+      const i = +b.dataset.i;
+      el.querySelectorAll(".qopt").forEach((x,xi) => { x.classList.add(xi===ans?"good": (xi===i?"bad":"")); x.disabled = true; });
+      const w = el.querySelector("[data-why]");
+      w.classList.remove("hidden"); w.textContent = why;
+      if (i===ans) { store.stats.quizzes++; save(); }
+    };
+  }
+  quiz(document.getElementById("q1-card"),
+    "A system wins 40% of the time. Average winner = +2R. Average loser = −1R. What is theoretical expectancy?",
+    ["−0.20R", "+0.20R", "+0.80R", "0R"],
+    1,
+    "(0.40 × 2R) − (0.60 × 1R) = 0.80 − 0.60 = +0.20R. Positive expectancy is not a promise the next trade wins.");
+  quiz(document.getElementById("q2-card"),
+    "A strategy wins 8 consecutive trades. Does that prove it has a positive edge?",
+    ["Yes — eight wins is enough.", "No. A streak alone does not establish statistical expectancy.", "Only if the eighth win was large.", "Yes, if the trader felt confident."],
+    1,
+    "Streaks appear in processes with no edge and in processes with an edge. Proof needs a defined rule set, a sufficient sample, and humility that regimes change.");
+
+  paintCalc();
+  dash(null, 0);
+}
+
+function bindPractice() {
+  const box = document.getElementById("t-out");
+  function go() {
+    const c = {
+      start: +document.getElementById("t-start").value,
+      p: +document.getElementById("t-p").value/100,
+      winR: +document.getElementById("t-rr").value,
+      lossR: 1,
+      riskPct: +document.getElementById("t-risk").value,
+      trades: +document.getElementById("t-n").value,
+      compound: true,
+    };
+    const p = runPath(c);
+    store.stats.paths++; save();
+    box.innerHTML = `
+      <div class="grid-4">
+        <div class="stat"><span>Ending</span><b>${usd(p.end)}</b></div>
+        <div class="stat"><span>Wins / losses</span><b>${p.wins} / ${p.losses}</b></div>
+        <div class="stat"><span>Max DD</span><b>${pct(p.maxDD*100,1)}</b></div>
+        <div class="stat"><span>Streaks W/L</span><b>${p.maxW} / ${p.maxL}</b></div>
+      </div>
+      <div class="card" style="margin-top:12px"><canvas id="t-eq"></canvas></div>
+      <p class="note">A positive statistical edge can still experience losing streaks. Risk management is what helps a process survive variance.</p>`;
+    drawLines(document.getElementById("t-eq"), [p.eq], ["#5eead4"], v => usd(v));
+  }
+  document.getElementById("t-run").onclick = go;
+  document.getElementById("t-again").onclick = go;
+}
+
+function bindStack() {
+  const scoreEl = document.getElementById("stack-score");
+  const bandEl = document.getElementById("stack-band");
+  function paint() {
+    let s = 0;
+    document.querySelectorAll("#stack-list input").forEach(ch => { if (ch.checked) s += +ch.dataset.pts; else s += Math.round(+ch.dataset.pts * 0.25); });
+    scoreEl.textContent = s;
+    const lab = s>=90?"Exceptional alignment":s>=75?"Strong alignment":s>=60?"Moderate alignment":s>=40?"Mixed conditions":"Weak alignment";
+    bandEl.innerHTML = `<span class="badge ${s>=60?"brandb":s>=40?"neu":"neg"}">${lab}</span>`;
+  }
+  document.getElementById("stack-list").onchange = paint; paint();
+}
+
+function bindObserve() {
+  let px = 21480, playing = true, buf = [];
+  for (let i=0;i<80;i++) { px += (Math.random()-0.48)*3; buf.push(px); }
+  const canvas = document.getElementById("ob-chart");
+  function analyze() {
+    const last = buf[buf.length-1];
+    const ema = buf.slice(-21).reduce((a,b)=>a+b,0)/21;
+    const trend = last > ema ? "Bullish" : last < ema ? "Bearish" : "Neutral";
+    const rsi = 40 + Math.random()*25;
+    const score = 40 + Math.round(Math.random()*40);
+    const band = score>=75?"Strong alignment":score>=60?"Moderate alignment":score>=40?"Mixed conditions":"Weak alignment";
+    document.getElementById("ob-px").textContent = fmt(last,2);
+    document.getElementById("ob-list").innerHTML = [
+      ["Trend", trend],["Price vs EMA 21", last>ema?"Above":"Below"],["Price vs VWAP", last>ema?"Above":"Testing"],
+      ["RSI", rsi>55?"Bullish momentum":rsi<45?"Bearish momentum":"Neutral"],
+      ["Volume", Math.random()>.5?"Normal":"Increasing"],["Structure", trend==="Neutral"?"Range":"Trending"],
+    ].map(([k,v])=>`<div style="display:flex;justify-content:space-between;background:var(--surf);padding:8px 10px;border-radius:8px;margin:6px 0;font-size:13px"><span style="color:var(--muted)">${k}</span><strong>${v}</strong></div>`).join("");
+    document.getElementById("ob-score").textContent = score + " · " + band;
+    document.getElementById("ob-sum").textContent = score>=70
+      ? "Several conditions are aligned. Alignment is not a guarantee of a winning trade."
+      : "Conditions are mixed. This is a useful example of why waiting can be the decision.";
+  }
+  function draw() {
+    const ctx = canvas.getContext("2d");
+    const W = canvas.width = canvas.clientWidth*2 || 700, H = canvas.height = 320;
+    ctx.fillStyle="#0a1220"; ctx.fillRect(0,0,W,H);
+    const mn = Math.min(...buf)-2, mx = Math.max(...buf)+2;
+    ctx.beginPath();
+    buf.forEach((v,i) => {
+      const x = 10 + i/(buf.length-1)*(W-20);
+      const y = 10 + (1-(v-mn)/(mx-mn))*(H-20);
+      i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+    });
+    ctx.strokeStyle="#5eead4"; ctx.lineWidth=2; ctx.stroke();
+  }
+  function tick() {
+    if (!playing) return;
+    px += (Math.random()-0.48)*2.2;
+    buf.push(px); if (buf.length>80) buf.shift();
+    draw(); analyze();
+    setTimeout(tick, 900);
+  }
+  document.getElementById("ob-toggle").onclick = function(){ playing=!playing; this.textContent=playing?"Pause":"Play"; if(playing) tick(); };
+  document.getElementById("ob-new").onclick = () => { buf=[]; px=21480+Math.random()*40; for(let i=0;i<80;i++){px+=(Math.random()-.48)*3;buf.push(px);} draw(); analyze(); };
+  draw(); analyze(); tick();
+}
+
+function bindJournal() {
+  const f = document.getElementById("j-form");
+  const date = f.date; date.value = new Date().toISOString().slice(0,10);
+  f.onsubmit = e => {
+    e.preventDefault();
+    const row = Object.fromEntries(new FormData(f).entries());
+    store.journal.unshift(row);
+    if (row.bias === "No Trade" || row.result === "No Trade") store.stats.noTrade++;
+    save();
+    render();
+  };
+}
+
+document.getElementById("menu-btn").onclick = () => {
+  const r = document.querySelector(".rail");
+  r.style.display = r.style.display === "block" ? "none" : "block";
+  r.style.position = "fixed"; r.style.zIndex = "40"; r.style.height = "100dvh";
+};
+render();
+</script>
+</body>
+</html>
