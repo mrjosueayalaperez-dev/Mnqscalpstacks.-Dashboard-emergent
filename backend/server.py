@@ -3137,10 +3137,19 @@ async def evaluate_live_signal() -> Optional[str]:
 
     cross_up = e9_prev <= e21_prev and e9_now > e21_now
     cross_down = e9_prev >= e21_prev and e9_now < e21_now
-    if not cross_up and not cross_down:
+    # Trend-pullback continuation: EMA stack intact, price dipped through EMA9 and reclaimed it
+    prev_close = closes[-2]
+    pullback_long = e9_now > e21_now and prev_close < e9_prev and price > e9_now and price > vw
+    pullback_short = e9_now < e21_now and prev_close > e9_prev and price < e9_now and price < vw
+    if cross_up or pullback_long:
+        side = "long"
+        setup = "EMA9/21 bull cross" if cross_up else "bull stack pullback reclaim (EMA9)"
+    elif cross_down or pullback_short:
+        side = "short"
+        setup = "EMA9/21 bear cross" if cross_down else "bear stack pullback reject (EMA9)"
+    else:
         spine = "above" if e9_now > e21_now else "below"
-        return _no(f"no EMA9/21 cross on last 1m bar (EMA9 {spine} EMA21 spine)")
-    side = "long" if cross_up else "short"
+        return _no(f"no cross or EMA9 pullback-reclaim on last 1m bar (EMA9 {spine} EMA21, waiting for setup)")
     if side == "long" and price <= vw:
         return _no("cross up but no VWAP reclaim (price below session VWAP)")
     if side == "short" and price >= vw:
@@ -3164,7 +3173,7 @@ async def evaluate_live_signal() -> Optional[str]:
     rsi = 100.0 if avg_loss == 0 else 100 - 100 / (1 + (sum(gains) / 14) / avg_loss)
     rsi_agrees = rsi > 50 if side == "long" else rsi < 50
 
-    reason = f"EMA9/21 {'bull' if side == 'long' else 'bear'} cross + VWAP aligned + 5m bias OK (RSI {rsi:.0f})"
+    reason = f"{setup} + VWAP aligned + 5m bias OK (RSI {rsi:.0f})"
     result = await _create_punch(side, price, "1", "live_engine", "", reason, False)
     if result["status"] != "created":
         return _no(result.get("reason", "duplicate"))

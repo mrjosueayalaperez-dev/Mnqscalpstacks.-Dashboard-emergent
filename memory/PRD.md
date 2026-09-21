@@ -318,6 +318,11 @@
     - send_daily_recap + daily_recap_loop (server.py ~3160): auto-post at 17:00 ET (once/day, skips zero-punch days, db.settings last_sent guard); POST /api/signals/daily-recap (admin, force) — verified 401 unauth / admin returns summary + posts embed; embed = punches/wins/losses/open/holds/net pts, green if net≥0
     - GOTCHA: routes added to api_router AFTER app.include_router(api_router) return 405 — new endpoints must be defined above line ~3052
 
+57. **Engine pullback-continuation setup — "no signals" fix** (2026-09-24, self-tested with synthetic bars):
+    - Root cause of zero engine punches during Sunday Globex rally: engine only fired on exact EMA9/21 crosses; in a steady trend (EMA9 above EMA21 all night) no cross ever occurs → silent through +120pt move (feed itself was LIVE and correct)
+    - evaluate_live_signal (server.py ~3140): added pullback_long/pullback_short — EMA stack intact + prev close through EMA9 + reclaim + VWAP side → punch with reason "bull/bear stack pullback reclaim/reject (EMA9)"; cross setups unchanged; no-trade reason now "waiting for setup"
+    - Verified: synthetic dip-reclaim fired LONG punch with correct reason (Discord captured via monkeypatch, doc cleaned); live loop evaluating every 60s
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key
