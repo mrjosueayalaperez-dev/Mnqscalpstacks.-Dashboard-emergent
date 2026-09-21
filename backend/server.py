@@ -75,6 +75,7 @@ signal_engine_state = {
     "last_error": None,
     "session_filter": True,
     "globex": True,
+    "aggressive": True,
     "cooldown_min": 3,
     "last_eval": None,
 }
@@ -1125,7 +1126,8 @@ async def _record_hold(source: str, note: str, is_test: bool) -> Dict[str, Any]:
 
 
 async def _create_punch(side: str, price: float, interval: str = "1", source: str = "webhook",
-                        note: str = "", reason: str = "", is_test: bool = False) -> Dict[str, Any]:
+                        note: str = "", reason: str = "", is_test: bool = False,
+                        confidence: Optional[int] = None) -> Dict[str, Any]:
     """Shared punch creator: dedupe, persist, fan out to Discord. Used by webhook, engine, and tests."""
     if side not in ("long", "short"):
         raise HTTPException(status_code=400, detail="HOLD cannot execute an order")
@@ -1143,6 +1145,7 @@ async def _create_punch(side: str, price: float, interval: str = "1", source: st
     doc = signal_obj.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
     doc["interval"] = interval
+    doc["confidence"] = confidence if confidence else 84
     doc["note"] = note
     doc["reason"] = reason or note
     doc["is_test"] = is_test
@@ -1298,6 +1301,7 @@ async def signals_receiver_status(request: Request) -> Dict[str, Any]:
             "cooldown_remaining_sec": cooldown_remaining,
             "session_filter": signal_engine_state["session_filter"],
             "globex": signal_engine_state["globex"],
+            "aggressive": signal_engine_state.get("aggressive", False),
             "session_open": session_open,
             "now_et": now_et.strftime("%H:%M ET"),
         },
@@ -1308,6 +1312,7 @@ async def signals_receiver_status(request: Request) -> Dict[str, Any]:
 class SessionFilterBody(BaseModel):
     session_filter: Optional[bool] = None
     globex: Optional[bool] = None
+    aggressive: Optional[bool] = None
 
 
 @api_router.post("/signals/session-filter", tags=["signals"])
@@ -1319,12 +1324,16 @@ async def signals_session_filter(body: SessionFilterBody, request: Request):
         signal_engine_state["session_filter"] = body.session_filter
     if body.globex is not None:
         signal_engine_state["globex"] = body.globex
+    if body.aggressive is not None:
+        signal_engine_state["aggressive"] = body.aggressive
     await db.settings.update_one(
         {"_id": "signal_engine"},
-        {"$set": {"session_filter": signal_engine_state["session_filter"], "globex": signal_engine_state["globex"]}},
+        {"$set": {"session_filter": signal_engine_state["session_filter"], "globex": signal_engine_state["globex"],
+                  "aggressive": signal_engine_state.get("aggressive", False)}},
         upsert=True,
     )
-    return {"session_filter": signal_engine_state["session_filter"], "globex": signal_engine_state["globex"]}
+    return {"session_filter": signal_engine_state["session_filter"], "globex": signal_engine_state["globex"],
+            "aggressive": signal_engine_state.get("aggressive", False)}
 
 
 @api_router.get("/signals/events", tags=["signals"])
@@ -3067,6 +3076,7 @@ async def seed_auth() -> None:
     if saved:
         signal_engine_state["session_filter"] = saved.get("session_filter", signal_engine_state["session_filter"])
         signal_engine_state["globex"] = saved.get("globex", signal_engine_state["globex"])
+        signal_engine_state["aggressive"] = saved.get("aggressive", signal_engine_state["aggressive"])
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
@@ -3141,21 +3151,35 @@ async def evaluate_live_signal() -> Optional[str]:
     prev_close = closes[-2]
     pullback_long = e9_now > e21_now and prev_close < e9_prev and price > e9_now and price > vw
     pullback_short = e9_now < e21_now and prev_close > e9_prev and price < e9_now and price < vw
-    if cross_up or pullback_long:
+    # Aggressive-mode setups: shallow EMA9 tag & hold, or VWAP reclaim inside an intact stack
+    aggressive = bool(signal_engine_state.get("aggressive"))
+    last_low, last_high = agg[-1]["low"], agg[-1]["high"]
+    vw_prev = vwap[-2] if len(vwap) > 1 else None
+    aggr_long = aggressive and e9_now > e21_now and price > vw and (
+        (last_low <= e9_now and price > e9_now) or (vw_prev is not None and prev_close < vw_prev))
+    aggr_short = aggressive and e9_now < e21_now and price < vw and (
+        (last_high >= e9_now and price < e9_now) or (vw_prev is not None and prev_close > vw_prev))
+    if cross_up or pullback_long or aggr_long:
         side = "long"
-        setup = "EMA9/21 bull cross" if cross_up else "bull stack pullback reclaim (EMA9)"
-    elif cross_down or pullback_short:
+        kind = "cross" if cross_up else "pullback" if pullback_long else "aggressive"
+        setup = {"cross": "EMA9/21 bull cross", "pullback": "bull stack pullback reclaim (EMA9)",
+                 "aggressive": "aggressive: bull stack EMA9 tag / VWAP reclaim"}[kind]
+    elif cross_down or pullback_short or aggr_short:
         side = "short"
-        setup = "EMA9/21 bear cross" if cross_down else "bear stack pullback reject (EMA9)"
+        kind = "cross" if cross_down else "pullback" if pullback_short else "aggressive"
+        setup = {"cross": "EMA9/21 bear cross", "pullback": "bear stack pullback reject (EMA9)",
+                 "aggressive": "aggressive: bear stack EMA9 tag / VWAP reject"}[kind]
     else:
         spine = "above" if e9_now > e21_now else "below"
-        return _no(f"no cross or EMA9 pullback-reclaim on last 1m bar (EMA9 {spine} EMA21, waiting for setup)")
+        mode = "aggressive" if aggressive else "strict"
+        return _no(f"no qualifying setup on last 1m bar (EMA9 {spine} EMA21, {mode} mode, waiting)")
     if side == "long" and price <= vw:
         return _no("cross up but no VWAP reclaim (price below session VWAP)")
     if side == "short" and price >= vw:
         return _no("cross down but price above VWAP")
 
     # 5-minute bias: price must agree with EMA21 on 5m
+    bias_ok = False
     agg5 = _aggregate_bars(bars, 300, 60)
     if len(agg5) >= 21:
         closes5 = [k["close"] for k in agg5]
@@ -3165,6 +3189,7 @@ async def evaluate_live_signal() -> Optional[str]:
                 return _no("cross up but against 5m bias (below 5m EMA21)")
             if side == "short" and closes5[-1] > ema21_5[-1]:
                 return _no("cross down but against 5m bias (above 5m EMA21)")
+            bias_ok = True
 
     # RSI 14 as a condition — boosts confluence when it agrees
     gains = [max(closes[i] - closes[i - 1], 0) for i in range(len(closes) - 14, len(closes))]
@@ -3173,8 +3198,18 @@ async def evaluate_live_signal() -> Optional[str]:
     rsi = 100.0 if avg_loss == 0 else 100 - 100 / (1 + (sum(gains) / 14) / avg_loss)
     rsi_agrees = rsi > 50 if side == "long" else rsi < 50
 
+    # Confidence: setup strength + RSI agreement + 5m bias alignment (cap 95)
+    conf = 50 + {"cross": 20, "pullback": 15, "aggressive": 8}[kind]
+    if rsi_agrees:
+        conf += 10
+    if (side == "long" and rsi > 60) or (side == "short" and rsi < 40):
+        conf += 5
+    if bias_ok:
+        conf += 10
+    conf = min(conf, 95)
+
     reason = f"{setup} + VWAP aligned + 5m bias OK (RSI {rsi:.0f})"
-    result = await _create_punch(side, price, "1", "live_engine", "", reason, False)
+    result = await _create_punch(side, price, "1", "live_engine", "", reason, False, confidence=conf)
     if result["status"] != "created":
         return _no(result.get("reason", "duplicate"))
     signal_engine_state["last_eval"] = {"time": datetime.now(timezone.utc).isoformat(), "reason": f"PUNCH FIRED: {side.upper()} @ {price}"}

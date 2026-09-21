@@ -323,6 +323,13 @@
     - evaluate_live_signal (server.py ~3140): added pullback_long/pullback_short — EMA stack intact + prev close through EMA9 + reclaim + VWAP side → punch with reason "bull/bear stack pullback reclaim/reject (EMA9)"; cross setups unchanged; no-trade reason now "waiting for setup"
     - Verified: synthetic dip-reclaim fired LONG punch with correct reason (Discord captured via monkeypatch, doc cleaned); live loop evaluating every 60s
 
+58. **Aggressive engine mode + confidence scoring** (2026-09-25, self-tested 4 synthetic cases + UI toggle screenshot):
+    - signal_engine_state.aggressive (default True, persisted via db.settings + session-filter endpoint, restored at startup, in receiver-status.engine)
+    - Aggressive setups (evaluate_live_signal): EMA9 tag&hold (bar wick tags EMA9, close holds) and VWAP reclaim, both requiring intact EMA stack + VWAP side; strict cross/pullback unchanged; no-trade reason shows mode
+    - Confidence: 50 + setup (cross 20/pullback 15/aggressive 8) + RSI agree 10 (+5 strong) + 5m bias 10, cap 95; stored on punch doc (confidence field; _create_punch new param, non-engine punches default 84)
+    - UI: MODE: AGGRESSIVE/STRICT toggle in Signal Engine panel (testid engine-mode-toggle, admin-only POST, orange when aggressive); conf badge on signal cards (signal-confidence-{id}); ExecutionPanel uses signal.confidence
+    - Verified: tag&hold fires conf 73, pullback conf 80, chop no-fire, strict mode suppresses aggressive setups; mode left ON (aggressive:true)
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

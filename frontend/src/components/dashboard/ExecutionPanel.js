@@ -21,7 +21,7 @@ const gradeOf = (score) => (score >= 3 ? { g: "A+", cls: "border-[#34C759] text-
 const SignalCard = ({ signal, onExecute, busy }) => {
   if (!signal) return null;
   const { g, cls } = gradeOf(signal.confluence_score ?? 0);
-  const confidence = Math.min(60 + (signal.confluence_score ?? 0) * 12, 95);
+  const confidence = signal.confidence ?? Math.min(60 + (signal.confluence_score ?? 0) * 12, 95);
   const long = signal.side === "long";
   return (
     <div className={`border rounded-sm p-2.5 ${cls}`} data-testid="signal-card">

@@ -55,9 +55,29 @@ const ReceiverPanel = ({ rs, onTest, testing }) => {
           <span className={`w-1.5 h-1.5 rounded-full ${rs.receiver_live ? "bg-[#34C759] animate-pulse" : "bg-[#FF3B30]"}`} />
           {rs.receiver_live ? "RECEIVER LIVE" : "NO ALERTS RECEIVED"}
         </span>
-        <span className={`text-[0.6rem] font-mono ${eng.session_open ? "text-[#34C759]" : "text-[#FFCC00]"}`} data-testid="session-status">
-          {eng.session_open ? `SESSION OPEN · ${eng.now_et}` : `SESSION CLOSED — signals paused · ${eng.now_et}`}
-        </span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={async () => {
+              try {
+                const { data } = await axios.post(`${API}/signals/session-filter`, { aggressive: !eng.aggressive });
+                toast.success(`Engine mode: ${data.aggressive ? "AGGRESSIVE" : "STRICT"}`);
+              } catch {
+                toast.error("Admin only");
+              }
+            }}
+            className={`px-2 py-0.5 rounded-full text-[0.6rem] font-black border transition-colors ${
+              eng.aggressive
+                ? "border-[#FF9500]/50 text-[#FF9500] bg-[#FF9500]/10 hover:bg-[#FF9500]/20"
+                : "border-white/20 text-zinc-400 bg-white/5 hover:bg-white/10"
+            }`}
+            data-testid="engine-mode-toggle"
+          >
+            {eng.aggressive ? "MODE: AGGRESSIVE" : "MODE: STRICT"}
+          </button>
+          <span className={`text-[0.6rem] font-mono ${eng.session_open ? "text-[#34C759]" : "text-[#FFCC00]"}`} data-testid="session-status">
+            {eng.session_open ? `SESSION OPEN · ${eng.now_et}` : `SESSION CLOSED — signals paused · ${eng.now_et}`}
+          </span>
+        </div>
       </div>
 
       {rs.never_received && (
@@ -151,6 +171,11 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
                   <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#BF5AF2]/20 text-[#BF5AF2] rounded">ENGINE</span>
                 ) : (
                   <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#007AFF]/20 text-[#007AFF] rounded">LIVE</span>
+                )}
+                {typeof sig.confidence === "number" && !isHold && (
+                  <span className="text-[0.6rem] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-zinc-300 font-mono" data-testid={`signal-confidence-${sig.id}`}>
+                    {sig.confidence}% conf
+                  </span>
                 )}
                 <span className={`text-[0.6rem] px-1.5 py-0.5 rounded ${
                   sig.status === "held" ? "bg-[#FFCC00]/20 text-[#FFCC00]" :
