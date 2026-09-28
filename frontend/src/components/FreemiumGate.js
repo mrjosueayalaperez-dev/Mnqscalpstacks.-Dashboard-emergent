@@ -1,105 +1,37 @@
 import React from "react";
-import { Crown, Star, Zap, Check, ExternalLink, Lock } from "lucide-react";
-import { paymentLinkFor } from "@/lib/paymentLinks";
-import { useAuth } from "@/context/AuthContext";
+import { GraduationCap, Check } from "lucide-react";
 
-const FreemiumGate = ({ userPlan, onUpgrade }) => {
-  const { user } = useAuth();
-  const plan = (userPlan || user?.tier || "free").toLowerCase();
-  const link = (tier) => paymentLinkFor(tier, user?.email);
-
-  return (
-    <div className="widget-panel col-span-1 md:col-span-2 lg:col-span-6" data-testid="freemium-gate">
-      <div className="widget-header">
-        <h3 className="flex items-center gap-2">
-          <Crown className="w-4 h-4 text-[#FFCC00]" />
-          SUBSCRIPTION PLANS
-        </h3>
-        <span className={`text-[0.6rem] font-black px-2 py-0.5 rounded ${
-          plan === "elite" ? "bg-[#34C759]/20 text-[#34C759]" :
-          plan === "pro" ? "bg-[#FFCC00]/20 text-[#FFCC00]" :
-          "bg-white/10 text-zinc-500"
-        }`}>
-          {plan.toUpperCase()}
-        </span>
-      </div>
-      <div className="widget-content">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-          {/* Free */}
-          <div className={`p-3 rounded-sm border text-center ${plan === "free" ? "border-[#007AFF]/40 bg-[#007AFF]/5" : "border-white/5 bg-white/[0.02]"}`}>
-            <Zap className="w-5 h-5 text-[#007AFF] mx-auto mb-1" />
-            <span className="text-xs font-black text-white block">Free</span>
-            <span className="text-lg font-mono font-bold text-white block mb-2">$0</span>
-            <ul className="text-[0.55rem] text-zinc-400 space-y-1 text-left mb-2">
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#007AFF] shrink-0" />Simulator access</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#007AFF] shrink-0" />Manual BUY/SELL</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#007AFF] shrink-0" />Last 3 signals</li>
-              <li className="flex items-start gap-1 opacity-40"><Lock className="w-2.5 h-2.5 mt-0.5 shrink-0" />Ads shown</li>
-            </ul>
-            {plan === "free" && <span className="text-[0.55rem] text-[#007AFF] font-bold">CURRENT</span>}
-          </div>
-
-          {/* Pro */}
-          <div className={`p-3 rounded-sm border text-center relative ${plan === "pro" ? "border-[#FFCC00]/40 bg-[#FFCC00]/5 ring-1 ring-[#FFCC00]/30" : "border-white/5 bg-white/[0.02]"}`}>
-            <div className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-[#FFCC00] text-black text-[0.45rem] font-black rounded-sm">POPULAR</div>
-            <Star className="w-5 h-5 text-[#FFCC00] mx-auto mb-1" />
-            <span className="text-xs font-black text-white block">Pro</span>
-            <span className="text-lg font-mono font-bold text-white block mb-2">$49<span className="text-[0.55rem] text-zinc-500">/mo</span></span>
-            <ul className="text-[0.55rem] text-zinc-400 space-y-1 text-left mb-2">
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#FFCC00] shrink-0" />No ads</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#FFCC00] shrink-0" />Unlimited signals</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#FFCC00] shrink-0" />Discord alerts</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#FFCC00] shrink-0" />Analytics</li>
-            </ul>
-            {plan === "pro" ? (
-              <span className="text-[0.55rem] text-[#FFCC00] font-bold">CURRENT</span>
-            ) : (
-              <a href={link("pro")} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[0.55rem] text-[#FFCC00] font-bold hover:underline" data-testid="upgrade-pro-link">UPGRADE <ExternalLink className="w-2.5 h-2.5" /></a>
-            )}
-          </div>
-
-          {/* Premium */}
-          <div className={`p-3 rounded-sm border text-center ${plan === "premium" ? "border-[#BF5AF2]/40 bg-[#BF5AF2]/5" : "border-white/5 bg-white/[0.02]"}`} data-testid="tier-premium">
-            <Star className="w-5 h-5 text-[#BF5AF2] mx-auto mb-1" />
-            <span className="text-xs font-black text-white block">Premium</span>
-            <span className="text-lg font-mono font-bold text-white block mb-2">$99.99<span className="text-[0.55rem] text-zinc-500">/mo</span></span>
-            <ul className="text-[0.55rem] text-zinc-400 space-y-1 text-left mb-2">
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Everything in Pro</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Operator bracket presets</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Live key-level alerts</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#BF5AF2] shrink-0" />Weekly performance report</li>
-            </ul>
-            {plan === "premium" ? (
-              <span className="text-[0.55rem] text-[#BF5AF2] font-bold">CURRENT</span>
-            ) : (
-              <a href={link("premium")} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[0.55rem] text-[#BF5AF2] font-bold hover:underline" data-testid="upgrade-premium-link">UPGRADE <ExternalLink className="w-2.5 h-2.5" /></a>
-            )}
-          </div>
-
-          {/* Elite */}
-          <div className={`p-3 rounded-sm border text-center ${plan === "elite" ? "border-[#34C759]/40 bg-[#34C759]/5" : "border-white/5 bg-white/[0.02]"}`}>
-            <Crown className="w-5 h-5 text-[#34C759] mx-auto mb-1" />
-            <span className="text-xs font-black text-white block">Elite</span>
-            <span className="text-lg font-mono font-bold text-white block mb-2">$149<span className="text-[0.55rem] text-zinc-500">/mo</span></span>
-            <ul className="text-[0.55rem] text-zinc-400 space-y-1 text-left mb-2">
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#34C759] shrink-0" />Everything in Pro</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#34C759] shrink-0" />1-on-1 review</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#34C759] shrink-0" />Priority signals</li>
-              <li className="flex items-start gap-1"><Check className="w-2.5 h-2.5 mt-0.5 text-[#34C759] shrink-0" />Webhook API</li>
-            </ul>
-            {plan === "elite" ? (
-              <span className="text-[0.55rem] text-[#34C759] font-bold">CURRENT</span>
-            ) : (
-              <a href={link("elite")} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-0.5 text-[0.55rem] text-[#34C759] font-bold hover:underline" data-testid="upgrade-elite-link">UPGRADE <ExternalLink className="w-2.5 h-2.5" /></a>
-            )}
-          </div>
-        </div>
-      </div>
+/** Free-access banner — all features unlocked for everyone (subscriptions removed). */
+const FreemiumGate = () => (
+  <div className="widget-panel col-span-1 md:col-span-2 lg:col-span-6" data-testid="freemium-gate">
+    <div className="widget-header">
+      <h3 className="flex items-center gap-2">
+        <GraduationCap className="w-4 h-4 text-[#34C759]" />
+        FREE ACCESS
+      </h3>
+      <span className="text-[0.6rem] font-black px-2 py-0.5 rounded bg-[#34C759]/20 text-[#34C759]">100% FREE</span>
     </div>
-  );
-};
+    <div className="widget-content">
+      <p className="text-xs text-zinc-300 mb-2">
+        MNQ Scalp Stacks is a <span className="text-[#34C759] font-bold">free learning service</span> — every tool is
+        unlocked for everyone: live signals, AI copilot, charts, Discord alerts, and the Community Lab.
+      </p>
+      <ul className="grid grid-cols-2 gap-1.5">
+        {["Real-time signals", "AI trade copilot", "Signal charts + levels", "Discord alerts", "Community Lab", "Practice journal"].map((f) => (
+          <li key={f} className="flex items-start gap-1.5 text-[0.65rem] text-zinc-400">
+            <Check className="w-3 h-3 mt-0.5 text-[#34C759] shrink-0" />{f}
+          </li>
+        ))}
+      </ul>
+      <a href="/community-lab" className="inline-block mt-3 px-3 py-1.5 bg-[#34C759] text-black text-[0.65rem] font-black rounded-sm hover:bg-[#2DB84E] transition-colors" data-testid="free-lab-link">
+        OPEN THE FREE COMMUNITY LAB
+      </a>
+      <p className="mt-2 text-[0.55rem] text-zinc-600">Educational simulation only — not financial advice. Futures involve substantial risk of loss.</p>
+    </div>
+  </div>
+);
 
-// Ad placement containers for Free tier
+// Ad placement containers (partner placeholders)
 const AdBanner = ({ position }) => (
   <div className={`bg-[#121212] border border-white/5 rounded-sm p-2.5 text-center ${
     position === "top" ? "col-span-1 md:col-span-4 lg:col-span-12" :

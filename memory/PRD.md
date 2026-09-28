@@ -330,6 +330,12 @@
     - UI: MODE: AGGRESSIVE/STRICT toggle in Signal Engine panel (testid engine-mode-toggle, admin-only POST, orange when aggressive); conf badge on signal cards (signal-confidence-{id}); ExecutionPanel uses signal.confidence
     - Verified: tag&hold fires conf 73, pullback conf 80, chop no-fire, strict mode suppresses aggressive setups; mode left ON (aggressive:true)
 
+59. **FREE-FOR-ALL PIVOT — subscriptions removed** (2026-09-28, screenshot + text-verified: no $49/$99/$149 anywhere, GPay widget gone):
+    - USER DECISION: MNQ Scalp Stacks is now a 100% free learning service; all paid tiers/paywalls removed (Stripe backend endpoints left dormant/harmless)
+    - LandingPage: single "$0 forever" free card (paid tiers deleted), copy + footer updated; Membership.js rewritten ("No plans. No paywall. Just learn."); FreemiumGate.js rewritten to FREE ACCESS banner (AdBanner kept); dashboard Header "Upgrade Pro" → "100% Free" → /community-lab; PromoModules Upgrade links → Free Community Lab; GPayWidget → returns null; CommunityLab.jsx tier gate REMOVED (all 10 sections open, join btn → free account)
+    - LiveTerminalChart tape labeled "TAPE ~10 MIN DELAYED" (Yahoo CME delay confirmed vs Plus500/TV real-time ~24pt gap in fast market)
+    - PENDING: real-time data via Capital.com WebSocket API (free) — WAITING ON USER for demo-account API key + account email + custom API password; plan: stream US100 CFD real-time, calibrate offset vs delayed Yahoo, fallback to Yahoo if stream drops; wss://api-streaming-capital.backend-capital.com/connect, 10-min sessions need pings, POST /session auth (docs: open-api.capital.com). Databento ($199/mo) was declined-by-default alternative
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

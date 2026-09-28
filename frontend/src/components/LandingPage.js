@@ -374,13 +374,10 @@ const WelcomeOnboarding = ({ steps, onComplete }) => {
 const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvite, referralCode, welcomeSteps, onCompleteStep, referrerName }) => {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
-  const [selectedTier, setSelectedTier] = useState("pro");
+  const [selectedTier, setSelectedTier] = useState("free");
 
   const tiers = [
-    { id: "free", name: "Free", price: "$0", period: "", features: ["Basic signals (delayed)", "Public dashboard", "Discord community"], color: "border-white/10", accent: "text-[#007AFF]" },
-    { id: "pro", name: "Pro", price: "$49", period: "/mo", popular: true, features: ["Real-time signals", "Discord Pro channel", "AI trade analysis", "Daily briefing"], color: "border-[#FFCC00]/40 ring-1 ring-[#FFCC00]/30", accent: "text-[#FFCC00]" },
-    { id: "premium", name: "Premium", price: "$99.99", period: "/mo", features: ["Everything in Pro", "Operator bracket presets", "Live key-level alerts", "Weekly performance report"], color: "border-[#BF5AF2]/40 ring-1 ring-[#BF5AF2]/30", accent: "text-[#BF5AF2]" },
-    { id: "elite", name: "Elite", price: "$149", period: "/mo", features: ["Everything in Premium", "Elite Discord", "1-on-1 review", "Priority signals", "Custom alerts"], color: "border-[#34C759]/30", accent: "text-[#34C759]" },
+    { id: "free", name: "Free — Everything Included", price: "$0", period: " forever", features: ["Real-time signals & Discord alerts", "AI Scalp Copilot (GPT + Grok)", "Charts with entry/stop/target lines", "Community Lab + practice journal", "No card. No catch — just learn."], color: "border-[#34C759]/40 ring-1 ring-[#34C759]/30", accent: "text-[#34C759]" },
   ];
 
   const handleSubmit = (e) => {
@@ -425,7 +422,7 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
         <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white text-center mb-2">
           Trade with clarity. <span className="text-[#34C759]">Execute with confidence.</span>
         </h2>
-        <p className="text-zinc-500 text-center mb-2 text-sm">Cancel anytime.</p>
+        <p className="text-zinc-500 text-center mb-2 text-sm">Now 100% free for everyone who wants to learn. No card, ever.</p>
         {referrerName && (
           <p className="text-center text-xs text-[#FFCC00] mb-4">
             <Gift className="w-3 h-3 inline mr-1" /> Referred by {referrerName}
@@ -433,7 +430,7 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
         )}
 
         {/* Tier Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 mb-8 md:mb-10">
+        <div className="grid grid-cols-1 gap-3 md:gap-4 mb-8 md:mb-10 max-w-md mx-auto">
           {tiers.map((tier) => {
             const Icon = tier.id === "elite" ? Crown : tier.id === "pro" || tier.id === "premium" ? Star : Zap;
             return (
@@ -466,7 +463,7 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
               selectedTier === "free" ? <>Start Free <ArrowRight className="w-4 h-4" /></> :
               <>Get {tiers.find(t => t.id === selectedTier)?.name} Access — Secure Checkout <ArrowRight className="w-4 h-4" /></>}
           </button>
-          <p className="text-center text-[0.65rem] text-zinc-600">Secure payment by Stripe · Cancel anytime · Instant Discord access after payment</p>
+          <p className="text-center text-[0.65rem] text-zinc-600">Free forever · Instant Discord access · Educational only, not financial advice</p>
         </form>
       </div>
     </section>

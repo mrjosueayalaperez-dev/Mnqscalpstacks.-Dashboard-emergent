@@ -63,8 +63,8 @@ const NinjaTraderPanel = () => (
         >
           Launch Ninja Setup <ExternalLink className="w-3 h-3" />
         </a>
-        <a href="/performance" className="px-3 py-1.5 bg-[#FFCC00]/15 text-[#FFCC00] text-[0.65rem] font-bold rounded-sm border border-[#FFCC00]/30 hover:bg-[#FFCC00]/25 transition-colors">
-          Upgrade Pro
+        <a href="/community-lab" className="px-3 py-1.5 bg-[#34C759]/15 text-[#34C759] text-[0.65rem] font-bold rounded-sm border border-[#34C759]/30 hover:bg-[#34C759]/25 transition-colors">
+          Free Community Lab
         </a>
       </div>
     </div>
@@ -131,7 +131,9 @@ const TradingViewPanel = () => (
 );
 
 // ============ GPAY FLOATING WIDGET ============
-const GPayWidget = () => {
+const GPayWidget = () => null; // subscriptions removed — service is 100% free
+
+const _legacyGPayWidget = () => {
   const [open, setOpen] = useState(false);
   const [loadingTier, setLoadingTier] = useState(null);
   const auth = useAuth();

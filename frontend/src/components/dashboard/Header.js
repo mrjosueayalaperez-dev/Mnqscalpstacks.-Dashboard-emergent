@@ -28,8 +28,8 @@ export const Header = ({ onRefresh, lastUpdate }) => {
       <a href="/performance" className="hidden md:flex items-center gap-1 px-2.5 py-1 text-[0.65rem] bg-[#FFCC00]/15 text-[#FFCC00] rounded-sm hover:bg-[#FFCC00]/25 transition-colors font-bold" data-testid="performance-link">
         <BarChart3 className="w-3 h-3" /> Performance
       </a>
-      <a href="/performance" className="hidden sm:flex items-center gap-1 px-2.5 py-1 text-[0.65rem] bg-[#34C759] text-black rounded-sm hover:bg-[#2DB84E] transition-colors font-bold" data-testid="upgrade-pro-btn">
-        Upgrade Pro
+      <a href="/community-lab" className="hidden sm:flex items-center gap-1 px-2.5 py-1 text-[0.65rem] bg-[#34C759] text-black rounded-sm hover:bg-[#2DB84E] transition-colors font-bold" data-testid="upgrade-pro-btn">
+        100% Free
       </a>
       <span className="text-[0.6rem] text-zinc-600 font-mono hidden md:inline">{lastUpdate || ""}</span>
       <button onClick={onRefresh} className="p-1.5 hover:bg-white/5 rounded transition-colors" data-testid="refresh-all-btn">
