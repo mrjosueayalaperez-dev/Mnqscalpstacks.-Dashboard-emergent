@@ -197,9 +197,29 @@ async def refresh_once() -> Dict[str, Any]:
     return get_last()
 
 
+_live_override: Dict[str, Any] = {"price": None, "ts": 0.0}
+
+
+def set_live_price(price: float) -> None:
+    """Real-time price pushed from a TradingView alert webhook — overrides the delayed Yahoo tape."""
+    _live_override["price"] = round(float(price), 2)
+    _live_override["ts"] = time.time()
+
+
 def get_last() -> Dict[str, Any]:
-    """Return cached snapshot (does not network)."""
-    return dict(_last_tick)
+    """Return cached snapshot (does not network). Prefers a fresh TradingView live price."""
+    snap = dict(_last_tick)
+    lp, ts = _live_override["price"], _live_override["ts"]
+    if lp and time.time() - ts < 120:
+        prev = snap.get("previous_close") or 0
+        snap.update({
+            "price": lp, "close": lp,
+            "change": round(lp - prev, 2) if prev else snap.get("change"),
+            "change_percent": round((lp - prev) / prev * 100, 2) if prev else snap.get("change_percent"),
+            "source": "tradingview:live",
+            "stale": False,
+        })
+    return snap
 
 
 def get_bars() -> List[Dict[str, Any]]:

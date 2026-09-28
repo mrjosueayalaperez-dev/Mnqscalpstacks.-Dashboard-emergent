@@ -157,7 +157,11 @@ export default function LiveTerminalChart() {
         <div className="flex items-center gap-2.5">
           <Activity className="w-4 h-4 text-[#34C759]" />
           <span className="text-xs md:text-sm font-black tracking-[0.2em] text-white">MNQ LIVE TERMINAL</span>
-          <span className="hidden sm:inline text-[0.6rem] font-mono text-zinc-500">US100 CFD · TRACKS MNQ 1:1 · <span className="text-[#FFCC00]">TAPE ~10 MIN DELAYED</span></span>
+          <span className="hidden sm:inline text-[0.6rem] font-mono text-zinc-500">
+            {tick?.source === "tradingview:live"
+              ? <>US100/MNQ · <span className="text-[#34C759]">TAPE: TRADINGVIEW LIVE</span></>
+              : <>US100 CFD · TRACKS MNQ 1:1 · <span className="text-[#FFCC00]">TAPE ~10 MIN DELAYED</span></>}
+          </span>
           <div
             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-sm ${connected ? "bg-[#34C759]/10" : "bg-[#FF3B30]/10"}`}
             data-testid="terminal-ws-status"

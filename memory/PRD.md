@@ -336,6 +336,14 @@
     - LiveTerminalChart tape labeled "TAPE ~10 MIN DELAYED" (Yahoo CME delay confirmed vs Plus500/TV real-time ~24pt gap in fast market)
     - PENDING: real-time data via Capital.com WebSocket API (free) — WAITING ON USER for demo-account API key + account email + custom API password; plan: stream US100 CFD real-time, calibrate offset vs delayed Yahoo, fallback to Yahoo if stream drops; wss://api-streaming-capital.backend-capital.com/connect, 10-min sessions need pings, POST /session auth (docs: open-api.capital.com). Databento ($199/mo) was declined-by-default alternative
 
+60. **Real-time tape via TradingView PRICE action + free launch post** (2026-09-28, curl-verified):
+    - Capital.com path DROPPED (user cannot create API key); user bought TradingView paid plan instead — TV alerts are now both the punch source AND the tape source
+    - market_feed.py: set_live_price() + _live_override; get_last() prefers TV price if <120s old (source "tradingview:live"), auto-falls back to Yahoo; webhook action "PRICE" (JSON or loose text) updates tape silently (no signal, no event-log spam), secret required, 422 if non-numeric
+    - LiveTerminalChart label: green "TAPE: TRADINGVIEW LIVE" when tick.source is tradingview:live, else amber delayed warning
+    - Verified: before 30698.75 yahoo → PRICE push → after 30717.25 tradingview:live; bad secret 401; no signal doc created
+    - USER SETUP NEEDED (told in chat): TV 1m chart alert, condition price > 0, trigger Once Per Bar Close, webhook URL /api/signals/tradingview, body {"action":"PRICE","price":{{close}},"secret":"<their secret>"}; TV webhook IPs need NO whitelisting on Emergent
+    - /app/marketing/FREE_LAUNCH_POST.md — X + Discord announcement of the free pivot
+
 ## Configured
 - Discord Webhook: LIVE
 - Stripe: test key

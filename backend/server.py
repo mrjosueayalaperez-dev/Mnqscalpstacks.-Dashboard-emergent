@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Depends, Header
 from fastapi.responses import RedirectResponse
-from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq
+from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq, set_live_price as market_feed_set_live_price
 from market_context import get_market_context
 import ati
 import proof
@@ -1174,7 +1174,7 @@ def _parse_tv_alert(raw: str, fallback_secret: str) -> dict:
         out["note"] = str(p.get("note", ""))
     except (json.JSONDecodeError, AttributeError):
         up = raw.upper()
-        out["action"] = "BUY" if "BUY" in up else "SELL" if "SELL" in up else "CLOSE" if "CLOSE" in up else "HOLD" if "HOLD" in up else ""
+        out["action"] = "BUY" if "BUY" in up else "SELL" if "SELL" in up else "CLOSE" if "CLOSE" in up else "HOLD" if "HOLD" in up else "PRICE" if "PRICE" in up else ""
         for tok in raw.replace(",", " ").split():
             try:
                 v = float(tok)
@@ -1213,9 +1213,17 @@ async def signals_tradingview(request: Request):
     if SIGNAL_WEBHOOK_SECRET and a["secret"] != SIGNAL_WEBHOOK_SECRET:
         await _log_signal_event(False, 401, "Bad or missing secret", action, source)
         raise HTTPException(status_code=401, detail="Invalid webhook secret")
-    if action not in ("BUY", "SELL", "CLOSE", "HOLD"):
+    if action not in ("BUY", "SELL", "CLOSE", "HOLD", "PRICE"):
         await _log_signal_event(False, 400, f"Unknown action: {action or raw[:60]}", action, source)
-        raise HTTPException(status_code=400, detail="action must be BUY, SELL, HOLD, or CLOSE")
+        raise HTTPException(status_code=400, detail="action must be BUY, SELL, HOLD, PRICE, or CLOSE")
+    if action == "PRICE":
+        # Real-time tape update from a once-per-bar TradingView alert — no signal, no log spam
+        try:
+            fp = float(a["price"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=422, detail="PRICE action requires a numeric price")
+        market_feed_set_live_price(fp)
+        return {"ok": True, "action": "PRICE", "price": fp}
     if symbol not in SYMBOL_MAP:
         await _log_signal_event(False, 400, f"Unsupported symbol: {symbol}", action, source)
         raise HTTPException(status_code=400, detail=f"Unsupported symbol {symbol} — use MNQ1! or NQ1!")
