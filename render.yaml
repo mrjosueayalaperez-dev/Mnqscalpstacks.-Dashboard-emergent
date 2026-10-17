@@ -1,0 +1,20 @@
+# Render Blueprint — MNQ Scalp Stacks backend
+# Commit this file to the repo ROOT, then Render -> New -> Blueprint -> select the repo.
+# Fill the blank env vars in the Render dashboard (never commit secrets).
+
+services:
+  - type: web
+    name: mnq-scalp-stacks-backend
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --app-dir backend
+    healthCheckPath: /docs
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.3
+      - key: MONGO_URL
+        sync: false          # paste your MongoDB Atlas connection string in the dashboard
+      - key: DB_NAME
+        value: mnqscalpstacks
+      - key: DISCORD_WEBHOOK_URL
+        sync: false          # paste your Discord webhook URL in the dashboard
