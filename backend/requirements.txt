@@ -20,7 +20,10 @@ distro==1.9.0
 dnspython==2.8.0
 ecdsa==0.19.2
 email-validator==2.3.0
-emergentintegrations==0.2.0
+# emergentintegrations was Emergent's private package (not on PyPI) and is not
+# installable outside Emergent. It is replaced by the local
+# backend/emergentintegrations/ compatibility shim (same imports, backed by
+# litellm and the official stripe SDK) — no vendor lock-in.
 fastapi==0.110.1
 fastuuid==0.14.0
 filelock==3.25.2

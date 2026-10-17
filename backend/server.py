@@ -22,7 +22,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 import secrets
 import hashlib
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
 
 # Secure random generator
 _rng = secrets.SystemRandom()
@@ -959,7 +959,7 @@ async def calculate_mnq_position(stop_points: int = 15, risk_amount: float = 30.
 @api_router.post("/ai/analyze")
 async def ai_analyze(request: AIAnalysisRequest):
     """Get AI-powered trade analysis"""
-    if not EMERGENT_LLM_KEY:
+    if not is_llm_configured():
         raise HTTPException(status_code=500, detail="AI service not configured")
     
     # Fetch current data for the symbol
