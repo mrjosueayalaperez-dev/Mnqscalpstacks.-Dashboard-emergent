@@ -1795,9 +1795,12 @@ async def delete_backtest(backtest_id: str):
 async def get_public_backtests():
     """Public endpoint: Get latest backtest results for performance page"""
     results = await db.backtests.find({}, {"_id": 0}).sort("created_at", -1).to_list(5)
+    for r in results:
+        r["data_mode"] = "HYPOTHETICAL/DEMO"
+        r["is_verified"] = False
     return results
 
-@api_router.post("/backtests/seed-demo")
+@api_router.post("/backtests/seed-demo", dependencies=[Depends(require_write_key)])
 async def seed_demo_backtest():
     """Seed a demo backtest for display"""
     existing = await db.backtests.count_documents({})
@@ -1826,8 +1829,8 @@ async def seed_demo_backtest():
         largest_loss=-48.00,
         max_consecutive_wins=11,
         max_consecutive_losses=4,
-        notes="3.5 months | MNQ 1m | Session VWAP + Structure | $10K initial capital",
-        is_verified=True,
+        notes="DEMO / HYPOTHETICAL placeholder — not a real or verified backtest",
+        is_verified=False,
     )
     doc = demo.model_dump()
     doc["created_at"] = doc["created_at"].isoformat()
@@ -1895,7 +1898,7 @@ async def get_public_performance():
     active = [s for s in all_signals if s.get("status") == "active"]
 
     total_pnl = sum(s.get("pnl_points", 0) for s in closed if s.get("pnl_points"))
-    win_rate = round(len(wins) / len(closed) * 100, 1) if closed else 0
+    win_rate = round(len(wins) / len(closed) * 100, 1) if closed else None
 
     avg_win_pts = round(sum(s.get("pnl_points", 0) for s in wins) / len(wins), 1) if wins else 0
     avg_loss_pts = round(abs(sum(s.get("pnl_points", 0) for s in losses) / len(losses)), 1) if losses else 0
@@ -1942,6 +1945,9 @@ async def get_public_performance():
             current_streak = 0
 
     return {
+        "data_mode": "PAPER/SIM/TEST",
+        "is_live": False,
+        "disclaimer": "Paper/simulated test data. Not live trading results and not proof of performance. Past performance is not indicative of future results.",
         "overview": {
             "total_signals": len(all_signals),
             "closed_signals": len(closed),
@@ -1960,7 +1966,7 @@ async def get_public_performance():
     }
 
 
-@api_router.post("/public/seed-demo")
+@api_router.post("/public/seed-demo", dependencies=[Depends(require_write_key)])
 async def seed_demo_performance():
     """Seed demo performance data for the public dashboard"""
 

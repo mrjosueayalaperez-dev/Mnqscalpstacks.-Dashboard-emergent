@@ -74,7 +74,7 @@ export default function AtiBridgePanel() {
           }`}
         >
           <Radio className="w-3.5 h-3.5" />
-          {enabled ? "LIVE ROUTING ARMED" : "SIMULATOR ONLY — TAP TO ARM"}
+          {enabled ? "ATI BRIDGE ARMED — SIM ACCOUNT ONLY" : "SIMULATOR ONLY — TAP TO ARM"}
         </button>
 
         {/* Config fields */}

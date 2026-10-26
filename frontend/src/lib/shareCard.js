@@ -40,7 +40,7 @@ function drawCard(trade) {
   ctx.fillText(`${win ? "+" : "-"}$${Math.abs(pnl).toFixed(2)}`, 80, 560);
   ctx.fillStyle = "#a1a1aa";
   ctx.font = "700 36px Arial";
-  ctx.fillText(win ? "WIN — VERIFIED SIM/LIVE EXECUTION" : "LOSS — RISK MANAGED", 80, 630);
+  ctx.fillText(win ? "WIN — PAPER/SIM PRACTICE (NOT LIVE)" : "LOSS — PAPER/SIM PRACTICE (NOT LIVE)", 80, 630);
 
   // Details
   ctx.font = "700 40px 'Courier New', monospace";
