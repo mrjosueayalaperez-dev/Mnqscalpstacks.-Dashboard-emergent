@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Activity, Wifi, WifiOff, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import useMnqLive from "@/components/operator/useMnqLive";
-import { buildTvEmbedUrl } from "@/lib/tvEmbedUrl";
+import { buildTvEmbedUrl, PROXY_LABEL, IS_PROXY } from "@/lib/tvEmbedUrl";
 import SignalChart from "@/components/dashboard/SignalChart";
 
 const INTERVALS = [
@@ -156,11 +156,12 @@ export default function LiveTerminalChart() {
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-b border-white/10 bg-[#0A0A0A]">
         <div className="flex items-center gap-2.5">
           <Activity className="w-4 h-4 text-[#34C759]" />
-          <span className="text-xs md:text-sm font-black tracking-[0.2em] text-white">MNQ LIVE TERMINAL</span>
+          <span className="text-xs md:text-sm font-black tracking-[0.2em] text-white">MNQ TERMINAL</span>
+          <span className={`text-[0.6rem] font-mono font-bold px-1.5 py-0.5 rounded-sm ${IS_PROXY ? "bg-[#FFCC00]/15 text-[#FFCC00]" : "bg-white/5 text-zinc-300"}`} data-testid="chart-symbol-label">{PROXY_LABEL}</span>
           <span className="hidden sm:inline text-[0.6rem] font-mono text-zinc-500">
             {tick?.source === "tradingview:live"
-              ? <>US100/MNQ · <span className="text-[#34C759]">TAPE: TRADINGVIEW LIVE</span></>
-              : <>US100 CFD · TRACKS MNQ 1:1 · <span className="text-[#FFCC00]">TAPE ~10 MIN DELAYED</span></>}
+              ? <>MNQ tape: <span className="text-[#34C759]">TradingView real-time</span></>
+              : <>MNQ tape: <span className="text-[#FFCC00]">~10 min delayed</span></>}
           </span>
           <div
             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-sm ${connected ? "bg-[#34C759]/10" : "bg-[#FF3B30]/10"}`}

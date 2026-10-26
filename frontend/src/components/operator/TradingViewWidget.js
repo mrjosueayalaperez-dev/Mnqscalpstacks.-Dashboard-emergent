@@ -1,6 +1,6 @@
 import React from "react";
 import { BarChart3, Wifi, WifiOff } from "lucide-react";
-import { buildTvEmbedUrl } from "@/lib/tvEmbedUrl";
+import { buildTvEmbedUrl, PROXY_LABEL } from "@/lib/tvEmbedUrl";
 
 /**
  * TradingView chart — deterministic direct `widgetembed` iframe (see
@@ -18,7 +18,7 @@ export default function TradingViewWidget({ wsConnected, lastTick }) {
       <div className="absolute top-0 left-0 right-0 z-10 px-3 py-1.5 flex items-center justify-between border-b border-white/5 bg-[#0A0A0A]/85 backdrop-blur-sm pointer-events-none">
         <div className="flex items-center gap-2">
           <BarChart3 className="w-3.5 h-3.5 text-[#34C759]" />
-          <span className="text-[0.65rem] font-black tracking-wider text-white">MNQ <span className="text-zinc-500 font-mono font-normal">· US100 CFD chart</span></span>
+          <span className="text-[0.65rem] font-black tracking-wider text-white">MNQ <span className="text-[#FFCC00] font-mono font-normal" data-testid="chart-symbol-label">· {PROXY_LABEL}</span></span>
           {lastTick?.price && (
             <span className="text-[0.65rem] font-mono text-zinc-300">
               {Number(lastTick.price).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
