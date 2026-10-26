@@ -1546,12 +1546,14 @@ async def get_kill_switch():
 @api_router.get("/signals/health")
 async def get_system_health():
     """Get system health metrics"""
-    total = signal_engine_state["total_signals"]
+    # In-memory counter resets on every restart/redeploy; the persisted signals collection is the source of truth.
+    since_restart = signal_engine_state["total_signals"]
+    total = await db.signals.count_documents({})
     errors = signal_engine_state["errors"]
-    error_rate = round(errors / total * 100, 1) if total > 0 else 0
+    error_rate = round(errors / since_restart * 100, 1) if since_restart > 0 else 0
 
     # Check auto kill-switch threshold (>5% error rate)
-    auto_kill = error_rate > 5 and total > 10
+    auto_kill = error_rate > 5 and since_restart > 10
 
     discord_configured = bool(DISCORD_WEBHOOK_URL) and DISCORD_WEBHOOK_URL != "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL"
 
@@ -1561,6 +1563,7 @@ async def get_system_health():
         "auto_kill_triggered": auto_kill,
         "uptime_since": signal_engine_state["started_at"],
         "total_signals_processed": total,
+        "signals_processed_since_restart": since_restart,
         "errors": errors,
         "error_rate_pct": error_rate,
         "last_signal_time": signal_engine_state["last_signal_time"],

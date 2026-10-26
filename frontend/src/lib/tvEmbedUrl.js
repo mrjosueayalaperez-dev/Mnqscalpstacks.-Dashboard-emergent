@@ -8,9 +8,16 @@
  *    fragment config (renders light) and misplaces the iframe below the
  *    container. Query-param `widgetembed` URLs are stable and loader-free.
  */
+// CME_MINI:MNQ1! is the true contract but TV blocks it in anonymous embeds. Default to the
+// proxy and ALWAYS show PROXY_LABEL when the proxy is in use. Override via REACT_APP_TV_SYMBOL
+// (e.g. CME_MINI:MNQ1! once a licensed/authenticated embed is available).
+export const TV_SYMBOL = process.env.REACT_APP_TV_SYMBOL || "CAPITALCOM:US100";
+export const IS_PROXY = TV_SYMBOL !== "CME_MINI:MNQ1!";
+export const PROXY_LABEL = IS_PROXY ? "Proxy: US100 CFD (not MNQ futures)" : "CME_MINI:MNQ1!";
+
 export function buildTvEmbedUrl({ interval = "1", hideSideToolbar = true, withDateRanges = false } = {}) {
   const params = new URLSearchParams({
-    symbol: "CAPITALCOM:US100",
+    symbol: TV_SYMBOL,
     interval,
     theme: "dark",
     style: "1",
@@ -26,14 +33,12 @@ export function buildTvEmbedUrl({ interval = "1", hideSideToolbar = true, withDa
   if (interval === "5") params.set("range", "1D");
   // JSON studies array supports per-instance inputs (repeated params can't set two EMA lengths)
   params.set("studies", JSON.stringify([
-    { id: "MAExp@tv-basicstudies", inputs: { length: 9 } },
     { id: "MAExp@tv-basicstudies", inputs: { length: 21 } },
     { id: "VWAP@tv-basicstudies" },
-    { id: "RSI@tv-basicstudies", inputs: { length: 14 } },
+    { id: "Volume@tv-basicstudies" },
   ]));
   params.set("studies_overrides", JSON.stringify({
-    "moving average exponential.0.plot.color": "#FFCC00",
-    "moving average exponential.1.plot.color": "#FFFFFF",
+    "moving average exponential.plot.color": "#FFFFFF",
   }));
   return `https://www.tradingview-widget.com/widgetembed/?${params.toString()}`;
 }
