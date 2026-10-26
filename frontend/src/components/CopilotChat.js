@@ -43,7 +43,7 @@ export const CopilotChat = () => {
   };
 
   useEffect(() => {
-    axios.get(`${API}/copilot/history/${sessionId.current}`)
+    axios.get(`${API}/copilot/history/${sessionId.current}`, { withCredentials: true })
       .then((r) => setMessages((r.data || []).map((m, idx) => ({ ...m, id: `h-${idx}-${m.created_at || ""}` }))))
       .catch(() => {});
   }, []);
@@ -64,6 +64,7 @@ export const CopilotChat = () => {
     try {
       const res = await fetch(`${API}/copilot/chat`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ session_id: sessionId.current, message: msg, provider, model }),
       });
