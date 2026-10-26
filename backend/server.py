@@ -23,6 +23,7 @@ import httpx
 import secrets
 import hashlib
 from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
+from copilot import build_copilot_router, copilot_enabled, with_disclaimer, METHOD_PROMPT
 
 # Secure random generator
 _rng = secrets.SystemRandom()
@@ -958,7 +959,9 @@ async def calculate_mnq_position(stop_points: int = 15, risk_amount: float = 30.
 # AI Analysis Routes
 @api_router.post("/ai/analyze")
 async def ai_analyze(request: AIAnalysisRequest):
-    """Get AI-powered trade analysis"""
+    """Legacy AI analysis — gated behind COPILOT_ENABLED (404 when off)."""
+    if not copilot_enabled():
+        raise HTTPException(status_code=404, detail="Not Found")
     if not is_llm_configured():
         raise HTTPException(status_code=500, detail="AI service not configured")
     
@@ -974,13 +977,8 @@ async def ai_analyze(request: AIAnalysisRequest):
     ema21 = indicators.get('ema21', 'N/A') if indicators else 'N/A'
     rsi = indicators.get('rsi', 'N/A') if indicators else 'N/A'
     
-    system_message = """You are an expert trading analyst specializing in MNQ futures and momentum stocks ($1-$20 range). 
-    Provide concise, actionable analysis. Focus on:
-    - Entry/exit points based on technical indicators
-    - Risk management (stop loss, position sizing)
-    - Market context and momentum
-    Be direct and specific. No financial advice disclaimers."""
-    
+    system_message = METHOD_PROMPT
+
     context_data = f"""
     Symbol: {request.symbol}
     Current Price: ${price}
@@ -993,8 +991,8 @@ async def ai_analyze(request: AIAnalysisRequest):
     
     prompts = {
         "general": f"Analyze {request.symbol} for potential trading opportunity. {context_data}",
-        "entry": f"Should I enter a position on {request.symbol}? Provide specific entry levels. {context_data}",
-        "exit": f"I have a position in {request.symbol}. Should I exit? {context_data}",
+        "entry": f"Walk through the five-step stack for {request.symbol} as an educational review. {context_data}",
+        "exit": f"Review the open practice position on {request.symbol} against the stack, educationally. {context_data}",
         "sentiment": f"What's the market sentiment for {request.symbol}? {context_data}"
     }
     
@@ -1014,7 +1012,7 @@ async def ai_analyze(request: AIAnalysisRequest):
         return {
             "symbol": request.symbol,
             "analysis_type": request.analysis_type,
-            "analysis": response,
+            "analysis": with_disclaimer(response),
             "data_used": {
                 "quote": quote,
                 "indicators": indicators
@@ -1022,7 +1020,7 @@ async def ai_analyze(request: AIAnalysisRequest):
         }
     except Exception as e:
         logger.error(f"AI analysis error: {e}")
-        raise HTTPException(status_code=500, detail=f"AI analysis failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="AI analysis failed")
 
 # ============== Signal Engine Routes ==============
 
@@ -1409,14 +1407,30 @@ from emergentintegrations.llm.chat import TextDelta, StreamDone
 from fastapi.responses import StreamingResponse
 
 
-GPT_MODELS = {"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5", "gpt-5.4", "gpt-5.4-mini"}
 
 
-class CopilotBody(BaseModel):
-    session_id: str
-    message: str
-    provider: str = "gpt"
-    model: str = "gpt-5.4"
+async def _copilot_stream(provider: str, model: str, system: str, msg: str, session_id: str):
+    if provider == "grok":
+        from openai import AsyncOpenAI
+        xai = AsyncOpenAI(api_key=os.environ["XAI_API_KEY"], base_url="https://api.x.ai/v1", timeout=120.0)
+        stream = await xai.chat.completions.create(
+            model=model,
+            messages=[{"role": "system", "content": system}, {"role": "user", "content": msg}],
+            stream=True, temperature=0.3,
+        )
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content if chunk.choices else None
+            if delta:
+                yield delta
+    else:
+        chat = LlmChat(
+            api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=session_id, system_message=system,
+        ).with_model("openai", model)
+        async for ev in chat.stream_message(UserMessage(text=msg)):
+            if isinstance(ev, TextDelta):
+                yield ev.content
+            elif isinstance(ev, StreamDone):
+                break
 
 
 async def _copilot_context() -> str:
@@ -1428,6 +1442,7 @@ async def _copilot_context() -> str:
         {"outcome": {"$in": ["win", "loss"]}}, {"_id": 0, "side": 1, "outcome": 1, "pnl_points": 1}
     ).sort("created_at", -1).to_list(5)
     lines = [
+        "DATA MODE: PAPER/SIM/TEST (not live, not performance proof)",
         f"MNQ last price: {tick.get('price')} (change {tick.get('change')}, {tick.get('change_percent')}%)",
         f"Session high/low: {tick.get('day_high')} / {tick.get('day_low')}",
         f"Open position: {pos.get('side') or 'FLAT'} qty={pos.get('qty', 0)} avg_entry={pos.get('avg_entry', 0)}",
@@ -1445,85 +1460,7 @@ async def _copilot_context() -> str:
     return "\n".join(lines)
 
 
-@api_router.post("/copilot/chat", tags=["ai"])
-async def copilot_chat(body: CopilotBody):
-    """Streaming AI trading copilot with live desk context. Plain-text token stream."""
-    msg = body.message.strip()
-    if not msg:
-        raise HTTPException(status_code=400, detail="Empty message")
-    history = await db.copilot_messages.find(
-        {"session_id": body.session_id}, {"_id": 0, "role": 1, "content": 1}
-    ).sort("created_at", 1).to_list(40)
-    transcript = "\n".join(f"{m['role'].upper()}: {m['content'][:600]}" for m in history[-12:]) or "(new conversation)"
-    context = await _copilot_context()
-    system = (
-        "You are Scalp Copilot, the in-dashboard assistant for MNQ Scalp Stacks — a practice and education "
-        "platform for MNQ futures scalpers using the five-step stack: session, location, trigger (EMA9/EMA21 "
-        "cross + VWAP + RSI14), risk, review.\n"
-        "Rules: be concise (under 120 words unless asked), plain text only — no markdown, no asterisks. Use the live desk context below, never guarantee "
-        "profits, never give personalized financial advice — frame everything as education. If asked about the "
-        "open position or active signal, use the exact numbers from context. Remind about the $100 daily loss "
-        "lockout when relevant.\n\n"
-        f"LIVE DESK CONTEXT (just fetched):\n{context}\n\n"
-        f"CONVERSATION SO FAR:\n{transcript}"
-    )
-    use_grok = body.provider.lower() == "grok" and bool(os.environ.get("XAI_API_KEY"))
-    gpt_model = body.model if body.model in GPT_MODELS else "gpt-5.4"
-
-    await db.copilot_messages.insert_one({
-        "session_id": body.session_id, "role": "user", "content": msg,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    })
-
-    async def gen():
-        parts = []
-        try:
-            if use_grok:
-                from openai import AsyncOpenAI
-                xai = AsyncOpenAI(api_key=os.environ["XAI_API_KEY"], base_url="https://api.x.ai/v1", timeout=120.0)
-                stream = await xai.chat.completions.create(
-                    model="grok-4.6",
-                    messages=[{"role": "system", "content": system}, {"role": "user", "content": msg}],
-                    stream=True, temperature=0.3,
-                )
-                async for chunk in stream:
-                    delta = chunk.choices[0].delta.content if chunk.choices else None
-                    if delta:
-                        parts.append(delta)
-                        yield delta
-            else:
-                chat = LlmChat(
-                    api_key=os.environ.get("EMERGENT_LLM_KEY", ""),
-                    session_id=body.session_id,
-                    system_message=system,
-                ).with_model("openai", gpt_model)
-                async for ev in chat.stream_message(UserMessage(text=msg)):
-                    if isinstance(ev, TextDelta):
-                        parts.append(ev.content)
-                        yield ev.content
-                    elif isinstance(ev, StreamDone):
-                        break
-        except Exception as e:
-            logger.error(f"Copilot stream error ({'grok' if use_grok else 'gpt'}): {e}")
-            yield "\n[Copilot hit an error — try again.]"
-        finally:
-            if parts:
-                await db.copilot_messages.insert_one({
-                    "session_id": body.session_id, "role": "assistant", "content": "".join(parts),
-                    "provider": "grok" if use_grok else "gpt",
-                    "model": "grok-4.6" if use_grok else gpt_model,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                })
-
-    return StreamingResponse(gen(), media_type="text/plain",
-                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
-
-
-@api_router.get("/copilot/history/{session_id}", tags=["ai"])
-async def copilot_history(session_id: str):
-    return await db.copilot_messages.find(
-        {"session_id": session_id}, {"_id": 0, "role": 1, "content": 1, "created_at": 1}
-    ).sort("created_at", 1).to_list(60)
+api_router.include_router(build_copilot_router(db, auth_module.get_current_user, _copilot_context, _copilot_stream, logger))
 
 
 # Update signal outcome
