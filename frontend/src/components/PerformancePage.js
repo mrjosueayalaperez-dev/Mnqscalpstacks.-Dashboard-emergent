@@ -1,3 +1,4 @@
+import { fmtPct, DATA_MODE, DATA_MODE_NOTE } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast, Toaster } from "sonner";
@@ -62,7 +63,7 @@ const HeroStats = ({ overview }) => {
   const stats = [
     {
       label: "Win Rate",
-      value: `${overview.win_rate}%`,
+      value: fmtPct(overview.win_rate),
       color: overview.win_rate >= 60 ? "text-[#34C759]" : "text-[#FFCC00]",
       icon: Trophy,
       glow: overview.win_rate >= 60,
@@ -299,11 +300,11 @@ const BacktestDisplay = ({ backtests }) => {
         <div className="flex items-center gap-2">
           <BarChart3 className="w-5 h-5 text-[#007AFF]" />
           <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-            Verified Backtest
+            Backtest (Hypothetical)
           </h3>
           {bt.is_verified && (
             <span className="text-[0.6rem] px-2 py-0.5 bg-[#34C759]/20 text-[#34C759] rounded font-bold uppercase">
-              Verified
+              Reviewed
             </span>
           )}
         </div>
@@ -706,8 +707,8 @@ const PerformancePage = () => {
             <h1 className="text-lg font-black tracking-tight text-white">
               MNQ STACK SIGNALS
             </h1>
-            <span className="hidden md:inline text-xs px-2 py-0.5 bg-[#34C759]/20 text-[#34C759] rounded font-bold uppercase">
-              Live
+            <span className="hidden md:inline text-xs px-2 py-0.5 bg-[#FFCC00]/20 text-[#FFCC00] rounded font-bold uppercase" data-testid="data-mode-badge">
+              {DATA_MODE}
             </span>
           </div>
           <a
@@ -725,11 +726,11 @@ const PerformancePage = () => {
         {/* Hero tagline */}
         <div className="text-center py-6">
           <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white mb-2">
-            Verified Signal Performance
+            Signal Log — Paper / Sim / Test
           </h2>
           <p className="text-zinc-500 text-sm max-w-lg mx-auto">
-            Real-time MNQ futures signals powered by confluence scoring.
-            Every trade logged. Every result tracked.
+            {DATA_MODE_NOTE} Every signal logged. Hypothetical and simulated results have inherent
+            limitations. Past performance is not indicative of future results.
           </p>
         </div>
 

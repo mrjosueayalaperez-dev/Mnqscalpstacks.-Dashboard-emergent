@@ -1,3 +1,4 @@
+import { fmtPct, hasNum } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -532,9 +533,9 @@ const SignalDashboard = () => {
             <div className="stat-box">
               <span className="stat-label">Win Rate</span>
               <span className={`stat-value text-lg ${
-                (stats.win_rate || 0) >= 50 ? "text-[#34C759]" : "text-[#FF3B30]"
+                !hasNum(stats.win_rate) ? "text-zinc-400" : stats.win_rate >= 50 ? "text-[#34C759]" : "text-[#FF3B30]"
               }`}>
-                {stats.win_rate || 0}%
+                {fmtPct(stats.win_rate)}
               </span>
             </div>
             <div className="stat-box">

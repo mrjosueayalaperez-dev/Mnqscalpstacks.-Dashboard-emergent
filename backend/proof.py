@@ -1,4 +1,4 @@
-"""Verified trading proof gallery — images stored in MongoDB (survive redeploys)."""
+"""Practice (paper/sim) screenshot gallery — images stored in MongoDB (survive redeploys)."""
 import base64
 import uuid
 from datetime import datetime, timezone
@@ -25,7 +25,8 @@ def build_proof_router(db: Any, require_write_key: Any) -> APIRouter:
         )
         for r in rows:
             r["url"] = f"/api/proof/image/{r['id']}"
-        return {"shots": rows}
+        return {"shots": rows, "data_mode": "PAPER/SIM/TEST", "is_live": False,
+                "disclaimer": "Practice/simulated screenshots. Not live results or proof of performance."}
 
     @router.get("/image/{pid}")
     async def proof_image(pid: str) -> Response:

@@ -1,3 +1,4 @@
+import { fmtPct } from "@/lib/fmt";
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { Trophy, Users, Flame, TrendingUp, Crown, Star, Medal } from "lucide-react";
@@ -70,7 +71,7 @@ const Leaderboard = () => {
             </div>
             <div className="p-3 bg-white/[0.03] rounded-sm text-center">
               <span className="text-[0.55rem] text-zinc-500 block uppercase">Win Rate</span>
-              <span className="text-xl font-mono font-bold text-[#34C759]">{data.month_stats?.win_rate || 0}%</span>
+              <span className="text-xl font-mono font-bold text-[#34C759]">{fmtPct(data.month_stats?.win_rate)}</span>
             </div>
             <div className="p-3 bg-white/[0.03] rounded-sm text-center">
               <span className="text-[0.55rem] text-zinc-500 block uppercase">P&L</span>

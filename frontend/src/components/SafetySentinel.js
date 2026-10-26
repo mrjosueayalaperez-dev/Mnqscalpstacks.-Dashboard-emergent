@@ -1,3 +1,4 @@
+import { fmtPct } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -104,7 +105,7 @@ const SafetySentinel = () => {
           <div className="stat-box">
             <span className="stat-label">Win Rate</span>
             <span className={`text-lg font-mono font-bold ${stats.win_rate >= 50 ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
-              {stats.win_rate || 0}%
+              {fmtPct(stats.win_rate)}
             </span>
           </div>
           <div className="stat-box">

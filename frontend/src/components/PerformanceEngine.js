@@ -1,3 +1,4 @@
+import { fmtPct, hasNum } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { Activity, TrendingUp, TrendingDown, BarChart3, Zap, Target } from "lucide-react";
@@ -40,12 +41,12 @@ const PerformanceEngine = () => {
   const stackBearish = price < ema21 && price < vwap;
 
   const metrics = [
-    { label: "Daily P&L", value: `${stats.total_pnl >= 0 ? "+" : ""}$${formatPrice(stats.total_pnl || 0)}`, color: (stats.total_pnl || 0) >= 0 ? "#34C759" : "#FF3B30", glow: true },
-    { label: "Win Rate", value: `${stats.win_rate || 0}%`, color: (stats.win_rate || 0) >= 50 ? "#34C759" : "#FF3B30", glow: false },
+    { label: "Daily P&L (SIM)", value: `${stats.total_pnl >= 0 ? "+" : ""}$${formatPrice(stats.total_pnl || 0)}`, color: (stats.total_pnl || 0) >= 0 ? "#34C759" : "#FF3B30", glow: true },
+    { label: "Win Rate (SIM)", value: fmtPct(stats.win_rate), color: !hasNum(stats.win_rate) ? "#a1a1aa" : stats.win_rate >= 50 ? "#34C759" : "#FF3B30", glow: false },
     { label: "Avg Win", value: `+$${formatPrice(stats.avg_win || 0)}`, color: "#34C759", glow: false },
     { label: "Avg Loss", value: `$${formatPrice(stats.avg_loss || 0)}`, color: "#FF3B30", glow: false },
     { label: "Signals", value: signalStats.total_signals || 0, color: "#007AFF", glow: false },
-    { label: "Sig Win%", value: `${signalStats.win_rate || 0}%`, color: (signalStats.win_rate || 0) >= 50 ? "#34C759" : "#FF3B30", glow: false },
+    { label: "Sig Win% (SIM)", value: fmtPct(signalStats.win_rate), color: !hasNum(signalStats.win_rate) ? "#a1a1aa" : signalStats.win_rate >= 50 ? "#34C759" : "#FF3B30", glow: false },
   ];
 
   return (

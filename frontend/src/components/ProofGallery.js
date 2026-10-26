@@ -65,11 +65,11 @@ export default function ProofGallery() {
       <div className="max-w-6xl mx-auto">
         <div className="flex items-center gap-2 mb-2">
           <BadgeCheck className="w-5 h-5 text-[#34C759]" />
-          <span className="text-[0.65rem] font-black tracking-[0.25em] text-[#34C759] uppercase">Receipts, Not Promises</span>
+          <span className="text-[0.65rem] font-black tracking-[0.25em] text-[#34C759] uppercase">Practice Journal — Paper/Sim</span>
         </div>
-        <h2 className="text-base md:text-lg font-black text-white mb-1">VERIFIED RESULTS — REAL TRADE PROOF</h2>
+        <h2 className="text-base md:text-lg font-black text-white mb-1">PRACTICE LOG — PAPER / SIM / TEST</h2>
         <p className="text-sm text-zinc-500 mb-8 max-w-xl">
-          Actual account screenshots and closed Micro E-mini Nasdaq-100 positions. Tap any shot to inspect the fills.
+          Screenshots from simulated/practice sessions. Not live results and not proof of future performance.
         </p>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -107,7 +107,7 @@ export default function ProofGallery() {
               </div>
               <div className="flex items-center gap-2 px-3 py-2 border-t border-white/5">
                 <BadgeCheck className="w-3.5 h-3.5 text-[#34C759] shrink-0" />
-                <span className="text-[0.65rem] text-zinc-400 font-mono truncate">{s.caption || "Verified trade proof"}</span>
+                <span className="text-[0.65rem] text-zinc-400 font-mono truncate">{s.caption || "Practice screenshot (SIM)"}</span>
               </div>
             </button>
           ))}
