@@ -23,6 +23,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 import secrets
 import hashlib
+import hmac
 from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
 from copilot import build_copilot_router, copilot_enabled, with_disclaimer, METHOD_PROMPT
 
@@ -2510,7 +2511,19 @@ async def auto_log_trade(signal_id: str, outcome: str, pnl_points: Optional[floa
 
 # ============== Admin Panel Routes ==============
 
-@api_router.get("/admin/overview")
+
+async def _require_admin(request: Request, x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> None:
+    """Admin gate: a matching X-API-Key (only when RETOOL_API_KEY is set; fails
+    closed otherwise) or an authenticated session whose role is 'admin'."""
+    env_key = os.environ.get("RETOOL_API_KEY", "")
+    if env_key and x_api_key is not None and hmac.compare_digest(x_api_key.encode(), env_key.encode()):
+        return
+    user = await auth_module.get_current_user(request, db)  # 401 when unauthenticated
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+
+@api_router.get("/admin/overview", dependencies=[Depends(_require_admin)])
 async def admin_overview():
     """Admin dashboard overview"""
     total_subs = await db.subscribers.count_documents({})
@@ -2538,14 +2551,14 @@ async def admin_overview():
     }
 
 
-@api_router.get("/admin/subscribers")
+@api_router.get("/admin/subscribers", dependencies=[Depends(_require_admin)])
 async def admin_get_subscribers(limit: int = 50):
     """Get all subscribers for admin"""
     subs = await db.subscribers.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return subs
 
 
-@api_router.patch("/admin/subscribers/{sub_id}/tier")
+@api_router.patch("/admin/subscribers/{sub_id}/tier", dependencies=[Depends(_require_admin)])
 async def admin_update_tier(sub_id: str, tier: str):
     """Admin: update subscriber tier"""
     if tier not in ("free", "pro", "elite"):
@@ -2556,7 +2569,7 @@ async def admin_update_tier(sub_id: str, tier: str):
     return {"message": f"Tier updated to {tier}"}
 
 
-@api_router.delete("/admin/subscribers/{sub_id}")
+@api_router.delete("/admin/subscribers/{sub_id}", dependencies=[Depends(_require_admin)])
 async def admin_delete_subscriber(sub_id: str):
     """Admin: remove subscriber"""
     result = await db.subscribers.delete_one({"id": sub_id})
@@ -2988,7 +3001,7 @@ async def affiliate_redirect(partner: str, request: Request, src: Optional[str] 
     return RedirectResponse(url=target, status_code=302)
 
 
-@api_router.get("/admin/clicks", tags=["admin"])
+@api_router.get("/admin/clicks", tags=["admin"], dependencies=[Depends(_require_admin)])
 async def affiliate_click_stats() -> Dict[str, Any]:
     """Aggregated click stats per partner + src (for the admin revenue card)."""
     pipeline = [
