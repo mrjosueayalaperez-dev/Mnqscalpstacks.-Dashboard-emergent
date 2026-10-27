@@ -19,6 +19,7 @@ import { MNQTracker } from "@/components/dashboard/MNQTracker";
 import { Checklist } from "@/components/dashboard/Checklist";
 import { AIAnalysis } from "@/components/dashboard/AIAnalysis";
 import { PositionCalculator } from "@/components/dashboard/PositionCalculator";
+import { ApexPnlJournal } from "@/components/dashboard/ApexPnlJournal";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
 import { MoreTools, BottomNav, RiskDisclaimer } from "@/components/dashboard/MobileShell";
 import { ReferralCard } from "@/components/ReferralCard";
@@ -254,6 +255,7 @@ export default function Dashboard() {
             <PerformanceEngine />
             <AlertsPanel alerts={alerts} onAdd={handleAddAlert} onDelete={handleDeleteAlert} />
             <PositionCalculator />
+            <ApexPnlJournal />
             <NinjaTraderPanel />
             <TradingViewPanel />
             <SafetySentinel />

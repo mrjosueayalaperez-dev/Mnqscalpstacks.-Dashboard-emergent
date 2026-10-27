@@ -5,6 +5,7 @@ from market_context import get_market_context
 import ati
 import proof
 import auth as auth_module
+import pnl_journal
 import analytics
 import notify
 from dotenv import load_dotenv
@@ -3012,6 +3013,7 @@ api_router.include_router(ati.build_ati_router(db, require_write_key))
 api_router.include_router(proof.build_proof_router(db, require_write_key))
 api_router.include_router(auth_module.build_auth_router(db))
 api_router.include_router(analytics.build_analytics_router(db))
+api_router.include_router(pnl_journal.build_pnl_journal_router(db, auth_module.get_current_user))
 @api_router.post("/signals/daily-recap", tags=["admin"])
 async def trigger_daily_recap(request: Request) -> Dict[str, Any]:
     actor = await auth_module.get_current_user(request, db)
@@ -3034,6 +3036,7 @@ async def seed_auth() -> None:
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
+    await pnl_journal.ensure_indexes(db)
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
     # Prove the pipeline: seed one PAPER BUY + SELL if no signals exist at all
