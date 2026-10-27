@@ -1,4 +1,4 @@
-import { fmtPct, hasNum } from "@/lib/fmt";
+import { fmtPct, fmtNum, hasNum } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { Activity, TrendingUp, TrendingDown, BarChart3, Zap, Target } from "lucide-react";
@@ -41,7 +41,7 @@ const PerformanceEngine = () => {
   const stackBearish = price < ema21 && price < vwap;
 
   const metrics = [
-    { label: "Daily P&L (SIM)", value: `${stats.total_pnl >= 0 ? "+" : ""}$${formatPrice(stats.total_pnl || 0)}`, color: (stats.total_pnl || 0) >= 0 ? "#34C759" : "#FF3B30", glow: true },
+    { label: "Daily P&L (SIM)", value: hasNum(stats.total_pnl) ? `${stats.total_pnl >= 0 ? "+" : ""}$${formatPrice(stats.total_pnl)}` : "—", color: (stats.total_pnl || 0) >= 0 ? "#34C759" : "#FF3B30", glow: true },
     { label: "Win Rate (SIM)", value: fmtPct(stats.win_rate), color: !hasNum(stats.win_rate) ? "#a1a1aa" : stats.win_rate >= 50 ? "#34C759" : "#FF3B30", glow: false },
     { label: "Avg Win", value: `+$${formatPrice(stats.avg_win || 0)}`, color: "#34C759", glow: false },
     { label: "Avg Loss", value: `$${formatPrice(stats.avg_loss || 0)}`, color: "#FF3B30", glow: false },
@@ -106,7 +106,7 @@ const PerformanceEngine = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <Target className="w-3 h-3 text-[#007AFF]" />
-              <span className="text-[0.6rem] text-zinc-400">R:R {signalStats.avg_rr || 0}:1</span>
+              <span className="text-[0.6rem] text-zinc-400">R:R {fmtNum(signalStats.avg_rr, "", ":1")}</span>
             </div>
           </div>
           <span className="text-[0.6rem] font-mono text-zinc-600">

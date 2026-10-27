@@ -81,7 +81,7 @@ const ExecutionHub = ({ mnqPrice, safeMode }) => {
 
     try {
       // Create trade
-      const tradeRes = await axios.post(`${API}/trades`, {
+      await axios.post(`${API}/trades`, {
         symbol: "MNQ",
         entry_price: entry,
         quantity: 1,
@@ -89,42 +89,12 @@ const ExecutionHub = ({ mnqPrice, safeMode }) => {
         notes: `SIM | SL: ${formatPrice(stopLoss)} | TP: ${formatPrice(takeProfit)} | ${safeMode ? "SAFE" : "PRO"} mode`,
       });
 
-      // Also create a signal record
-      await axios.post(`${API}/signals/test`);
-
+      // SIM journal entry only: trade stays OPEN until the user closes it manually.
+      // (Random outcome simulation + /signals/test call removed — CFTC 4.41.)
       toast.success(
-        `${side.toUpperCase()} PUNCH EXECUTED @ $${formatPrice(entry)}`,
+        `SIM · ${side.toUpperCase()} PUNCH LOGGED @ $${formatPrice(entry)} (open — close manually)`,
         { className: side === "long" ? "alert-toast-bullish" : "alert-toast-bearish" }
       );
-
-      // Simulate fill after delay
-      setTimeout(async () => {
-        // Random outcome weighted toward strategy win rate
-        const rand = Math.random();
-        let exitPrice, outcome;
-
-        if (rand < 0.65) {
-          // TP hit (65%)
-          exitPrice = takeProfit;
-          outcome = "closed";
-        } else if (rand < 0.85) {
-          // Partial win (20%)
-          const partial = side === "long" ? entry + (tpPoints * 0.5) : entry - (tpPoints * 0.5);
-          exitPrice = partial;
-          outcome = "closed";
-        } else {
-          // SL hit (15%)
-          exitPrice = stopLoss;
-          outcome = "closed";
-        }
-
-        await axios.patch(`${API}/trades/${tradeRes.data.id}`, {
-          exit_price: exitPrice,
-          status: outcome,
-        });
-
-        await fetchTrades();
-      }, 3000 + Math.random() * 5000);
 
       await fetchTrades();
     } catch (e) {

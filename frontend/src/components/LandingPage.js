@@ -537,10 +537,6 @@ const LandingPage = () => {
     }
   }, []);
 
-  useEffect(() => {
-    axios.post(`${API}/backtests/seed-demo`).catch((e) => console.error("Seed error:", e));
-  }, []);
-
   // Check for payment return
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

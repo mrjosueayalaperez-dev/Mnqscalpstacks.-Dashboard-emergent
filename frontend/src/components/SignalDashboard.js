@@ -1,4 +1,4 @@
-import { fmtPct, hasNum } from "@/lib/fmt";
+import { fmtPct, fmtNum, hasNum } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -451,21 +451,8 @@ const SignalDashboard = () => {
     setLoading(false);
   };
 
-  const handleTestSignal = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.post(`${API}/signals/test`);
-      if (res.data.status === "generated") {
-        toast.success("Test signal generated!");
-        await fetchAll();
-      } else {
-        toast.error(res.data.reason || "Signal blocked");
-      }
-    } catch (e) {
-      toast.error("Failed to generate test signal");
-    }
-    setLoading(false);
-  };
+  // Random /signals/test removed (CFTC 4.41): button now sends a PAPER test punch (excluded from KPIs).
+  const handleTestSignal = () => handleTestPunch("long");
 
   const handleToggleKill = async (enabled) => {
     try {
@@ -510,7 +497,7 @@ const SignalDashboard = () => {
               data-testid="test-signal-btn"
             >
               {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-              Test Signal
+              PAPER Test Signal
             </button>
             <button
               onClick={fetchAll}
@@ -543,12 +530,12 @@ const SignalDashboard = () => {
               <span className={`stat-value text-lg ${
                 (stats.total_pnl_points || 0) >= 0 ? "text-[#34C759]" : "text-[#FF3B30]"
               }`}>
-                {(stats.total_pnl_points || 0) >= 0 ? "+" : ""}{stats.total_pnl_points || 0}
+                {fmtNum(stats.total_pnl_points, stats.total_pnl_points >= 0 ? "+" : "")}
               </span>
             </div>
             <div className="stat-box">
               <span className="stat-label">Avg R:R</span>
-              <span className="stat-value text-lg">{stats.avg_rr || 0}</span>
+              <span className="stat-value text-lg">{fmtNum(stats.avg_rr)}</span>
             </div>
             <div className="stat-box">
               <span className="stat-label">Freq/Day</span>
