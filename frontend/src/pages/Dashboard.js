@@ -60,7 +60,7 @@ export default function Dashboard() {
 
   const fetchChecklist = useCallback(async () => {
     try {
-      const res = await axios.get(`${API}/checklist`);
+      const res = await axios.get(`${API}/checklist`, { withCredentials: true });
       setChecklist(res.data);
     } catch (e) {
       console.error("Error fetching checklist:", e);
@@ -118,7 +118,7 @@ export default function Dashboard() {
 
   const handleToggleChecklist = async (id, completed) => {
     try {
-      await axios.patch(`${API}/checklist/${id}?completed=${completed}`);
+      await axios.patch(`${API}/checklist/${id}?completed=${completed}`, null, { withCredentials: true });
       setChecklist((items) =>
         items.map((item) => (item.id === id ? { ...item, completed } : item))
       );
@@ -129,7 +129,7 @@ export default function Dashboard() {
 
   const handleResetChecklist = async () => {
     try {
-      await axios.post(`${API}/checklist/reset`);
+      await axios.post(`${API}/checklist/reset`, null, { withCredentials: true });
       await fetchChecklist();
       toast.success("Checklist reset");
     } catch (e) {
@@ -139,7 +139,7 @@ export default function Dashboard() {
 
   const handleAddChecklist = async (item) => {
     try {
-      await axios.post(`${API}/checklist`, item);
+      await axios.post(`${API}/checklist`, item, { withCredentials: true });
       await fetchChecklist();
     } catch (e) {
       console.error("Error adding checklist:", e);
