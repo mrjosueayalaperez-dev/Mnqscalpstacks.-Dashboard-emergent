@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Depends, Header
 from fastapi.responses import RedirectResponse
-from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq, set_live_price as market_feed_set_live_price
+from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq, set_live_price as market_feed_set_live_price, tv_data_mode
 from market_context import get_market_context
 import ati
 import proof
@@ -602,6 +602,14 @@ async def scan_stocks(min_change: float = 3.0):
     return {"scanners": results, "status": "ok" if results else "data_unavailable"}
 
 # MNQ Futures Routes — LIVE feed (CME via Yahoo NQ=F; NQ and MNQ trade at same price)
+@api_router.get("/market/data-mode", tags=["market"])
+async def market_data_mode() -> Dict[str, Any]:
+    """Drives UI feed labels. Env TV_DATA_MODE=delayed|realtime (default delayed)."""
+    mode = tv_data_mode()
+    return {"tv_data_mode": mode, "tv_label": "REAL-TIME" if mode == "realtime" else "DELAYED 10m",
+            "yahoo_label": "DELAYED 10m", "ingest": "/api/signals/tradingview (X-Webhook-Secret header)"}
+
+
 @api_router.get("/futures/mnq", tags=["market"])
 async def get_mnq_data() -> Dict[str, Any]:
     """Real-time MNQ futures snapshot. Falls back to cached tick on transient errors."""
@@ -623,6 +631,8 @@ async def get_mnq_data() -> Dict[str, Any]:
         "ema21": snap.get("ema21", 0),
         "rsi": snap.get("rsi", 50),
         "data_source": snap.get("source", "yahoo:NQ=F"),
+        "data_mode": snap.get("data_mode", "delayed"),
+        "data_label": snap.get("data_label", "DELAYED 10m"),
         "market_state": snap.get("market_state", "UNKNOWN"),
         "exchange": snap.get("exchange", "CME"),
         "stale": snap.get("stale", False),
@@ -1629,7 +1639,7 @@ bgcolor(buyPunch ? color.new(color.green, 93) : sellPunch ? color.new(color.red,
 plot(math.round(close / 100) * 100, "Level 00", color=color.new(color.gray, 70), style=plot.style_cross)
 plot(math.round(close / 100) * 100 + 50, "Level 50", color=color.new(color.gray, 80), style=plot.style_cross)
 
-// ==================== ALERTS (JSON for /api/webhook/tradingview) ====================
+// ==================== ALERTS (JSON for /api/signals/tradingview) ====================
 alertcondition(buyPunch, title="BUY PUNCH", message='{"type":"buy","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
 alertcondition(sellPunch, title="SELL PUNCH", message='{"type":"sell","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
 alertcondition(inResistanceZone, title="27972 RESISTANCE", message='{"type":"resistance","symbol":"MNQ","price":"{{close}}","level":"27972"}')
@@ -1641,8 +1651,10 @@ def _build_webhook_instructions(base_url: str) -> str:
     return f"""
 ## MNQ Scalp Stacks v3 — TradingView Setup
 
-### Webhook URL:
-{backend}/api/webhook/tradingview
+### Webhook URL (signal + price ingest):
+{backend}/api/signals/tradingview
+Auth: X-Webhook-Secret header (server env SIGNAL_WEBHOOK_SECRET). Query/body secrets are rejected.
+Data label: server env TV_DATA_MODE=delayed|realtime (default delayed). All signals are PAPER.
 
 ### Setup Steps:
 1. Open TradingView -> MNQ 1-min chart (MNQ ONLY)
@@ -1664,7 +1676,7 @@ def _build_webhook_instructions(base_url: str) -> str:
 ### Wave Validation:
 - All numeric data validated before signal fires
 - Resistance zone blocks fake breakout longs
-- JSON format matches /api/webhook/tradingview endpoint
+- JSON format matches /api/signals/tradingview endpoint
 """
 
 
@@ -1679,7 +1691,7 @@ async def get_pine_script(request: Request):
     return {
         "pine_script": _PINE_SCRIPT_V3,
         "webhook_instructions": _build_webhook_instructions(base),
-        "webhook_url": "/api/webhook/tradingview",
+        "webhook_url": "/api/signals/tradingview",
     }
 
 # ============== Backtest Routes ==============
