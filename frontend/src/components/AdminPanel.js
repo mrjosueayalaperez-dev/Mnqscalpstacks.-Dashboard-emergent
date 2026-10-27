@@ -23,9 +23,9 @@ const AdminPanel = () => {
   const fetchData = useCallback(async () => {
     try {
       const [ovRes, subRes, clickRes] = await Promise.all([
-        axios.get(`${API}/admin/overview`),
-        axios.get(`${API}/admin/subscribers?limit=20`),
-        axios.get(`${API}/admin/clicks`),
+        axios.get(`${API}/admin/overview`, { withCredentials: true }),
+        axios.get(`${API}/admin/subscribers?limit=20`, { withCredentials: true }),
+        axios.get(`${API}/admin/clicks`, { withCredentials: true }),
       ]);
       setOverview(ovRes.data);
       setSubscribers(subRes.data);
@@ -38,7 +38,7 @@ const AdminPanel = () => {
 
   const handleTierChange = async (subId, newTier) => {
     try {
-      await axios.patch(`${API}/admin/subscribers/${subId}/tier`, null, { params: { tier: newTier } });
+      await axios.patch(`${API}/admin/subscribers/${subId}/tier`, null, { params: { tier: newTier }, withCredentials: true });
       toast.success(`Tier updated to ${newTier}`);
       await fetchData();
     } catch (e) { toast.error("Failed"); }
@@ -47,7 +47,7 @@ const AdminPanel = () => {
   const handleDelete = async (subId) => {
     if (!window.confirm("Delete this subscriber?")) return;
     try {
-      await axios.delete(`${API}/admin/subscribers/${subId}`);
+      await axios.delete(`${API}/admin/subscribers/${subId}`, { withCredentials: true });
       toast.success("Subscriber removed");
       await fetchData();
     } catch (e) { toast.error("Failed"); }
