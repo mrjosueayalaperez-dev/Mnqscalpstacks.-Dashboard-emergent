@@ -377,7 +377,7 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
   const [selectedTier, setSelectedTier] = useState("free");
 
   const tiers = [
-    { id: "free", name: "Free — Everything Included", price: "$0", period: " forever", features: ["Real-time signals & Discord alerts", "AI Scalp Copilot (GPT + Grok)", "Charts with entry/stop/target lines", "Community Lab + practice journal", "No card. No catch — just learn."], color: "border-[#34C759]/40 ring-1 ring-[#34C759]/30", accent: "text-[#34C759]" },
+    { id: "free", name: "Free — Everything Included", price: "$0", period: " forever", features: ["PAPER signals & Discord alerts", "AI Scalp Copilot (GPT + Grok)", "Charts with entry/stop/target lines", "Community Lab + practice journal", "No card. No catch — just learn."], color: "border-[#34C759]/40 ring-1 ring-[#34C759]/30", accent: "text-[#34C759]" },
   ];
 
   const handleSubmit = (e) => {

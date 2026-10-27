@@ -263,6 +263,7 @@ class Signal(BaseModel):
     pnl_points: Optional[float] = None
     discord_sent: bool = False
     source: str = "engine"  # engine, webhook, test
+    data_label: str = "PAPER"  # every signal is a paper/educational signal
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class KillSwitchRequest(BaseModel):
@@ -373,7 +374,7 @@ def _build_discord_payload(signal: dict) -> dict:
         "username": "MNQ SCALP STACKS BOT",
         "avatar_url": "https://i.imgur.com/4S7S5vj.png",
         "embeds": [{
-            "title": f"{side_emoji} SCALP PUNCH — {side_label}",
+            "title": f"PAPER · {side_emoji} SCALP PUNCH — {side_label}",
             "color": signal_color,
             "fields": [
                 {"name": "Asset", "value": "MNQ (Micro Nasdaq)", "inline": True},
@@ -1064,6 +1065,9 @@ async def get_signals(limit: int = 50, status: Optional[str] = None):
     if status:
         query["status"] = status
     signals = await db.signals.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    for sig in signals:
+        demo = sig.get("source") in ("demo", "seed", "random") or sig.get("is_demo")
+        sig["data_label"] = "DEMO" if demo else "PAPER"  # display-only, never live orders; DEMO rows are KPI-excluded
     return signals
 
 
@@ -1090,7 +1094,7 @@ async def _record_hold(source: str, note: str, is_test: bool) -> Dict[str, Any]:
         "note": note, "reason": note or "Waiting for confirmation", "is_test": is_test,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    return {"ok": True, "action": "HOLD", "executed": False, "status": "held",
+    return {"ok": True, "action": "HOLD", "executed": False, "status": "held", "data_label": "PAPER",
             "message": "HOLD accepted — no order placed."}
 
 
@@ -1125,7 +1129,7 @@ async def _create_punch(side: str, price: float, interval: str = "1", source: st
     if is_test:
         doc["symbol"] = "MNQ (PAPER TEST)"
     _asyncio.create_task(send_discord_signal(doc))
-    return {"status": "created", "signal_id": signal_obj.id, "side": side, "price": price, "is_test": is_test}
+    return {"status": "created", "signal_id": signal_obj.id, "side": side, "price": price, "is_test": is_test, "data_label": "PAPER"}
 
 
 def _parse_tv_alert(raw: str, fallback_secret: str) -> dict:

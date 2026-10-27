@@ -5,7 +5,7 @@ import PublicLayout from "@/pages/public/PublicLayout";
 
 const INCLUDED = [
   "Live MNQ signal dashboard with entry / stop / targets",
-  "Real-time punch alerts to Discord",
+  "PAPER punch alerts to Discord",
   "AI Scalp Copilot (GPT + Grok) that knows your live desk",
   "Stacked 5m + 1m charts with EMA / VWAP / RSI",
   "Community Lab — probability, expectancy, risk drills",

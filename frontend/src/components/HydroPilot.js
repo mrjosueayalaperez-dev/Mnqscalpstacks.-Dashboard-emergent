@@ -164,7 +164,7 @@ const HydroPilot = () => {
         <div className="flex items-center justify-between mt-3 text-[0.6rem] text-zinc-600 px-1">
           <span className="flex items-center gap-1">
             {health.discord_configured ? <Wifi className="w-3 h-3 text-[#34C759]" /> : <WifiOff className="w-3 h-3 text-[#FF3B30]" />}
-            Discord: {health.discord_configured ? "LIVE" : "OFF"}
+            Discord: {health.discord_configured ? "ON" : "OFF"}
           </span>
           <span className="flex items-center gap-1">
             <Activity className="w-3 h-3" />

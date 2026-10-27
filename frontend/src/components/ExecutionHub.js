@@ -60,7 +60,7 @@ const ExecutionHub = ({ mnqPrice, safeMode }) => {
     setExecuting(side);
 
     if (!mnqPrice) {
-      toast.error("No live price — execution blocked");
+      toast.error("SIM · No price — log blocked");
       setExecuting(null);
       return;
     }
@@ -98,7 +98,7 @@ const ExecutionHub = ({ mnqPrice, safeMode }) => {
 
       await fetchTrades();
     } catch (e) {
-      toast.error("Execution failed");
+      toast.error("SIM · Log failed");
     }
 
     setExecuting(null);

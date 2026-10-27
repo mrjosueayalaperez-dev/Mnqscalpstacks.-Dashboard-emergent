@@ -1,3 +1,4 @@
+import { feedLabel } from "@/lib/fmt";
 import React from "react";
 import { BarChart3, RefreshCw, AlertTriangle, TrendingUp, TrendingDown } from "lucide-react";
 import { formatPrice } from "@/lib/format";
@@ -119,7 +120,7 @@ export const MNQTracker = ({ data, loading }) => {
             <div className="flex items-center justify-between text-[0.6rem] text-zinc-600 px-1">
               <span>
                 {data?.data_source === "mock" ? "MOCK DATA" :
-                 data?.data_source === "qqq_proxy" ? "QQQ PROXY" : "LIVE MNQ"}
+                 data?.data_source === "qqq_proxy" ? "QQQ PROXY" : `MNQ · ${feedLabel({ source: data?.data_source, data_mode: data?.data_mode })}`}
               </span>
               <span className={data?.wave_valid ? "text-[#34C759]" : "text-[#FF3B30]"}>
                 Wave: {data?.wave_valid ? "VALID" : "INVALID"}

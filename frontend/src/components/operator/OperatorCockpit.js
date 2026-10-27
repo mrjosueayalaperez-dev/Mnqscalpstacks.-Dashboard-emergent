@@ -123,7 +123,7 @@ export default function OperatorCockpit() {
       const bracketLine = data.order?.sl_price
         ? ` • SL ${data.order.sl_price.toFixed(2)} / TP ${data.order.tp_price.toFixed(2)} (${activePreset.label})`
         : "";
-      toast.success(`${action} ${order_type} accepted`, {
+      toast.success(`SIM · ${action} ${order_type} LOGGED`, {
         description: data.order
           ? `Fill @ ${data.order.fill_price?.toFixed(2)}${bracketLine}`
           : undefined,
@@ -133,7 +133,7 @@ export default function OperatorCockpit() {
     } catch (e) {
       play("reject");
       const detail = e.response?.data?.detail || "Order rejected";
-      toast.error(`${action} blocked`, { description: detail });
+      toast.error(`SIM · ${action} blocked`, { description: detail });
     }
   }, [mnq, refreshState, refreshJournal, play, brackets, activePreset]);
 
@@ -142,12 +142,12 @@ export default function OperatorCockpit() {
       await axios.post(`${API}/operator/control/${act}`);
       const sndMap = { flatten: "flatten", pause: "pause", resume: "pause", kill: "killOn", unkill: "killOff", reset_session: "click" };
       play(sndMap[act] || "click");
-      toast.success(`Control: ${act.toUpperCase()}`);
+      toast.success(`SIM · Control: ${act.toUpperCase()}`);
       refreshState();
       refreshJournal();
     } catch (e) {
       play("reject");
-      toast.error(`Control failed: ${act}`);
+      toast.error(`SIM · Control failed: ${act}`);
     }
   }, [refreshState, refreshJournal, play]);
 
@@ -276,11 +276,9 @@ export default function OperatorCockpit() {
 
         <div className="col-span-12 mt-1">
           <div className="px-3 py-2 border border-[#34C759]/30 bg-[#34C759]/5 rounded-sm flex items-center justify-between text-[0.6rem]">
-            <span className="text-[#34C759] font-black">◉ LIVE FEED — CME via TradingView + Yahoo NQ=F</span>
+            <span className="text-[#34C759] font-black">◉ FEED — CME via Yahoo NQ=F (DELAYED 10m) · SIM ONLY</span>
             <span className="text-zinc-500">
-              {state?.connection?.ati_enabled
-                ? "PHASE 2 ACTIVE — orders route to NinjaTrader via the ATI bridge."
-                : "Chart, prices, and order fills use real MNQ data. Arm the ATI bridge panel for Phase 2 NinjaTrader routing."}
+              SIM · order fills are simulated journal entries only. No broker routing.
             </span>
           </div>
         </div>

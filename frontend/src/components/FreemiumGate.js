@@ -14,10 +14,10 @@ const FreemiumGate = () => (
     <div className="widget-content">
       <p className="text-xs text-zinc-300 mb-2">
         MNQ Scalp Stacks is a <span className="text-[#34C759] font-bold">free learning service</span> — every tool is
-        unlocked for everyone: live signals, AI copilot, charts, Discord alerts, and the Community Lab.
+        unlocked for everyone: PAPER signals, AI copilot, charts, Discord alerts, and the Community Lab.
       </p>
       <ul className="grid grid-cols-2 gap-1.5">
-        {["Real-time signals", "AI trade copilot", "Signal charts + levels", "Discord alerts", "Community Lab", "Practice journal"].map((f) => (
+        {["PAPER signals", "AI trade copilot", "Signal charts + levels", "Discord alerts", "Community Lab", "Practice journal"].map((f) => (
           <li key={f} className="flex items-start gap-1.5 text-[0.65rem] text-zinc-400">
             <Check className="w-3 h-3 mt-0.5 text-[#34C759] shrink-0" />{f}
           </li>
