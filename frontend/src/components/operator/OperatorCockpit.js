@@ -14,7 +14,6 @@ import MarketContext from "./MarketContext";
 import KeyLevels from "./KeyLevels";
 import SnipeBar, { HotkeyHelp } from "./SnipeBar";
 import BracketPresets, { PRESETS, presetById } from "./BracketPresets";
-import AtiBridgePanel from "./AtiBridgePanel";
 import useHotkeys from "./useHotkeys";
 import useMnqLive from "./useMnqLive";
 import { sounds, unlockAudio } from "./useAudio";
@@ -262,7 +261,7 @@ export default function OperatorCockpit() {
         <div className="col-span-12 md:col-span-4 space-y-3">
           <MasterControls state={state} onControl={sendControl} />
           <BracketPresets activeId={presetId} onSelect={selectPreset} brackets={brackets} />
-          <AtiBridgePanel />
+          <div className="border border-white/10 bg-[#0D0D0F] rounded-sm px-3 py-2 text-[0.6rem] font-bold tracking-wider text-zinc-400" data-testid="ati-disabled">NINJATRADER ROUTING DISABLED · SIM LOG ONLY</div>
         </div>
         <div className="col-span-12 md:col-span-4">
           <OrderPanel side="SHORT" onOrder={submitOrder} disabled={orderDisabled} snipeMode={snipe} bracketLabel={brackets ? activePreset : null} />

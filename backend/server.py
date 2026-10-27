@@ -22,6 +22,7 @@ from datetime import datetime, timezone, timedelta
 import httpx
 import secrets
 import hashlib
+import hmac
 from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
 from copilot import build_copilot_router, copilot_enabled, with_disclaimer, METHOD_PROMPT
 
@@ -102,16 +103,26 @@ api_router = APIRouter(prefix="/api")
 # Reads (GET) stay open so the public site / Retool dashboards can display data
 # without needing keys. Configure via env: RETOOL_API_KEY=<any long random string>.
 RETOOL_API_KEY = os.environ.get("RETOOL_API_KEY", "")
+SIGNAL_WEBHOOK_SECRET = os.environ.get("SIGNAL_WEBHOOK_SECRET", "")
 
 
 def require_write_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> None:
-    """FastAPI dependency: enforced on every mutating endpoint. If RETOOL_API_KEY
-    is unset (dev/preview default), this is a no-op — the endpoint is open.
-    Set the env var in production to lock all writes to Retool + your own tools."""
+    """FastAPI dependency on mutating endpoints. FAILS CLOSED: 503 when RETOOL_API_KEY
+    is unset, 401 on missing/wrong key (constant-time compare)."""
     if not RETOOL_API_KEY:
-        return
-    if x_api_key != RETOOL_API_KEY:
+        raise HTTPException(status_code=503, detail="Write access disabled: server key not configured")
+    if not x_api_key or not hmac.compare_digest(x_api_key.encode(), RETOOL_API_KEY.encode()):
         raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key header")
+
+
+def verify_webhook_secret(request: Request) -> None:
+    """Shared TradingView webhook verifier: X-Webhook-Secret header ONLY (no query/body),
+    constant-time compare, rejected (503) when SIGNAL_WEBHOOK_SECRET is unset."""
+    if not SIGNAL_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook disabled: secret not configured")
+    got = request.headers.get("X-Webhook-Secret", "")
+    if not got or not hmac.compare_digest(got.encode(), SIGNAL_WEBHOOK_SECRET.encode()):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
 
 # ---- KPI hygiene (CFTC 4.41): demo/test/generated rows never feed KPIs ----
 KPI_EXCLUDED_SOURCES = ["demo", "test", "seed", "random"]
@@ -986,9 +997,9 @@ async def ai_analyze(request: AIAnalysisRequest):
 # ============== Signal Engine Routes ==============
 
 # TradingView Webhook Receiver
-@api_router.post("/webhook/tradingview")
+@api_router.post("/webhook/tradingview", dependencies=[Depends(verify_webhook_secret)])
 async def receive_tradingview_webhook(payload: TradingViewWebhook, background_tasks: BackgroundTasks):
-    """Receive signals from TradingView webhook"""
+    """Legacy TradingView webhook — same verifier as /signals/tradingview (header secret)."""
     if signal_engine_state["kill_switch"]:
         return {"status": "blocked", "reason": "Kill switch active"}
 
@@ -1061,7 +1072,6 @@ async def get_signals(limit: int = 50, status: Optional[str] = None):
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
-SIGNAL_WEBHOOK_SECRET = os.environ.get("SIGNAL_WEBHOOK_SECRET", "")
 SYMBOL_MAP = {"MNQ1!": "MNQ", "NQ1!": "MNQ", "MNQ": "MNQ", "NQ": "MNQ", "CME_MINI:MNQ1!": "MNQ", "CME_MINI:NQ1!": "MNQ"}
 
 
@@ -1164,14 +1174,13 @@ async def _resolve_punch_price(price, action: str, source: str) -> float:
 async def signals_tradingview(request: Request):
     """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
     raw = (await request.body()).decode("utf-8", errors="ignore").strip()
-    # Secret can also arrive via header or query (for plain-text TradingView alerts)
-    header_secret = request.headers.get("X-Webhook-Secret", "") or request.query_params.get("secret", "")
-    a = _parse_tv_alert(raw, header_secret)
+    a = _parse_tv_alert(raw, "")
     action, symbol, interval, source, note = a["action"], a["symbol"], a["interval"], a["source"], a["note"]
-
-    if SIGNAL_WEBHOOK_SECRET and a["secret"] != SIGNAL_WEBHOOK_SECRET:
-        await _log_signal_event(False, 401, "Bad or missing secret", action, source)
-        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    try:
+        verify_webhook_secret(request)  # header-only; query/body secrets are ignored
+    except HTTPException as e:
+        await _log_signal_event(False, e.status_code, "Bad or missing secret", action, source)
+        raise
     if action not in ("BUY", "SELL", "CLOSE", "HOLD", "PRICE"):
         await _log_signal_event(False, 400, f"Unknown action: {action or raw[:60]}", action, source)
         raise HTTPException(status_code=400, detail="action must be BUY, SELL, HOLD, PRICE, or CLOSE")
@@ -1248,7 +1257,6 @@ async def signals_receiver_status(request: Request) -> Dict[str, Any]:
     in_rth = now_et.weekday() < 5 and (9, 30) <= (now_et.hour, now_et.minute) < (16, 0)
     session_open = True if (signal_engine_state["globex"] or not signal_engine_state["session_filter"]) else in_rth
     alert_template = json.dumps({
-        "secret": SIGNAL_WEBHOOK_SECRET or "<set SIGNAL_WEBHOOK_SECRET>",
         "action": "{{strategy.order.action}}", "symbol": "MNQ1!", "interval": "{{interval}}",
         "price": "{{close}}", "time": "{{timenow}}", "source": "MNQ Scalp Punch v1",
     }, indent=2)
@@ -2704,21 +2712,16 @@ async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
     _apply_fill(order, fill_price)
 
     entry = _build_journal_entry(order, fill_price)
-    ati_cmd = None
     try:
         await db.operator_orders.insert_one(dict(entry))
     except Exception as e:
         logger.warning(f"operator_orders insert failed: {e}")
-    try:
-        ati_cmd = await ati.enqueue(db, ati.build_ati_command_for_order(order, entry["id"]))
-    except Exception as e:
-        logger.warning(f"ati enqueue failed: {e}")
 
     return {
         "ok": True,
         "order": entry,
         "state": _operator_state["position"],
-        "ati": {"routed": ati_cmd is not None, "command_id": ati_cmd["id"] if ati_cmd else None},
+        "ati": {"routed": False, "command_id": None, "note": "Broker routing disabled (SIM log only)"},
     }
 
 
@@ -2732,7 +2735,6 @@ async def operator_control(action: str) -> Dict[str, Any]:
             "id": str(uuid.uuid4()), "ts": datetime.now(timezone.utc).isoformat(),
             "action": "FLATTEN_ALL", "phase": "SIM_LOG_ONLY",
         })
-        await ati.enqueue(db, ati.build_flatten_command())
         return {"ok": True, "action": "FLATTEN", "position": _operator_state["position"]}
     if action == "pause":
         _operator_state["automation_paused"] = True
@@ -2743,7 +2745,6 @@ async def operator_control(action: str) -> Dict[str, Any]:
     if action == "kill":
         _operator_state["kill_switch"] = True
         _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
-        await ati.enqueue(db, ati.build_flatten_command())
         return {"ok": True, "kill_switch": True}
     if action == "unkill":
         _operator_state["kill_switch"] = False
