@@ -1,20 +1,80 @@
-# Render Blueprint — MNQ Scalp Stacks backend
-# Commit this file to the repo ROOT, then Render -> New -> Blueprint -> select the repo.
-# Fill the blank env vars in the Render dashboard (never commit secrets).
+# Render Blueprint — MNQ Scalp Stacks backend (FastAPI + websockets + background loops)
+# Render -> New -> Blueprint -> select this repo. Values marked `sync: false` are
+# entered in the Render dashboard (never committed). See docs/MIGRATION.md.
+#
+# IMPORTANT: plan must be a paid, always-on instance. The free plan spins down after
+# 15 min idle, which stops the 60s live signal engine, the signal resolver and the
+# daily recap loop, and drops websocket clients.
+# Run exactly ONE instance with ONE uvicorn worker: engine state is in-memory and the
+# background loops would run once per worker/instance otherwise.
 
 services:
   - type: web
     name: mnq-scalp-stacks-backend
     runtime: python
-    buildCommand: pip install -r backend/requirements.txt
-    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --app-dir backend
-    healthCheckPath: /docs
+    plan: starter            # $7/mo, 0.5 CPU / 512 MB, no spin-down
+    region: virginia         # close to Atlas us-east-1
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn server:app --host 0.0.0.0 --port $PORT --workers 1 --proxy-headers --forwarded-allow-ips '*'
+    healthCheckPath: /api/
+    autoDeploy: false        # deploy manually until cut-over is verified
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.3
+      # --- required ---
       - key: MONGO_URL
-        sync: false          # paste your MongoDB Atlas connection string in the dashboard
+        sync: false          # MongoDB Atlas SRV connection string
       - key: DB_NAME
-        value: mnqscalpstacks
+        sync: false          # MUST equal the DB name restored from the Emergent dump
+      - key: JWT_SECRET
+        sync: false          # reuse the Emergent value to keep existing sessions valid, or rotate (forces re-login)
+      - key: CORS_ORIGINS
+        sync: false          # e.g. https://mnqscalpstacks.com,https://www.mnqscalpstacks.com,https://<project>.vercel.app
+      - key: CORS_ORIGIN_REGEX
+        sync: false          # optional, Vercel preview URLs
+      # --- auth / admin ---
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      # --- write/webhook guards ---
+      - key: RETOOL_API_KEY
+        sync: false
+      - key: SIGNAL_WEBHOOK_SECRET
+        sync: false
+      # --- integrations ---
       - key: DISCORD_WEBHOOK_URL
-        sync: false          # paste your Discord webhook URL in the dashboard
+        sync: false
+      - key: DISCORD_INVITE_FREE
+        sync: false
+      - key: DISCORD_INVITE_PRO
+        sync: false
+      - key: DISCORD_INVITE_ELITE
+        sync: false
+      - key: ALPHA_VANTAGE_KEY
+        sync: false
+      - key: STRIPE_API_KEY
+        sync: false
+      - key: STRIPE_LIVE_SECRET_KEY
+        sync: false
+      - key: STRIPE_LIVE_WEBHOOK_SECRET
+        sync: false
+      # --- LLM (copilot) ---
+      - key: COPILOT_ENABLED
+        value: "false"
+      - key: OPENAI_API_KEY
+        sync: false          # replaces EMERGENT_LLM_KEY
+      - key: XAI_API_KEY
+        sync: false
+      # --- optional affiliate URLs (have safe defaults) ---
+      - key: AFFILIATE_URL_NINJATRADER
+        sync: false
+      - key: AFFILIATE_URL_TRADINGVIEW
+        sync: false
+      - key: AFFILIATE_URL_GPAY
+        sync: false
+      - key: AFFILIATE_URL_DISCORD
+        sync: false

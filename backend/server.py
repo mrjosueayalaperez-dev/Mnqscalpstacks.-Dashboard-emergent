@@ -3298,10 +3298,16 @@ async def purge_stale_market_data() -> None:
         logger.error(f"Stale-data purge failed: {e}")
 
 
+# CORS: set CORS_ORIGINS to a comma-separated list of exact origins (e.g. the
+# Vercel production domain) and optionally CORS_ORIGIN_REGEX for Vercel preview
+# URLs (e.g. ^https://mnq-scalp-stacks-[a-z0-9-]+\.vercel\.app$). Unset keeps
+# the legacy '*' default for local dev only — always set it in production.
+_cors_origins = [o.strip().rstrip('/') for o in os.environ.get('CORS_ORIGINS', '*').split(',') if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins or ['*'],
+    allow_origin_regex=(os.environ.get('CORS_ORIGIN_REGEX', '').strip() or None),
     allow_methods=["*"],
     allow_headers=["*"],
 )
