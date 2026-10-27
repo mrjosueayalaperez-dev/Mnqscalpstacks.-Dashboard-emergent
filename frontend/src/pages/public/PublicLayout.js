@@ -1,3 +1,4 @@
+import { RISK_DISCLAIMER } from "@/lib/fmt";
 import React, { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { Zap, Menu, X } from "lucide-react";
@@ -19,8 +20,7 @@ const FOOTER = [
   { label: "Privacy", to: "/privacy" },
 ];
 
-export const DISCLAIMER =
-  "Educational material only. Futures trading involves substantial risk of loss. MNQ Scalp Stacks is not a broker, not an investment adviser, and does not provide personalized financial advice. Past study results do not predict future results.";
+export const DISCLAIMER = RISK_DISCLAIMER;
 
 export const usePageMeta = (title, description) => {
   useEffect(() => {

@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { ChevronDown, LayoutGrid } from "lucide-react";
+import { RISK_DISCLAIMER, SIGNALS_NOTE } from "@/lib/fmt";
 
 export const RiskDisclaimer = () => (
   <p className="col-span-1 md:col-span-4 lg:col-span-12 text-[0.55rem] leading-relaxed text-zinc-600 border border-white/5 bg-white/[0.02] rounded-sm px-3 py-2" data-testid="risk-disclaimer">
-    ⚠️ Trading futures involves substantial risk of loss and is not suitable for all investors. Past performance is not indicative of future results.
+    ⚠️ {RISK_DISCLAIMER} <span className="font-bold text-[#FFCC00]">{SIGNALS_NOTE}</span>
   </p>
 );
 

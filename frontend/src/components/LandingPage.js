@@ -1,3 +1,4 @@
+import { RISK_DISCLAIMER } from "@/lib/fmt";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
@@ -491,7 +492,7 @@ const Footer = () => (
       <span className="text-[0.65rem] text-zinc-600">MNQ SCALP STACKS</span>
     </div>
     <p className="max-w-5xl mx-auto mt-4 text-[0.55rem] leading-relaxed text-zinc-700 text-center" data-testid="landing-risk-disclaimer">
-      Educational material only. Futures trading involves substantial risk of loss. MNQ Scalp Stacks is not a broker, not an investment adviser, and does not provide personalized financial advice. Past study results do not predict future results.
+      {RISK_DISCLAIMER}
     </p>
   </footer>
 );

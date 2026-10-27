@@ -11,7 +11,7 @@ import KnowledgeVault from "@/components/KnowledgeVault";
 import ExecutionHub from "@/components/ExecutionHub";
 import AutoSignalEngine from "@/components/AutoSignalEngine";
 import { FreemiumGate, AdBanner } from "@/components/FreemiumGate";
-import { NinjaTraderPanel, TradingViewPanel, MarketSidebar } from "@/components/PromoModules";
+import { TradingViewPanel, MarketSidebar } from "@/components/PromoModules";
 import LiveTerminalChart from "@/components/LiveTerminalChart";
 import { Header } from "@/components/dashboard/Header";
 import ExecutionPanel from "@/components/dashboard/ExecutionPanel";
@@ -232,29 +232,11 @@ export default function Dashboard() {
             <SimulationTemple />
             <MarketSidebar mnqData={mnqData} />
             <ExecutionHub mnqPrice={mnqData?.close || mnqData?.price} safeMode={safeMode} />
-            <AutoSignalEngine
-              mnqData={mnqData}
-              onAutoExecute={(side) => {
-                const livePrice = mnqData?.close || mnqData?.price;
-                if (!livePrice) {
-                  toast.error("No live price — auto execution blocked");
-                  return;
-                }
-                axios.post(`${API}/trades`, {
-                  symbol: "MNQ",
-                  entry_price: livePrice,
-                  quantity: 1,
-                  side: side,
-                  notes: `AUTO | ${side.toUpperCase()} | Signal Engine`,
-                }).then(() => toast.success(`AUTO ${side.toUpperCase()} executed`))
-                  .catch(() => toast.error("Auto execution failed"));
-              }}
-            />
+            <AutoSignalEngine mnqData={mnqData} />
             <HydroPilot />
             <PerformanceEngine />
             <AlertsPanel alerts={alerts} onAdd={handleAddAlert} onDelete={handleDeleteAlert} />
             <PositionCalculator />
-            <NinjaTraderPanel />
             <TradingViewPanel />
             <SafetySentinel />
             <AIAnalysis onAnalyze={handleAIAnalyze} loading={loading.ai} result={aiResult} />

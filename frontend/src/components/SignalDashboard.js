@@ -1,4 +1,4 @@
-import { fmtPct, fmtNum, hasNum } from "@/lib/fmt";
+import { fmtPct, fmtNum, hasNum, RISK_DISCLAIMER, SIGNALS_NOTE } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -484,6 +484,9 @@ const SignalDashboard = () => {
 
   return (
     <div className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-4" data-testid="signal-dashboard">
+      <p className="lg:col-span-12 text-[0.6rem] leading-relaxed text-zinc-400 border border-[#FFCC00]/30 bg-[#FFCC00]/5 rounded-sm px-3 py-2" data-testid="signals-disclaimer">
+        <span className="font-black text-[#FFCC00]">{SIGNALS_NOTE}</span> {RISK_DISCLAIMER}
+      </p>
       {/* Left: Signal Feed */}
       <div className="widget-panel lg:col-span-7">
         <div className="widget-header">
