@@ -811,26 +811,54 @@ async def get_trade_stats():
         "avg_loss": round(sum(t["pnl"] for t in losers) / len(losers), 2) if losers else 0
     }
 
-# Checklist Routes
+# Checklist Routes — per-user: every route requires auth (same resolver as /api/auth/me)
+# and every query/write is scoped by user_id. Legacy global docs (no user_id) are never exposed.
+DEFAULT_CHECKLIST = [
+    {"text": "Check pre-market futures direction", "category": "premarket", "order": 1},
+    {"text": "Review overnight news/earnings", "category": "premarket", "order": 2},
+    {"text": "Mark key support/resistance levels", "category": "premarket", "order": 3},
+    {"text": "Set daily max loss limit ($40)", "category": "premarket", "order": 4},
+    {"text": "Price above VWAP for longs", "category": "rules", "order": 5},
+    {"text": "9 EMA crosses 21 EMA", "category": "rules", "order": 6},
+    {"text": "RSI confirms (>50 long, <50 short)", "category": "rules", "order": 7},
+    {"text": "Max 2-3 trades per session", "category": "rules", "order": 8},
+    {"text": "Stop if 2 consecutive losses", "category": "rules", "order": 9},
+    {"text": "Journal all trades with notes", "category": "postmarket", "order": 10},
+    {"text": "Review wins and losses", "category": "postmarket", "order": 11},
+]
+_CHECKLIST_PROJECTION = {"_id": 0, "user_id": 0}
+_LEGACY_CHECKLIST = {"user_id": {"$exists": False}}
+
+
+async def _checklist_user(request: Request) -> Dict[str, Any]:
+    """Auth dependency for checklist routes (401 when unauthenticated)."""
+    return await auth_module.get_current_user(request, db)
+
+
 @api_router.get("/checklist")
-async def get_checklist():
-    """Get all checklist items"""
-    items = await db.checklist.find({}, {"_id": 0}).to_list(100)
+async def get_checklist(user: Dict[str, Any] = Depends(_checklist_user)):
+    """Get the current user's checklist items (seeded from defaults on first use)"""
+    uid = user["user_id"]
+    items = await db.checklist.find({"user_id": uid}, _CHECKLIST_PROJECTION).to_list(100)
+    if not items:
+        await db.checklist.insert_many(
+            [{**ChecklistItem(**d).model_dump(), "user_id": uid} for d in DEFAULT_CHECKLIST])
+        items = await db.checklist.find({"user_id": uid}, _CHECKLIST_PROJECTION).to_list(100)
     return items
 
 @api_router.post("/checklist", response_model=ChecklistItem)
-async def add_checklist_item(item: ChecklistItemCreate):
+async def add_checklist_item(item: ChecklistItemCreate, user: Dict[str, Any] = Depends(_checklist_user)):
     """Add checklist item"""
     checklist_item = ChecklistItem(**item.model_dump())
-    doc = checklist_item.model_dump()
+    doc = {**checklist_item.model_dump(), "user_id": user["user_id"]}
     await db.checklist.insert_one(doc)
     return checklist_item
 
 @api_router.patch("/checklist/{item_id}")
-async def toggle_checklist(item_id: str, completed: bool):
+async def toggle_checklist(item_id: str, completed: bool, user: Dict[str, Any] = Depends(_checklist_user)):
     """Toggle checklist item completion"""
     result = await db.checklist.update_one(
-        {"id": item_id}, 
+        {"id": item_id, "user_id": user["user_id"]},
         {"$set": {"completed": completed}}
     )
     if result.matched_count == 0:
@@ -838,17 +866,17 @@ async def toggle_checklist(item_id: str, completed: bool):
     return {"message": "Updated"}
 
 @api_router.delete("/checklist/{item_id}")
-async def delete_checklist_item(item_id: str):
+async def delete_checklist_item(item_id: str, user: Dict[str, Any] = Depends(_checklist_user)):
     """Delete checklist item"""
-    result = await db.checklist.delete_one({"id": item_id})
+    result = await db.checklist.delete_one({"id": item_id, "user_id": user["user_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Deleted"}
 
 @api_router.post("/checklist/reset")
-async def reset_checklist():
-    """Reset all checklist items to uncompleted"""
-    await db.checklist.update_many({}, {"$set": {"completed": False}})
+async def reset_checklist(user: Dict[str, Any] = Depends(_checklist_user)):
+    """Reset the current user's checklist items to uncompleted"""
+    await db.checklist.update_many({"user_id": user["user_id"]}, {"$set": {"completed": False}})
     return {"message": "Reset complete"}
 
 # Alerts Routes
@@ -1848,7 +1876,7 @@ async def seed_data():
     """Seed default watchlist and checklist items"""
     # Check if already seeded
     existing_watchlist = await db.watchlist.count_documents({})
-    existing_checklist = await db.checklist.count_documents({})
+    existing_checklist = await db.checklist.count_documents(_LEGACY_CHECKLIST)
     
     if existing_watchlist > 0 and existing_checklist > 0:
         return {"message": "Data already seeded"}
@@ -1858,24 +1886,12 @@ async def seed_data():
         {"symbol": "MNQ", "name": "Micro E-mini Nasdaq-100", "category": "futures", "notes": "Primary instrument — live CME feed"},
     ]
     
-    # Default checklist
-    default_checklist = [
-        {"text": "Check pre-market futures direction", "category": "premarket", "order": 1},
-        {"text": "Review overnight news/earnings", "category": "premarket", "order": 2},
-        {"text": "Mark key support/resistance levels", "category": "premarket", "order": 3},
-        {"text": "Set daily max loss limit ($40)", "category": "premarket", "order": 4},
-        {"text": "Price above VWAP for longs", "category": "rules", "order": 5},
-        {"text": "9 EMA crosses 21 EMA", "category": "rules", "order": 6},
-        {"text": "RSI confirms (>50 long, <50 short)", "category": "rules", "order": 7},
-        {"text": "Max 2-3 trades per session", "category": "rules", "order": 8},
-        {"text": "Stop if 2 consecutive losses", "category": "rules", "order": 9},
-        {"text": "Journal all trades with notes", "category": "postmarket", "order": 10},
-        {"text": "Review wins and losses", "category": "postmarket", "order": 11},
-    ]
+    # Default checklist (legacy global copy; per-user copies are seeded by GET /checklist)
+    default_checklist = DEFAULT_CHECKLIST
     
     # Clear and seed
     await db.watchlist.delete_many({})
-    await db.checklist.delete_many({})
+    await db.checklist.delete_many(_LEGACY_CHECKLIST)  # never wipe per-user items
     
     for item in default_watchlist:
         watchlist_item = WatchlistItem(**item)
