@@ -1,0 +1,26 @@
+# Birth-cell / local only. NOT used by Emergent, Render, or Vercel.
+# Usage: docker compose -f docker-compose.temporal.yml up -d
+services:
+  temporal:
+    image: temporalio/temporal:1.9.1
+    command: ["server", "start-dev", "--ip", "0.0.0.0", "--db-filename", "/data/temporal.db"]
+    ports:
+      - "127.0.0.1:7233:7233"   # gRPC — keep bound to localhost; do not expose publicly
+      - "127.0.0.1:8233:8233"   # Web UI
+    volumes:
+      - temporal-data:/data
+  worker:
+    image: python:3.12-slim
+    working_dir: /app
+    volumes:
+      - ./backend:/app:ro
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: mnq-birthcell-main
+      PYTHONUNBUFFERED: "1"
+    command: ["sh", "-c", "pip install -q -r temporal/requirements.txt && python -m temporal.worker"]
+    depends_on: [temporal]
+    restart: unless-stopped
+volumes:
+  temporal-data:
