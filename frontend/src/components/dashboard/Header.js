@@ -2,6 +2,7 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import { Activity, BarChart3, LogOut, RefreshCw } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { RailDrawer } from "@/components/dashboard/MobileShell";
 
 export const Header = ({ onRefresh, lastUpdate }) => {
   const { user, logout } = useAuth();
@@ -13,16 +14,12 @@ export const Header = ({ onRefresh, lastUpdate }) => {
   return (
   <header className="h-12 md:h-14 border-b border-white/10 bg-[#0A0A0A]/90 backdrop-blur-xl flex items-center justify-between px-3 md:px-4 sticky top-0 z-50" data-testid="main-header">
     <div className="flex items-center gap-2 md:gap-3">
+      <RailDrawer />
       <div className="flex items-center gap-1.5">
         <Activity className="w-5 h-5 text-[#007AFF]" />
         <h1 className="text-sm md:text-base font-black tracking-tight">MNQ COMMAND CENTER</h1>
       </div>
       <div className="w-2 h-2 bg-[#34C759] rounded-full animate-pulse hidden md:block" />
-    </div>
-    <div className="hidden lg:flex items-center gap-1">
-      {["Signals", "Automation", "Education", "Broker Tools"].map((tab) => (
-        <span key={tab} className="px-2 py-1 text-[0.6rem] text-zinc-500 hover:text-white cursor-pointer transition-colors">{tab}</span>
-      ))}
     </div>
     <div className="flex items-center gap-2 md:gap-3">
       <a href="/performance" className="hidden md:flex items-center gap-1 px-2.5 py-1 text-[0.65rem] bg-[#FFCC00]/15 text-[#FFCC00] rounded-sm hover:bg-[#FFCC00]/25 transition-colors font-bold" data-testid="performance-link">
