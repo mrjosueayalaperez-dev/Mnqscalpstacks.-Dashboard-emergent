@@ -1,5 +1,5 @@
 from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Depends, Header
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq, set_live_price as market_feed_set_live_price
 from market_context import get_market_context
 import ati
@@ -23,6 +23,9 @@ from datetime import datetime, timezone, timedelta
 import httpx
 import secrets
 import hashlib
+import hmac
+from pydantic import ValidationError
+from temporal import ingest_client as tv_ingest_client  # Temporal hook; OFF unless TEMPORAL_ENABLED=true
 from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
 from copilot import build_copilot_router, copilot_enabled, with_disclaimer, METHOD_PROMPT
 
@@ -1055,14 +1058,32 @@ async def ai_analyze(request: AIAnalysisRequest):
 
 # TradingView Webhook Receiver
 @api_router.post("/webhook/tradingview")
-async def receive_tradingview_webhook(payload: TradingViewWebhook, background_tasks: BackgroundTasks):
-    """Receive signals from TradingView webhook"""
+async def receive_tradingview_webhook(request: Request, background_tasks: BackgroundTasks):
+    """Legacy TradingView webhook. Secret required (X-Webhook-Secret header or JSON body `secret`)."""
+    raw = await request.body()
+    try:
+        data = json.loads(raw or b"{}")
+    except ValueError:
+        data = None
+    body_secret = data.get("secret") if isinstance(data, dict) else None
+    _verify_webhook_secret(request.headers.get("X-Webhook-Secret", ""), body_secret)
+    try:
+        payload = TradingViewWebhook(**data) if isinstance(data, dict) else None
+    except ValidationError:
+        payload = None
+    if payload is None:
+        raise HTTPException(status_code=422, detail="Invalid webhook payload")
     if signal_engine_state["kill_switch"]:
         return {"status": "blocked", "reason": "Kill switch active"}
 
     # Check duplicate
     side = "long" if payload.type and payload.type.lower() == "buy" else "short"
     symbol = payload.symbol or "MNQ"
+    if tv_ingest_client.temporal_enabled():
+        return await _ingest_via_temporal({
+            "route": "legacy", "action": "BUY" if side == "long" else "SELL", "symbol": symbol,
+            "db_symbol": symbol, "price": payload.price, "interval": "1",
+            "source": "TradingView legacy webhook", "note": ""}, payload.time)
     is_dup = await check_duplicate_signal(symbol, side, minutes=3)
     if is_dup:
         return {"status": "duplicate", "reason": "Signal already active"}
@@ -1131,6 +1152,29 @@ from zoneinfo import ZoneInfo
 ET = ZoneInfo("America/New_York")
 SIGNAL_WEBHOOK_SECRET = os.environ.get("SIGNAL_WEBHOOK_SECRET", "")
 SYMBOL_MAP = {"MNQ1!": "MNQ", "NQ1!": "MNQ", "MNQ": "MNQ", "NQ": "MNQ", "CME_MINI:MNQ1!": "MNQ", "CME_MINI:NQ1!": "MNQ"}
+
+
+def _verify_webhook_secret(*candidates) -> None:
+    """Fail closed: 503 when SIGNAL_WEBHOOK_SECRET is unset; 401 unless the X-Webhook-Secret header
+    or JSON body `secret` matches (constant-time). Query-string secrets are ignored."""
+    if not SIGNAL_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook disabled: secret not configured")
+    want = SIGNAL_WEBHOOK_SECRET.encode()
+    if not any(c and hmac.compare_digest(str(c).encode(), want) for c in candidates):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
+
+async def _ingest_via_temporal(p: Dict[str, Any], alert_time: Optional[str]):
+    """TEMPORAL_ENABLED path: TvIngestWorkflow (idempotent + audited). No local fallback when down."""
+    try:
+        status, body = await tv_ingest_client.run_ingest(p, alert_time)
+    except tv_ingest_client.IngestUnavailable:
+        await _log_signal_event(False, 503, "Ingest unavailable: Temporal unreachable", p.get("action", ""), p.get("source", ""))
+        return JSONResponse(status_code=503, content={"detail": "ingest unavailable"})
+    if status == 200 and body.get("status") in ("created", "received"):
+        signal_engine_state["total_signals"] += 1
+        signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
+    return JSONResponse(status_code=status, content=body)
 
 
 async def _log_signal_event(ok: bool, status: int, detail: str, action: str = "", source: str = "") -> None:
@@ -1232,14 +1276,20 @@ async def _resolve_punch_price(price, action: str, source: str) -> float:
 async def signals_tradingview(request: Request):
     """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
     raw = (await request.body()).decode("utf-8", errors="ignore").strip()
-    # Secret can also arrive via header or query (for plain-text TradingView alerts)
-    header_secret = request.headers.get("X-Webhook-Secret", "") or request.query_params.get("secret", "")
-    a = _parse_tv_alert(raw, header_secret)
+    # Secret: X-Webhook-Secret header (plain-text alerts) or JSON body `secret`. Query string is ignored.
+    a = _parse_tv_alert(raw, "")
     action, symbol, interval, source, note = a["action"], a["symbol"], a["interval"], a["source"], a["note"]
-
-    if SIGNAL_WEBHOOK_SECRET and a["secret"] != SIGNAL_WEBHOOK_SECRET:
-        await _log_signal_event(False, 401, "Bad or missing secret", action, source)
-        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+    try:
+        _verify_webhook_secret(request.headers.get("X-Webhook-Secret", ""), a["secret"])
+    except HTTPException as e:
+        await _log_signal_event(False, e.status_code, "Bad or missing secret" if e.status_code == 401 else e.detail, action, source)
+        raise
+    try:
+        alert_time = json.loads(raw).get("time") or None
+    except (ValueError, AttributeError):
+        alert_time = None
+    tv_p = {"route": "primary", "action": action, "symbol": symbol, "interval": interval, "price": a["price"],
+            "source": source, "note": note, "cooldown_min": signal_engine_state["cooldown_min"]}
     if action not in ("BUY", "SELL", "CLOSE", "HOLD", "PRICE"):
         await _log_signal_event(False, 400, f"Unknown action: {action or raw[:60]}", action, source)
         raise HTTPException(status_code=400, detail="action must be BUY, SELL, HOLD, PRICE, or CLOSE")
@@ -1255,12 +1305,16 @@ async def signals_tradingview(request: Request):
         await _log_signal_event(False, 400, f"Unsupported symbol: {symbol}", action, source)
         raise HTTPException(status_code=400, detail=f"Unsupported symbol {symbol} — use MNQ1! or NQ1!")
     if action == "HOLD":
+        if tv_ingest_client.temporal_enabled():
+            return await _ingest_via_temporal(tv_p, alert_time)
         result = await _record_hold(source, note or "HOLD — waiting for confirmation", False)
         await _log_signal_event(True, 200, "HOLD accepted — no trade placed.", action, source)
         return result
     if signal_engine_state["kill_switch"]:
         await _log_signal_event(False, 200, "Blocked: kill switch active", action, source)
         return {"status": "blocked", "reason": "Kill switch active"}
+    if tv_ingest_client.temporal_enabled():
+        return await _ingest_via_temporal(tv_p, alert_time)
 
     if action == "CLOSE":
         r = await db.signals.update_many({"status": "active"}, {"$set": {"status": "expired"}})
@@ -1316,13 +1370,14 @@ async def signals_receiver_status(request: Request) -> Dict[str, Any]:
     in_rth = now_et.weekday() < 5 and (9, 30) <= (now_et.hour, now_et.minute) < (16, 0)
     session_open = True if (signal_engine_state["globex"] or not signal_engine_state["session_filter"]) else in_rth
     alert_template = json.dumps({
-        "secret": SIGNAL_WEBHOOK_SECRET or "<set SIGNAL_WEBHOOK_SECRET>",
+        "secret": "<paste your SIGNAL_WEBHOOK_SECRET>" if SIGNAL_WEBHOOK_SECRET else "<set SIGNAL_WEBHOOK_SECRET>",
         "action": "{{strategy.order.action}}", "symbol": "MNQ1!", "interval": "{{interval}}",
         "price": "{{close}}", "time": "{{timenow}}", "source": "MNQ Scalp Punch v1",
     }, indent=2)
     return {
         "webhook_url": f"{base}/api/signals/tradingview",
         "secret_configured": bool(SIGNAL_WEBHOOK_SECRET),
+        "secret_masked": "********" if SIGNAL_WEBHOOK_SECRET else "",
         "alert_template": alert_template,
         "receiver_live": bool(last_in and last_in["ts"] > live_cutoff),
         "last_inbound": last_in,
