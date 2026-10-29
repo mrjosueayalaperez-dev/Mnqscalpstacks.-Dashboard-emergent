@@ -23,6 +23,8 @@ API = f"{BASE_URL}/api"
 def http():
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
+    # Webhook secret is now required (header or JSON body). Dummy default for local runs only.
+    s.headers["X-Webhook-Secret"] = os.environ.get("SIGNAL_WEBHOOK_SECRET", "test-secret-dummy")
     # Reset any active signals so duplicate suppression doesn't block us
     try:
         import asyncio
