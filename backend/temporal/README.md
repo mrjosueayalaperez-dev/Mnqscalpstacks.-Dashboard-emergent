@@ -72,4 +72,37 @@ WantedBy=multi-user.target
 ```
 `sudo mkdir -p /var/lib/temporal && sudo chown mnq /var/lib/temporal && sudo systemctl daemon-reload && sudo systemctl enable --now temporal-dev mnq-temporal-worker`
 
+## Paper-cut 2: TradingView ingest workflow (`TvIngestWorkflow`)
+The API starts this workflow only when `TEMPORAL_ENABLED=true`. It is **off by default**: with it off, both webhook
+routes keep their current synchronous path, with the new secret rules applied.
+
+| Var | Where | Default | Notes |
+|---|---|---|---|
+| `TEMPORAL_ENABLED` | API | `false` | `true` sends HOLD/CLOSE/BUY/SELL through the workflow |
+| `SIGNAL_WEBHOOK_SECRET` | API | — | **required**. Unset → 503 on both webhook routes |
+| `MONGO_URL`, `DB_NAME` | worker | — / `mnqscalpstacks` | birth-cell worker needs the same Mongo as the API |
+| `DISCORD_WEBHOOK_URL` | worker | — | optional. Sending needs the full backend deps (`pip install -r backend/requirements.txt`) |
+
+Secret rules (both `/api/signals/tradingview` and legacy `/api/webhook/tradingview`):
+- The secret comes from the `X-Webhook-Secret` header or the JSON body `secret` field. `?secret=` is ignored.
+- It is checked with `hmac.compare_digest`.
+- Unset → 503 `Webhook disabled: secret not configured`. Wrong or missing → 401.
+
+Flow: route (secret → parse → PRICE stays sync → kill switch at its existing position) → `TvIngestWorkflow`:
+`validate_and_price` (non-retryable validation errors; live-price fallback) → `persist_signal` (idempotent per
+workflow id via the unique sparse index `signals.ingest_key`) → `notify_discord` (≤5 attempts; the `discord_sent` flag
+prevents a second send) → `write_audit` (`signal_ingest_audit`, never stores the secret, plus one `signal_events` line).
+
+Workflow id = `tv-ingest-` + sha256(secret-free normalized payload + TradingView `time`, or the UTC minute when there is no `time`).
+A duplicate delivery attaches to the same id and returns the original result: no second insert, no second Discord message.
+
+API responses when enabled:
+- Same shapes as today if the workflow finishes within 1.5s.
+- Otherwise `202 {"status":"accepted","workflow_id"}`.
+- Temporal unreachable → `503 {"detail":"ingest unavailable"}` plus a `signal_events` entry. There is no local fallback.
+- Workflow failed after retries → `500 {"detail":"ingest failed","workflow_id"}`.
+
+Birth-cell Mongo: point the worker's `MONGO_URL` at the same database the API uses (Atlas or a local mongod on
+birth cell, bound to 127.0.0.1). Signals stay display-only. Nothing here calls ATI, `/trades`, or any order routing.
+
 Futures trading involves substantial risk of loss and is not suitable for all investors. This is education and structured practice, not financial advice. Past performance is not indicative of future results.
