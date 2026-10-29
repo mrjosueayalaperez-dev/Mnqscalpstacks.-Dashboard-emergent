@@ -15,6 +15,8 @@ import os
 import time
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'http://localhost:8001').rstrip('/')
+# Webhook secret is now required (header or JSON body). Dummy default for local runs only.
+WH = {"X-Webhook-Secret": os.environ.get("SIGNAL_WEBHOOK_SECRET", "test-secret-dummy")}
 
 
 class TestSignalEngineV2Components:
@@ -177,7 +179,7 @@ class TestWebhookStillWorks:
             "time": "2026-01-15T10:30:00Z"
         }
         
-        response = requests.post(f"{BASE_URL}/api/webhook/tradingview", json=payload)
+        response = requests.post(f"{BASE_URL}/api/webhook/tradingview", json=payload, headers=WH)
         assert response.status_code == 200
         data = response.json()
         
@@ -199,7 +201,7 @@ class TestWebhookStillWorks:
             "time": "2026-01-15T10:35:00Z"
         }
         
-        response = requests.post(f"{BASE_URL}/api/webhook/tradingview", json=payload)
+        response = requests.post(f"{BASE_URL}/api/webhook/tradingview", json=payload, headers=WH)
         assert response.status_code == 200
         data = response.json()
         
