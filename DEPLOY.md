@@ -1,5 +1,7 @@
 # MNQ Scalp Stacks — Free Hosting Runbook
 
+> **Superseded for the backend move:** see [docs/MIGRATION.md](docs/MIGRATION.md) (Render Starter, not free — the free tier sleeps and stops the signal engine loops).
+
 **Goal:** the full app (React frontend + FastAPI backend + MongoDB) running free,
 on **mnqscalpstacks.com**, working like it did on Emergent.
 
