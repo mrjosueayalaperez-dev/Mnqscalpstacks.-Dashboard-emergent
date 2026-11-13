@@ -176,8 +176,12 @@ async def _default_discord_sender(doc: dict) -> bool:
         return False
     import httpx
     from server import _build_discord_payload  # same branded embed as the API (needs backend deps)
-    async with httpx.AsyncClient() as c:
-        resp = await c.post(url, json=_build_discord_payload(doc), timeout=5.0)
+    try:
+        async with httpx.AsyncClient() as c:
+            resp = await c.post(url, json=_build_discord_payload(doc), timeout=5.0)
+    except Exception as exc:
+        # Never raise str(exc): httpx embeds the webhook URL in the message.
+        raise RuntimeError(f"Discord send failed: {type(exc).__name__}") from None
     if resp.status_code not in (200, 204):
         raise RuntimeError(f"Discord HTTP {resp.status_code}")  # retried by Temporal
     return True

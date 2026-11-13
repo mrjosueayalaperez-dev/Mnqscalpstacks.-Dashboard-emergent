@@ -24,7 +24,8 @@ async def _post(payload: dict) -> None:
         async with httpx.AsyncClient(timeout=8) as client:
             await client.post(url, json=payload)
     except Exception as e:
-        logger.warning(f"owner alert failed: {e}")
+        # httpx exception messages often embed the request URL. Log the type only.
+        logger.warning("owner alert failed: %s", type(e).__name__)
 
 
 def owner_alert(title: str, description: str, color: int = 3447003) -> None:

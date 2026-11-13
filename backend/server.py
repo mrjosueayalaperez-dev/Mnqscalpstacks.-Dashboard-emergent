@@ -362,10 +362,8 @@ def _rr_ratio(entry: float, stop: float, tp1: float) -> str:
 
 
 def _build_discord_payload(signal: dict) -> dict:
-    is_long = signal["side"] == "long"
-    side_label = "LONG" if is_long else "SHORT"
-    side_emoji = "🟢" if is_long else "🔴"
-    signal_color = 5763719 if is_long else 15548997  # Green / Red
+    is_long = signal.get("side") == "long"
+    side_label = "LONG" if is_long else ("SHORT" if signal.get("side") == "short" else "WAIT")
 
     pillar_status = _format_signal_pillars(signal.get("components", {}))
     score = signal.get("confluence_score", 0)
@@ -375,27 +373,21 @@ def _build_discord_payload(signal: dict) -> dict:
     tp1 = signal.get("tp1", 0)
     rr = _rr_ratio(entry, stop, tp1)
 
-    return {
-        "username": "MNQ SCALP STACKS BOT",
-        "avatar_url": "https://i.imgur.com/4S7S5vj.png",
-        "embeds": [{
-            "title": f"PAPER · {side_emoji} SCALP PUNCH — {side_label}",
-            "color": signal_color,
-            "fields": [
-                {"name": "Asset", "value": "MNQ (Micro Nasdaq)", "inline": True},
-                {"name": "Strategy", "value": f"Scalp Punch ({score}/2)", "inline": True},
-                {"name": "Status", "value": f"{'✅' if score >= 2 else '⚠️'} {pillar_status}", "inline": False},
-                {"name": "Entry", "value": f"```${entry:.2f}```", "inline": True},
-                {"name": "Stop Loss", "value": f"```${stop:.2f}```", "inline": True},
-                {"name": "R:R", "value": f"```{rr}```", "inline": True},
-                {"name": "TP1", "value": f"```${tp1:.2f}```", "inline": True},
-                {"name": "TP2", "value": f"```${signal.get('tp2', 0):.2f}```", "inline": True},
-                {"name": "Trend", "value": f"```{signal.get('trend_direction', 'neutral').upper()}```", "inline": True},
-            ],
-            "footer": {"text": "MNQ SCALP STACKS SaaS | Emergent.sh"},
-            "timestamp": signal.get("created_at", datetime.now(timezone.utc).isoformat()),
-        }],
-    }
+    source = str(signal.get("source") or "")
+    body = notifications.format_alert_message({
+        "strategy": signal.get("strategy_name") or f"Scalp Punch (legacy path — not Strategy A/B) ({score}/2)",
+        "instrument": signal.get("symbol") or "MNQ",
+        "timeframe": signal.get("interval") or signal.get("timeframe") or "1m",
+        "direction": side_label,
+        "trigger": (
+            f"{pillar_status}; entry {entry:.2f}, stop {stop:.2f}, TP1 {tp1:.2f}, "
+            f"TP2 {signal.get('tp2', 0):.2f}, R:R {rr}, trend {signal.get('trend_direction', 'neutral')}"
+        ),
+        "data_label": (signal.get("data_label") or notifications.data_label_for_source(source)),
+        "data_source": source,
+        "timestamp_et": None,
+    })
+    return {"username": body["username"], "embeds": body["embeds"]}
 
 
 async def send_discord_signal(signal: dict) -> bool:
@@ -427,7 +419,6 @@ async def send_discord_signal(signal: dict) -> bool:
     result = await notifications.deliver_discord(
         payload,
         store=notifications.MongoDeliveryStore(db),
-        webhook_url=DISCORD_WEBHOOK_URL if _discord_webhook_configured() else "",
     )
     return result.get("status") == "delivered"
 
@@ -3011,6 +3002,10 @@ async def seed_auth() -> None:
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
     await pnl_journal.ensure_indexes(db)
+    try:
+        await notifications.MongoDeliveryStore(db).ensure_indexes()
+    except Exception:
+        logger.warning("alert_deliveries index setup skipped")
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
     # (startup PAPER test punches removed — no auto-generated signals)
