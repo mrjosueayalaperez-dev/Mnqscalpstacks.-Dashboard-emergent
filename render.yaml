@@ -1,6 +1,7 @@
 # Render Blueprint — MNQ Scalp Stacks backend (FastAPI + websockets + background loops)
 # Render -> New -> Blueprint -> select this repo. Values marked `sync: false` are
-# entered in the Render dashboard (never committed). See docs/MIGRATION.md.
+# entered in the Render dashboard (never committed).
+# See docs/MIGRATION-OFF-EMERGENT.md (current) and docs/MIGRATION.md.
 #
 # IMPORTANT: plan must be a paid, always-on instance. The free plan spins down after
 # 15 min idle, which stops the 60s live signal engine, the signal resolver and the
@@ -12,7 +13,7 @@ services:
   - type: web
     name: mnq-scalp-stacks-backend
     runtime: python
-    plan: starter            # $7/mo, 0.5 CPU / 512 MB, no spin-down
+    plan: starter            # always-on; check current pricing on Render's site (historically ~$7/mo, 0.5 CPU / 512 MB)
     region: virginia         # close to Atlas us-east-1
     rootDir: backend
     buildCommand: pip install --upgrade pip && pip install -r requirements.txt
@@ -78,3 +79,19 @@ services:
         sync: false
       - key: AFFILIATE_URL_DISCORD
         sync: false
+      - key: TV_DATA_MODE
+        sync: false          # delayed (default) / realtime — label only, not a live broker feed
+      # --- practice alerts (PRs #17/#18). Leave approval flags unset; only exact "true" enables them ---
+      - key: STRATEGY_A_PARAMETERS_APPROVED
+        sync: false
+      - key: STRATEGY_B_PARAMETERS_APPROVED
+        sync: false
+      - key: ALERT_DEDUP_WINDOW_SECONDS
+        sync: false
+      - key: ALERT_DISCORD_RETRIES
+        sync: false
+      - key: ALERT_DISCORD_BACKOFF_BASE_SECONDS
+        sync: false
+      # --- Temporal stays off unless separately approved ---
+      - key: TEMPORAL_ENABLED
+        value: "false"

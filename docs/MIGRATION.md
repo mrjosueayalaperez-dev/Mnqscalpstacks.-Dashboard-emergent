@@ -1,3 +1,5 @@
+> **Prefer [MIGRATION-OFF-EMERGENT.md](./MIGRATION-OFF-EMERGENT.md).** That is the current future-use runbook (Vercel receiver, Mongo copy script, post-#17/#18 env vars, and the 4-point TradingView gate). Josue is staying on Emergent for now; do not execute a cut-over from this older checklist. In particular, do not follow §7's TradingView step as written — TradingView stays on Emergent until the 4-point check passes, and the Vercel receiver should be pointed at the new host rather than sending alerts directly to the backend.
+
 # Backend migration: Emergent.host → Render + MongoDB Atlas
 
 Status: **prepared, not executed.** Nothing in this branch touches production or deploys anything.
