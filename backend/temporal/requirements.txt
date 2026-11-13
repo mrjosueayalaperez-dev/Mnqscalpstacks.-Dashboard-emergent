@@ -1,2 +1,5 @@
 # Worker-only deps (kept separate from backend/requirements.txt so the API image is unchanged)
 temporalio==1.35.0
+httpx==0.28.1
+motor==3.3.1
+pymongo==4.5.0
