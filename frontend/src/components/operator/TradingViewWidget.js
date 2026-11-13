@@ -31,10 +31,10 @@ export default function TradingViewWidget({ wsConnected, lastTick }) {
           )}
         </div>
         <div className="flex items-center gap-2 pointer-events-auto">
-          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-white/5" title={wsConnected ? "WebSocket live" : "WebSocket reconnecting"}>
+          <div className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-white/5" title={wsConnected ? "WebSocket connected" : "WebSocket reconnecting"}>
             {wsConnected ? <Wifi className="w-3 h-3 text-[#34C759]" /> : <WifiOff className="w-3 h-3 text-[#FF3B30]" />}
             <span className={`text-[0.5rem] font-bold tracking-wider ${wsConnected ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
-              {wsConnected ? "LIVE" : "RECONNECT"}
+              {wsConnected ? "CONNECTED" : "RECONNECT"}
             </span>
           </div>
         </div>

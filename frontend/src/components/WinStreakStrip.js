@@ -1,3 +1,4 @@
+import { fmtPct } from "@/lib/fmt";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Radio } from "lucide-react";
@@ -25,7 +26,7 @@ const WinStreakStrip = () => {
           </span>
           <span className="text-[0.65rem] md:text-xs font-mono text-zinc-500" data-testid="win-streak-summary">
             <span className="text-[#34C759] font-bold">{wins}W</span> / <span className="text-[#FF3B30] font-bold">{losses}L</span>
-            {" · "}{win_rate}% win rate{" · "}
+            {" · "}{fmtPct(win_rate)} win rate{" · "}
             <span className={net_points >= 0 ? "text-[#34C759]" : "text-[#FF3B30]"}>
               {net_points >= 0 ? "+" : ""}{net_points} pts
             </span>

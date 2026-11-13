@@ -73,7 +73,7 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
     const isTest = signal.is_test || signal.source === "test";
     if (lastSignalIdRef.current && lastSignalIdRef.current !== signal.id && !isTest) {
       if (soundOn) playSignalSound(signal.side);
-      toast.info(`New ${signal.side.toUpperCase()} signal @ ${fmt(signal.entry_price)}`);
+      toast.info(`PAPER · New ${signal.side.toUpperCase()} signal @ ${fmt(signal.entry_price)}`);
       window.dispatchEvent(new CustomEvent("mnq:new-live-signal", { detail: { id: signal.id, side: signal.side } }));
     }
     lastSignalIdRef.current = signal.id;
@@ -120,12 +120,12 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
         action, qty, order_type: "MARKET", preset: "SNIPE_2R", sl_ticks: 40, tp_ticks: 120,
       });
       cooldownRef.current = Date.now();
-      toast.success(`${action} ${qty} MNQ @ ${fmt(data.order?.fill_price)}`, {
-        description: data.ati?.routed ? "Routed to NinjaTrader via ATI bridge" : "Simulated fill (bracket 40t/120t)",
+      toast.success(`SIM · ${action} ${qty} MNQ LOGGED @ ${fmt(data.order?.fill_price)}`, {
+        description: "Simulated fill (bracket 40t/120t) — no broker routing",
       });
       refresh();
     } catch (e) {
-      toast.error(`${action} rejected`, { description: e.response?.data?.detail || e.message });
+      toast.error(`SIM · ${action} rejected`, { description: e.response?.data?.detail || e.message });
     }
     setBusy(false);
   };
@@ -140,10 +140,10 @@ export default function ExecutionPanel({ checklistDone = 0, checklistTotal = 0, 
     setBusy(true);
     try {
       await axios.post(`${API}/operator/control/flatten`);
-      toast.success("FLATTENED — all positions closed");
+      toast.success("SIM · FLATTENED — simulated positions closed");
       refresh();
     } catch (e) {
-      toast.error("Flatten failed");
+      toast.error("SIM · Flatten failed");
     }
     setBusy(false);
   };

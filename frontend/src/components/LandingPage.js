@@ -1,3 +1,4 @@
+import { RISK_DISCLAIMER } from "@/lib/fmt";
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
@@ -344,7 +345,7 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
   const [selectedTier, setSelectedTier] = useState("free");
 
   const tiers = [
-    { id: "free", name: "Free — Everything Included", price: "$0", period: " forever", features: ["Real-time signals & Discord alerts", "AI Scalp Copilot (GPT + Grok)", "Charts with entry/stop/target lines", "Community Lab + practice journal", "No card. No catch — just learn."], color: "border-[#34C759]/40 ring-1 ring-[#34C759]/30", accent: "text-[#34C759]" },
+    { id: "free", name: "Free — Everything Included", price: "$0", period: " forever", features: ["PAPER signals & Discord alerts", "AI Scalp Copilot (GPT + Grok)", "Charts with entry/stop/target lines", "Community Lab + practice journal", "No card. No catch — just learn."], color: "border-[#34C759]/40 ring-1 ring-[#34C759]/30", accent: "text-[#34C759]" },
   ];
 
   const handleSubmit = (e) => {
@@ -458,7 +459,7 @@ const Footer = () => (
       <span className="text-[0.65rem] text-zinc-600">MNQ SCALP STACKS</span>
     </div>
     <p className="max-w-5xl mx-auto mt-4 text-[0.55rem] leading-relaxed text-zinc-700 text-center" data-testid="landing-risk-disclaimer">
-      Educational material only. Futures trading involves substantial risk of loss. MNQ Scalp Stacks is not a broker, not an investment adviser, and does not provide personalized financial advice. Past study results do not predict future results.
+      {RISK_DISCLAIMER}
     </p>
   </footer>
 );
@@ -502,10 +503,6 @@ const LandingPage = () => {
         if (r.data.valid) setReferrerName(r.data.referrer_name);
       }).catch((e) => console.error("Referral lookup error:", e));
     }
-  }, []);
-
-  useEffect(() => {
-    axios.post(`${API}/backtests/seed-demo`).catch((e) => console.error("Seed error:", e));
   }, []);
 
   // Check for payment return

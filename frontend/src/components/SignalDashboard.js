@@ -1,4 +1,4 @@
-import { fmtPct, hasNum } from "@/lib/fmt";
+import { fmtPct, fmtNum, hasNum, RISK_DISCLAIMER, SIGNALS_NOTE } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast } from "sonner";
@@ -54,7 +54,7 @@ const ReceiverPanel = ({ rs, onTest, testing }) => {
           rs.receiver_live ? "border-[#34C759]/50 text-[#34C759] bg-[#34C759]/10" : "border-[#FF3B30]/50 text-[#FF3B30] bg-[#FF3B30]/10"
         }`} data-testid="receiver-live-badge">
           <span className={`w-1.5 h-1.5 rounded-full ${rs.receiver_live ? "bg-[#34C759] animate-pulse" : "bg-[#FF3B30]"}`} />
-          {rs.receiver_live ? "RECEIVER LIVE" : "NO ALERTS RECEIVED"}
+          {rs.receiver_live ? "RECEIVER CONNECTED" : "NO ALERTS RECEIVED"}
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -166,12 +166,14 @@ const SignalFeed = ({ signals, onUpdateSignal }) => {
                 </span>
               </div>
               <div className="flex items-center gap-1">
-                {sig.is_test || sig.source === "test" ? (
+                {sig.source === "demo" || sig.is_demo || sig.data_label === "DEMO" ? (
+                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#FF3B30]/20 text-[#FF3B30] rounded" data-testid="demo-tag">DEMO · NOT A RESULT</span>
+                ) : sig.is_test || sig.source === "test" ? (
                   <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#FFCC00]/20 text-[#FFCC00] rounded">PAPER TEST</span>
                 ) : sig.source === "live_engine" ? (
-                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#BF5AF2]/20 text-[#BF5AF2] rounded">ENGINE</span>
+                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#BF5AF2]/20 text-[#BF5AF2] rounded">PAPER · ENGINE</span>
                 ) : (
-                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#007AFF]/20 text-[#007AFF] rounded">LIVE</span>
+                  <span className="text-[0.6rem] px-1.5 py-0.5 bg-[#007AFF]/20 text-[#007AFF] rounded" data-testid="paper-tag">PAPER · WEBHOOK</span>
                 )}
                 {typeof sig.confidence === "number" && !isHold && (
                   <span className="text-[0.6rem] px-1.5 py-0.5 rounded bg-white/5 border border-white/10 text-zinc-300 font-mono" data-testid={`signal-confidence-${sig.id}`}>
@@ -451,21 +453,8 @@ const SignalDashboard = () => {
     setLoading(false);
   };
 
-  const handleTestSignal = async () => {
-    setLoading(true);
-    try {
-      const res = await axios.post(`${API}/signals/test`);
-      if (res.data.status === "generated") {
-        toast.success("Test signal generated!");
-        await fetchAll();
-      } else {
-        toast.error(res.data.reason || "Signal blocked");
-      }
-    } catch (e) {
-      toast.error("Failed to generate test signal");
-    }
-    setLoading(false);
-  };
+  // Random /signals/test removed (CFTC 4.41): button now sends a PAPER test punch (excluded from KPIs).
+  const handleTestSignal = () => handleTestPunch("long");
 
   const handleToggleKill = async (enabled) => {
     try {
@@ -486,7 +475,7 @@ const SignalDashboard = () => {
   const handleUpdateSignal = async (signalId, status, pnlPoints) => {
     try {
       await axios.patch(`${API}/signals/${signalId}?status=${status}&pnl_points=${pnlPoints}`);
-      toast.success(`Signal marked as ${status}`);
+      toast.success(`PAPER · Signal marked as ${status}`);
       await fetchAll();
     } catch (e) {
       toast.error("Failed to update signal");
@@ -495,6 +484,9 @@ const SignalDashboard = () => {
 
   return (
     <div className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 lg:grid-cols-12 gap-4" data-testid="signal-dashboard">
+      <p className="lg:col-span-12 text-[0.6rem] leading-relaxed text-zinc-400 border border-[#FFCC00]/30 bg-[#FFCC00]/5 rounded-sm px-3 py-2" data-testid="signals-disclaimer">
+        <span className="font-black text-[#FFCC00]">{SIGNALS_NOTE}</span> {RISK_DISCLAIMER}
+      </p>
       {/* Left: Signal Feed */}
       <div className="widget-panel lg:col-span-7">
         <div className="widget-header">
@@ -510,7 +502,7 @@ const SignalDashboard = () => {
               data-testid="test-signal-btn"
             >
               {loading ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Zap className="w-3 h-3" />}
-              Test Signal
+              PAPER Test Signal
             </button>
             <button
               onClick={fetchAll}
@@ -543,12 +535,12 @@ const SignalDashboard = () => {
               <span className={`stat-value text-lg ${
                 (stats.total_pnl_points || 0) >= 0 ? "text-[#34C759]" : "text-[#FF3B30]"
               }`}>
-                {(stats.total_pnl_points || 0) >= 0 ? "+" : ""}{stats.total_pnl_points || 0}
+                {fmtNum(stats.total_pnl_points, stats.total_pnl_points >= 0 ? "+" : "")}
               </span>
             </div>
             <div className="stat-box">
               <span className="stat-label">Avg R:R</span>
-              <span className="stat-value text-lg">{stats.avg_rr || 0}</span>
+              <span className="stat-value text-lg">{fmtNum(stats.avg_rr)}</span>
             </div>
             <div className="stat-box">
               <span className="stat-label">Freq/Day</span>

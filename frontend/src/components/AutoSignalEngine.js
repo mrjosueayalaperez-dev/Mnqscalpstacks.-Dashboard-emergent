@@ -1,8 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { toast } from "sonner";
 import {
-  Zap, TrendingUp, TrendingDown, ToggleLeft, ToggleRight, Radio,
+  Zap, TrendingUp, TrendingDown, Radio,
   Activity, AlertTriangle, Clock, Target,
 } from "lucide-react";
 
@@ -12,8 +11,9 @@ const API = `${BACKEND_URL}/api`;
 const formatPrice = (p) =>
   typeof p === "number" ? p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00";
 
-const AutoSignalEngine = ({ mnqData, onAutoExecute }) => {
-  const [autoMode, setAutoMode] = useState(false);
+const AutoSignalEngine = ({ mnqData }) => {
+  // P0: display-only PAPER signals. Auto-execution removed; no order/trade is ever placed from here.
+  const autoMode = false;
   const [signals, setSignals] = useState([]);
   const [lastCheck, setLastCheck] = useState(null);
 
@@ -85,17 +85,11 @@ const AutoSignalEngine = ({ mnqData, onAutoExecute }) => {
 
         setSignals(prev => [signal, ...prev].slice(0, 20));
 
-        if (autoMode && onAutoExecute) {
-          onAutoExecute(signal.type === "BUY" ? "long" : "short");
-          toast(`AUTO ${signal.type} @ $${formatPrice(signal.entry)}`, {
-            className: signal.type === "BUY" ? "alert-toast-bullish" : "alert-toast-bearish",
-          });
-        }
       }
     }, 5000);
 
     return () => clearInterval(interval);
-  }, [evaluateSignal, autoMode, onAutoExecute, signals]);
+  }, [evaluateSignal, signals]);
 
   return (
     <div className="widget-panel col-span-1 md:col-span-4 lg:col-span-6" data-testid="auto-signal-engine">
@@ -109,12 +103,12 @@ const AutoSignalEngine = ({ mnqData, onAutoExecute }) => {
           <span className={`text-[0.6rem] font-black px-2 py-0.5 rounded ${
             autoMode ? "bg-[#34C759] text-black animate-pulse" : "bg-white/10 text-zinc-500"
           }`}>
-            {autoMode ? "AUTO ON" : "MANUAL"}
+            PAPER
           </span>
         </div>
       </div>
       <div className="widget-content">
-        {/* Auto Execution Toggle */}
+        {/* PAPER display-only (auto execution removed) */}
         <div className={`flex items-center justify-between p-2.5 rounded-sm border mb-3 transition-all ${
           autoMode ? "bg-[#34C759]/5 border-[#34C759]/30" : "bg-white/5 border-white/10"
         }`}>
@@ -122,12 +116,9 @@ const AutoSignalEngine = ({ mnqData, onAutoExecute }) => {
             <Radio className={`w-4 h-4 ${autoMode ? "text-[#34C759] animate-pulse" : "text-zinc-600"}`} />
             <div>
               <span className="text-xs font-bold text-white block">Auto Execution Mode</span>
-              <span className="text-[0.55rem] text-zinc-500">{autoMode ? "Signals auto-trade when fired" : "Manual BUY/SELL only"}</span>
+              <span className="text-[0.55rem] text-zinc-500">PAPER · display-only — no auto-trading</span>
             </div>
           </div>
-          <button onClick={() => setAutoMode(!autoMode)} data-testid="auto-mode-toggle">
-            {autoMode ? <ToggleRight className="w-7 h-7 text-[#34C759]" /> : <ToggleLeft className="w-7 h-7 text-zinc-600" />}
-          </button>
         </div>
 
         {/* Signal Feed */}

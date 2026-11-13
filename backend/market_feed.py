@@ -13,6 +13,7 @@ Symbol mapping:
 """
 import asyncio
 import logging
+import os
 import time
 from typing import Any, Dict, List, Optional
 
@@ -200,6 +201,20 @@ async def refresh_once() -> Dict[str, Any]:
 _live_override: Dict[str, Any] = {"price": None, "ts": 0.0}
 
 
+def tv_data_mode() -> str:
+    """TV_DATA_MODE=delayed|realtime (default delayed). 'realtime' only when the TradingView
+    data tier feeding the webhook is licensed real-time. Yahoo is ALWAYS delayed."""
+    mode = os.environ.get("TV_DATA_MODE", "delayed").strip().lower()
+    return "realtime" if mode == "realtime" else "delayed"
+
+
+def _label(snap: Dict[str, Any]) -> Dict[str, Any]:
+    mode = tv_data_mode() if snap.get("source") == "tradingview:live" else "delayed"
+    snap["data_mode"] = mode
+    snap["data_label"] = "REAL-TIME" if mode == "realtime" else "DELAYED 10m"
+    return snap
+
+
 def set_live_price(price: float) -> None:
     """Real-time price pushed from a TradingView alert webhook — overrides the delayed Yahoo tape."""
     _live_override["price"] = round(float(price), 2)
@@ -219,7 +234,7 @@ def get_last() -> Dict[str, Any]:
             "source": "tradingview:live",
             "stale": False,
         })
-    return snap
+    return _label(snap)
 
 
 def get_bars() -> List[Dict[str, Any]]:

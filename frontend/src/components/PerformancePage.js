@@ -1,4 +1,4 @@
-import { fmtPct, DATA_MODE, DATA_MODE_NOTE } from "@/lib/fmt";
+import { fmtPct, fmtNum, DATA_MODE, DATA_MODE_NOTE } from "@/lib/fmt";
 import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
 import { toast, Toaster } from "sonner";
@@ -70,14 +70,14 @@ const HeroStats = ({ overview }) => {
     },
     {
       label: "Total P&L",
-      value: `+${overview.total_pnl_points} pts`,
+      value: fmtNum(overview.total_pnl_points, overview.total_pnl_points >= 0 ? "+" : "", " pts"),
       color: overview.total_pnl_points >= 0 ? "text-[#34C759]" : "text-[#FF3B30]",
       icon: TrendingUp,
       glow: true,
     },
     {
       label: "Avg R:R",
-      value: `${overview.avg_rr}:1`,
+      value: fmtNum(overview.avg_rr, "", ":1"),
       color: "text-[#007AFF]",
       icon: Target,
       glow: false,
@@ -613,8 +613,6 @@ const PerformancePage = () => {
   useEffect(() => {
     const fetchPerformance = async () => {
       try {
-        await axios.post(`${API}/public/seed-demo`);
-        await axios.post(`${API}/backtests/seed-demo`);
         const [perfRes, countRes, btRes] = await Promise.all([
           axios.get(`${API}/public/performance`),
           axios.get(`${API}/subscribers/count`),

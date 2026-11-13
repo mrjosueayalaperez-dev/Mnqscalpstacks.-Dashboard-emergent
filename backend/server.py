@@ -1,6 +1,6 @@
 from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Depends, Header
 from fastapi.responses import RedirectResponse, JSONResponse
-from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq, set_live_price as market_feed_set_live_price
+from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq, set_live_price as market_feed_set_live_price, tv_data_mode
 from market_context import get_market_context
 import ati
 import proof
@@ -28,9 +28,6 @@ from pydantic import ValidationError
 from temporal import ingest_client as tv_ingest_client  # Temporal hook; OFF unless TEMPORAL_ENABLED=true
 from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
 from copilot import build_copilot_router, copilot_enabled, with_disclaimer, METHOD_PROMPT
-
-# Secure random generator
-_rng = secrets.SystemRandom()
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -109,16 +106,36 @@ api_router = APIRouter(prefix="/api")
 # Reads (GET) stay open so the public site / Retool dashboards can display data
 # without needing keys. Configure via env: RETOOL_API_KEY=<any long random string>.
 RETOOL_API_KEY = os.environ.get("RETOOL_API_KEY", "")
+SIGNAL_WEBHOOK_SECRET = os.environ.get("SIGNAL_WEBHOOK_SECRET", "")
 
 
 def require_write_key(x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> None:
-    """FastAPI dependency: enforced on every mutating endpoint. If RETOOL_API_KEY
-    is unset (dev/preview default), this is a no-op — the endpoint is open.
-    Set the env var in production to lock all writes to Retool + your own tools."""
+    """FastAPI dependency on mutating endpoints. FAILS CLOSED: 503 when RETOOL_API_KEY
+    is unset, 401 on missing/wrong key (constant-time compare)."""
     if not RETOOL_API_KEY:
-        return
-    if x_api_key != RETOOL_API_KEY:
+        raise HTTPException(status_code=503, detail="Write access disabled: server key not configured")
+    if not x_api_key or not hmac.compare_digest(x_api_key.encode(), RETOOL_API_KEY.encode()):
         raise HTTPException(status_code=401, detail="Missing or invalid X-API-Key header")
+
+
+def verify_webhook_secret(request: Request) -> None:
+    """Shared TradingView webhook verifier: X-Webhook-Secret header ONLY (no query/body),
+    constant-time compare, rejected (503) when SIGNAL_WEBHOOK_SECRET is unset."""
+    if not SIGNAL_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook disabled: secret not configured")
+    got = request.headers.get("X-Webhook-Secret", "")
+    if not got or not hmac.compare_digest(got.encode(), SIGNAL_WEBHOOK_SECRET.encode()):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
+# ---- KPI hygiene (CFTC 4.41): demo/test/generated rows never feed KPIs ----
+KPI_EXCLUDED_SOURCES = ["demo", "test", "seed", "random"]
+KPI_SIGNAL_FILTER: Dict[str, Any] = {"source": {"$nin": KPI_EXCLUDED_SOURCES}, "is_test": {"$ne": True}, "is_demo": {"$ne": True}}
+
+
+def _kpi_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """In-Python twin of KPI_SIGNAL_FILTER (for paths that already loaded rows)."""
+    return [r for r in rows if r.get("source") not in KPI_EXCLUDED_SOURCES
+            and not r.get("is_test") and not r.get("is_demo")]
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -249,6 +266,7 @@ class Signal(BaseModel):
     pnl_points: Optional[float] = None
     discord_sent: bool = False
     source: str = "engine"  # engine, webhook, test
+    data_label: str = "PAPER"  # every signal is a paper/educational signal
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class KillSwitchRequest(BaseModel):
@@ -359,7 +377,7 @@ def _build_discord_payload(signal: dict) -> dict:
         "username": "MNQ SCALP STACKS BOT",
         "avatar_url": "https://i.imgur.com/4S7S5vj.png",
         "embeds": [{
-            "title": f"{side_emoji} SCALP PUNCH — {side_label}",
+            "title": f"PAPER · {side_emoji} SCALP PUNCH — {side_label}",
             "color": signal_color,
             "fields": [
                 {"name": "Asset", "value": "MNQ (Micro Nasdaq)", "inline": True},
@@ -541,99 +559,60 @@ async def root():
     return {"message": "Trading Command Center API"}
 
 # Stock Data Routes
+def _data_unavailable(what: str, symbol: str = "") -> None:
+    """No generated/mock market data is ever returned (CFTC 4.41)."""
+    raise HTTPException(status_code=503, detail={"status": "data_unavailable", "what": what, "symbol": symbol,
+                                                 "message": "Data unavailable — no synthetic data is served."})
+
+
 @api_router.get("/stocks/quote/{symbol}")
 async def get_stock_quote(symbol: str):
-    """Get real-time quote for a stock"""
+    """Quote from Alpha Vantage; 503 data_unavailable if the provider returns nothing."""
     quote = await fetch_stock_quote(symbol.upper())
     if not quote:
-        # Return mock data when API limit reached
-        return {
-            "symbol": symbol.upper(),
-            "price": 150.00 + (hash(symbol) % 100),
-            "change": 2.50,
-            "change_percent": "1.67",
-            "volume": 1500000,
-            "high": 152.00,
-            "low": 148.00,
-            "open": 149.00,
-            "previous_close": 147.50,
-            "is_mock": True
-        }
+        _data_unavailable("quote", symbol.upper())
     return quote
 
 @api_router.get("/stocks/intraday/{symbol}")
 async def get_intraday(symbol: str):
-    """Get intraday price data"""
+    """Intraday candles from Alpha Vantage; never generated."""
     data = await fetch_intraday_data(symbol.upper())
     if not data:
-        # Generate mock intraday data
-        base_price = 150 + (hash(symbol) % 50)
-        mock_data = []
-        for i in range(50):
-            price = base_price + _rng.uniform(-5, 5)
-            mock_data.append({
-                "time": f"2024-01-15 {9 + i//12}:{(i*5) % 60:02d}:00",
-                "open": price,
-                "high": price + _rng.uniform(0, 2),
-                "low": price - _rng.uniform(0, 2),
-                "close": price + _rng.uniform(-1, 1),
-                "volume": _rng.randint(10000, 100000)
-            })
-        return {"data": mock_data, "is_mock": True}
+        _data_unavailable("intraday", symbol.upper())
     return {"data": data}
 
 @api_router.get("/stocks/indicators/{symbol}")
 async def get_indicators(symbol: str):
-    """Get technical indicators"""
+    """Provider indicators only. VWAP is not approximated (was ema9*0.995)."""
     indicators = await fetch_technical_indicators(symbol.upper())
     if not indicators:
-        # Return mock indicators
-        base = 150 + (hash(symbol) % 50)
-        return {
-            "ema9": base + 1.5,
-            "ema21": base - 0.5,
-            "rsi": 55 + (hash(symbol) % 20),
-            "vwap": base + 0.8,
-            "is_mock": True
-        }
-    # Add VWAP (simplified calculation)
-    indicators["vwap"] = indicators.get("ema9", 0) * 0.995
+        _data_unavailable("indicators", symbol.upper())
+    indicators["vwap"] = None
+    indicators["vwap_note"] = "VWAP unavailable from provider"
     return indicators
 
 @api_router.get("/stocks/scanner")
 async def scan_stocks(min_change: float = 3.0):
-    """Scan for stocks with unusual activity"""
-    # Default watchlist stocks
+    """Scan for stocks with unusual activity (real quotes only, no random fill-ins)."""
     symbols = ["AMD", "PLTR", "NIO", "RKLB", "PLUG", "SNAP", "F", "OPEN", "RIVN"]
     results = []
-    
     for symbol in symbols[:5]:  # Limit to conserve API calls
         quote = await fetch_stock_quote(symbol)
         if quote:
             change_pct = float(quote.get("change_percent", "0").replace("%", ""))
             if abs(change_pct) >= min_change:
-                results.append({
-                    **quote,
-                    "alert_type": "breakout" if change_pct > 0 else "breakdown"
-                })
-    
-    # Add some mock results if no real results
-    if not results:
-        for symbol in symbols[:3]:
-            change = _rng.uniform(3, 8) * (1 if _rng.random() > 0.5 else -1)
-            results.append({
-                "symbol": symbol,
-                "price": 10 + (hash(symbol) % 20),
-                "change": round(change * 0.1, 2),
-                "change_percent": str(round(change, 2)),
-                "volume": _rng.randint(500000, 5000000),
-                "alert_type": "breakout" if change > 0 else "breakdown",
-                "is_mock": True
-            })
-    
-    return {"scanners": results}
+                results.append({**quote, "alert_type": "breakout" if change_pct > 0 else "breakdown"})
+    return {"scanners": results, "status": "ok" if results else "data_unavailable"}
 
 # MNQ Futures Routes — LIVE feed (CME via Yahoo NQ=F; NQ and MNQ trade at same price)
+@api_router.get("/market/data-mode", tags=["market"])
+async def market_data_mode() -> Dict[str, Any]:
+    """Drives UI feed labels. Env TV_DATA_MODE=delayed|realtime (default delayed)."""
+    mode = tv_data_mode()
+    return {"tv_data_mode": mode, "tv_label": "REAL-TIME" if mode == "realtime" else "DELAYED 10m",
+            "yahoo_label": "DELAYED 10m", "ingest": "/api/signals/tradingview (X-Webhook-Secret header)"}
+
+
 @api_router.get("/futures/mnq", tags=["market"])
 async def get_mnq_data() -> Dict[str, Any]:
     """Real-time MNQ futures snapshot. Falls back to cached tick on transient errors."""
@@ -655,6 +634,8 @@ async def get_mnq_data() -> Dict[str, Any]:
         "ema21": snap.get("ema21", 0),
         "rsi": snap.get("rsi", 50),
         "data_source": snap.get("source", "yahoo:NQ=F"),
+        "data_mode": snap.get("data_mode", "delayed"),
+        "data_label": snap.get("data_label", "DELAYED 10m"),
         "market_state": snap.get("market_state", "UNKNOWN"),
         "exchange": snap.get("exchange", "CME"),
         "stale": snap.get("stale", False),
@@ -786,17 +767,18 @@ async def update_trade(trade_id: str, update: TradeEntryUpdate):
 @api_router.get("/trades/stats")
 async def get_trade_stats():
     """Get trading statistics"""
-    trades = await db.trades.find({"status": "closed"}, {"_id": 0}).to_list(1000)
+    trades = await db.trades.find({"status": "closed", **KPI_SIGNAL_FILTER}, {"_id": 0}).to_list(1000)
     
     if not trades:
         return {
             "total_trades": 0,
             "winning_trades": 0,
             "losing_trades": 0,
-            "win_rate": 0,
-            "total_pnl": 0,
-            "avg_win": 0,
-            "avg_loss": 0
+            "win_rate": None,
+            "total_pnl": None,
+            "avg_win": None,
+            "avg_loss": None,
+            "note": "n/a — no reviewed closed trades",
         }
     
     total = len(trades)
@@ -1142,6 +1124,9 @@ async def get_signals(limit: int = 50, status: Optional[str] = None):
     if status:
         query["status"] = status
     signals = await db.signals.find(query, {"_id": 0}).sort("created_at", -1).to_list(limit)
+    for sig in signals:
+        demo = sig.get("source") in ("demo", "seed", "random") or sig.get("is_demo")
+        sig["data_label"] = "DEMO" if demo else "PAPER"  # display-only, never live orders; DEMO rows are KPI-excluded
     return signals
 
 
@@ -1150,7 +1135,6 @@ async def get_signals(limit: int = 50, status: Optional[str] = None):
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
-SIGNAL_WEBHOOK_SECRET = os.environ.get("SIGNAL_WEBHOOK_SECRET", "")
 SYMBOL_MAP = {"MNQ1!": "MNQ", "NQ1!": "MNQ", "MNQ": "MNQ", "NQ": "MNQ", "CME_MINI:MNQ1!": "MNQ", "CME_MINI:NQ1!": "MNQ"}
 
 
@@ -1192,7 +1176,7 @@ async def _record_hold(source: str, note: str, is_test: bool) -> Dict[str, Any]:
         "note": note, "reason": note or "Waiting for confirmation", "is_test": is_test,
         "created_at": datetime.now(timezone.utc).isoformat(),
     })
-    return {"ok": True, "action": "HOLD", "executed": False, "status": "held",
+    return {"ok": True, "action": "HOLD", "executed": False, "status": "held", "data_label": "PAPER",
             "message": "HOLD accepted — no order placed."}
 
 
@@ -1227,7 +1211,7 @@ async def _create_punch(side: str, price: float, interval: str = "1", source: st
     if is_test:
         doc["symbol"] = "MNQ (PAPER TEST)"
     _asyncio.create_task(send_discord_signal(doc))
-    return {"status": "created", "signal_id": signal_obj.id, "side": side, "price": price, "is_test": is_test}
+    return {"status": "created", "signal_id": signal_obj.id, "side": side, "price": price, "is_test": is_test, "data_label": "PAPER"}
 
 
 def _parse_tv_alert(raw: str, fallback_secret: str) -> dict:
@@ -1445,7 +1429,7 @@ async def recent_signal_results(limit: int = 10) -> Dict[str, Any]:
     """Last N resolved signals (win/loss) — public proof strip for the landing page."""
     limit = max(1, min(limit, 20))
     docs = await db.signals.find(
-        {"outcome": {"$in": ["win", "loss"]}},
+        {"outcome": {"$in": ["win", "loss"]}, **KPI_SIGNAL_FILTER},
         {"_id": 0, "side": 1, "outcome": 1, "pnl_points": 1, "status": 1, "created_at": 1},
     ).sort("created_at", -1).to_list(limit)
     wins = sum(1 for d in docs if d.get("outcome") == "win")
@@ -1454,8 +1438,8 @@ async def recent_signal_results(limit: int = 10) -> Dict[str, Any]:
         "results": docs,
         "wins": wins,
         "losses": len(docs) - wins,
-        "win_rate": round(wins / len(docs) * 100, 1) if docs else 0,
-        "net_points": net,
+        "win_rate": round(wins / len(docs) * 100, 1) if docs else None,
+        "net_points": net if docs else None,
     }
 
 
@@ -1576,8 +1560,8 @@ async def update_signal(signal_id: str, status: str, pnl_points: Optional[float]
 # Signal Engine Stats
 @api_router.get("/signals/stats")
 async def get_signal_stats():
-    """Get signal performance metrics"""
-    all_signals = await db.signals.find({}, {"_id": 0}).to_list(1000)
+    """Get signal performance metrics (demo/test rows excluded)."""
+    all_signals = await db.signals.find(KPI_SIGNAL_FILTER, {"_id": 0}).to_list(1000)
     closed = [s for s in all_signals if s.get("outcome") in ("win", "loss")]
     wins = [s for s in closed if s.get("outcome") == "win"]
     losses = [s for s in closed if s.get("outcome") == "loss"]
@@ -1601,9 +1585,9 @@ async def get_signal_stats():
         "closed_signals": len(closed),
         "wins": len(wins),
         "losses": len(losses),
-        "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else 0,
-        "total_pnl_points": round(total_pnl, 1),
-        "avg_rr": avg_rr,
+        "win_rate": round(len(wins) / len(closed) * 100, 1) if closed else None,
+        "total_pnl_points": round(total_pnl, 1) if closed else None,
+        "avg_rr": avg_rr if closed else None,
         "signal_frequency_per_day": freq,
         "missed_signals": signal_engine_state["errors"],
     }
@@ -1665,64 +1649,9 @@ async def get_system_health():
 
 # Test Signal Generator
 @api_router.post("/signals/test")
-async def generate_test_signal(background_tasks: BackgroundTasks):
-    """Generate a test signal matching Scalp Punch logic (EMA21 cross + VWAP)"""
-    if signal_engine_state["kill_switch"]:
-        return {"status": "blocked", "reason": "Kill switch active"}
-
-    side = _rng.choice(["long", "short"])
-    live_snap = get_last_mnq()
-    live_anchor = live_snap.get("price") or 0
-    if not live_anchor:
-        live_anchor = (await refresh_mnq()).get("price") or 29500
-    base_price = live_anchor + _rng.uniform(-50, 50)
-    entry = round(base_price, 2)
-
-    # Scalp Punch: EMA21 as spine, VWAP as institutional level
-    swing_range = _rng.uniform(8, 18)
-    sl_buffer = 0.25
-
-    if side == "long":
-        stop = round(entry - swing_range - sl_buffer, 2)
-        tp1 = round(entry + swing_range * 1.2, 2)
-        tp2 = round(entry + swing_range * 2.0, 2)
-    else:
-        stop = round(entry + swing_range + sl_buffer, 2)
-        tp1 = round(entry - swing_range * 1.2, 2)
-        tp2 = round(entry - swing_range * 2.0, 2)
-
-    # Scalp Punch confluence: EMA21 crossover + VWAP filter
-    ema21_cross = _rng.choice([True, True, True, False])
-    vwap_confirm = side == "long"  # Above VWAP for longs
-    score = int(ema21_cross) + int(vwap_confirm)
-
-    signal_obj = Signal(
-        symbol="MNQ",
-        side=side,
-        entry_price=entry,
-        stop_loss=stop,
-        tp1=tp1,
-        tp2=tp2,
-        confluence_score=score,
-        components={
-            "ema21_cross": ema21_cross,
-            "vwap_filter": vwap_confirm,
-        },
-        trend_direction="bullish" if side == "long" else "bearish",
-        source="test",
-    )
-    doc = signal_obj.model_dump()
-    doc["created_at"] = doc["created_at"].isoformat()
-    await db.signals.insert_one(doc)
-
-    signal_engine_state["total_signals"] += 1
-    signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
-
-    background_tasks.add_task(send_discord_signal, doc)
-
-    # Remove MongoDB _id before returning
-    doc.pop("_id", None)
-    return {"status": "generated", "signal": doc}
+async def generate_test_signal():
+    """Removed: generated random signals (CFTC 4.41). Use /signals/test-punch (PAPER, KPI-excluded)."""
+    raise HTTPException(status_code=410, detail="Random test signals removed")
 
 
 # Pine Script Reference
@@ -1803,7 +1732,7 @@ bgcolor(buyPunch ? color.new(color.green, 93) : sellPunch ? color.new(color.red,
 plot(math.round(close / 100) * 100, "Level 00", color=color.new(color.gray, 70), style=plot.style_cross)
 plot(math.round(close / 100) * 100 + 50, "Level 50", color=color.new(color.gray, 80), style=plot.style_cross)
 
-// ==================== ALERTS (JSON for /api/webhook/tradingview) ====================
+// ==================== ALERTS (JSON for /api/signals/tradingview) ====================
 alertcondition(buyPunch, title="BUY PUNCH", message='{"type":"buy","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
 alertcondition(sellPunch, title="SELL PUNCH", message='{"type":"sell","symbol":"MNQ","price":"{{close}}","time":"{{time}}"}')
 alertcondition(inResistanceZone, title="27972 RESISTANCE", message='{"type":"resistance","symbol":"MNQ","price":"{{close}}","level":"27972"}')
@@ -1815,8 +1744,10 @@ def _build_webhook_instructions(base_url: str) -> str:
     return f"""
 ## MNQ Scalp Stacks v3 — TradingView Setup
 
-### Webhook URL:
-{backend}/api/webhook/tradingview
+### Webhook URL (signal + price ingest):
+{backend}/api/signals/tradingview
+Auth: X-Webhook-Secret header or JSON body `secret` (server env SIGNAL_WEBHOOK_SECRET). Query-string secrets are ignored.
+Data label: server env TV_DATA_MODE=delayed|realtime (default delayed). All signals are PAPER.
 
 ### Setup Steps:
 1. Open TradingView -> MNQ 1-min chart (MNQ ONLY)
@@ -1838,7 +1769,7 @@ def _build_webhook_instructions(base_url: str) -> str:
 ### Wave Validation:
 - All numeric data validated before signal fires
 - Resistance zone blocks fake breakout longs
-- JSON format matches /api/webhook/tradingview endpoint
+- JSON format matches /api/signals/tradingview endpoint
 """
 
 
@@ -1853,7 +1784,7 @@ async def get_pine_script(request: Request):
     return {
         "pine_script": _PINE_SCRIPT_V3,
         "webhook_instructions": _build_webhook_instructions(base),
-        "webhook_url": "/api/webhook/tradingview",
+        "webhook_url": "/api/signals/tradingview",
     }
 
 # ============== Backtest Routes ==============
@@ -1903,7 +1834,7 @@ async def seed_demo_backtest():
         return {"message": "Backtest data already exists"}
 
     demo = BacktestResult(
-        strategy_name="MNQ Scalp Stack v2",
+        strategy_name="DEMO · HYPOTHETICAL — MNQ Scalp Stack v2",
         timeframe="1m",
         symbol="MNQ",
         period_start="2025-10-01",
@@ -1973,8 +1904,8 @@ async def seed_data():
 
 @api_router.get("/public/performance")
 async def get_public_performance():
-    """Public-facing performance data for the signal system"""
-    all_signals = await db.signals.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    """Public-facing performance data (demo/test rows excluded)."""
+    all_signals = await db.signals.find(KPI_SIGNAL_FILTER, {"_id": 0}).sort("created_at", -1).to_list(1000)
     closed = [s for s in all_signals if s.get("outcome") in ("win", "loss")]
     wins = [s for s in closed if s.get("outcome") == "win"]
     losses = [s for s in closed if s.get("outcome") == "loss"]
@@ -2036,10 +1967,10 @@ async def get_public_performance():
             "closed_signals": len(closed),
             "active_signals": len(active),
             "win_rate": win_rate,
-            "total_pnl_points": round(total_pnl, 1),
-            "avg_win_points": avg_win_pts,
-            "avg_loss_points": avg_loss_pts,
-            "avg_rr": avg_rr,
+            "total_pnl_points": round(total_pnl, 1) if closed else None,
+            "avg_win_points": avg_win_pts if closed else None,
+            "avg_loss_points": avg_loss_pts if closed else None,
+            "avg_rr": avg_rr if closed else None,
             "best_win_streak": best_streak,
             "wins": len(wins),
             "losses": len(losses),
@@ -2051,73 +1982,8 @@ async def get_public_performance():
 
 @api_router.post("/public/seed-demo", dependencies=[Depends(require_write_key)])
 async def seed_demo_performance():
-    """Seed demo performance data for the public dashboard"""
-
-    existing = await db.signals.count_documents({"source": "demo"})
-    if existing > 0:
-        return {"message": "Demo data already seeded"}
-
-    # Generate 30 days of realistic signal history
-    outcomes = (
-        [("win", 10, "hit_tp1")] * 6 +
-        [("win", 20, "hit_tp2")] * 3 +
-        [("loss", -8, "stopped")] * 4
-    )  # ~69% win rate, positive expectancy
-
-    base_time = datetime.now(timezone.utc) - timedelta(days=30)
-    signals_to_insert = []
-
-    for day_offset in range(30):
-        day = base_time + timedelta(days=day_offset)
-        # 1-3 signals per day
-        num_signals = _rng.randint(1, 3)
-        for i in range(num_signals):
-            outcome_data = _rng.choice(outcomes)
-            outcome, pnl, status = outcome_data
-            side = _rng.choice(["long", "short"])
-            base_price = 18300 + _rng.uniform(-200, 200)
-            entry = round(base_price, 2)
-
-            if side == "long":
-                stop = round(entry - 8, 2)
-                tp1 = round(entry + 10, 2)
-                tp2 = round(entry + 20, 2)
-            else:
-                stop = round(entry + 8, 2)
-                tp1 = round(entry - 10, 2)
-                tp2 = round(entry - 20, 2)
-
-            score = _rng.randint(2, 3)
-            sig_time = day + timedelta(hours=_rng.choice([9, 10, 15, 16]), minutes=_rng.randint(0, 59))
-
-            sig = {
-                "id": str(uuid.uuid4()),
-                "symbol": "MNQ",
-                "side": side,
-                "entry_price": entry,
-                "stop_loss": stop,
-                "tp1": tp1,
-                "tp2": tp2,
-                "confluence_score": score,
-                "components": {
-                    "near_level": _rng.choice([True, False]),
-                    "rejection": True,
-                    "momentum_break": score >= 2,
-                },
-                "trend_direction": "bullish" if side == "long" else "bearish",
-                "status": status,
-                "outcome": outcome,
-                "pnl_points": pnl,
-                "discord_sent": True,
-                "source": "demo",
-                "created_at": sig_time.isoformat(),
-            }
-            signals_to_insert.append(sig)
-
-    if signals_to_insert:
-        await db.signals.insert_many(signals_to_insert)
-
-    return {"message": f"Seeded {len(signals_to_insert)} demo signals"}
+    """Removed: seeded ~69% win-rate history (CFTC 4.41). Existing source=demo rows are KPI-excluded."""
+    raise HTTPException(status_code=410, detail="Demo performance seeding removed")
 
 
 # ============== Subscriber & Stripe Routes ==============
@@ -2564,6 +2430,8 @@ async def auto_log_trade(signal_id: str, outcome: str, pnl_points: Optional[floa
         "exit_date": datetime.now(timezone.utc).isoformat(),
         "pnl": round(pnl_dollar, 2),
         "notes": f"Auto-logged from signal {signal_id[:8]} | {outcome}",
+        "source": signal.get("source", "engine"),
+        "is_test": bool(signal.get("is_test")),
     }
     await db.trades.insert_one(trade_doc)
     trade_doc.pop("_id", None)
@@ -2653,7 +2521,7 @@ async def get_leaderboard():
     ]
 
     # Top signal streaks (best consecutive wins)
-    closed_signals = await db.signals.find({"outcome": {"$in": ["win", "loss"]}}, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    closed_signals = await db.signals.find({"outcome": {"$in": ["win", "loss"]}, **KPI_SIGNAL_FILTER}, {"_id": 0}).sort("created_at", 1).to_list(1000)
     current_streak = 0
     best_streak = 0
     streak_history = []
@@ -2669,7 +2537,7 @@ async def get_leaderboard():
     # Monthly stats
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-    month_signals = await db.signals.find({"created_at": {"$gte": month_start}, "outcome": {"$in": ["win", "loss"]}}, {"_id": 0}).to_list(500)
+    month_signals = await db.signals.find({"created_at": {"$gte": month_start}, "outcome": {"$in": ["win", "loss"]}, **KPI_SIGNAL_FILTER}, {"_id": 0}).to_list(500)
     month_wins = len([s for s in month_signals if s.get("outcome") == "win"])
     month_total = len(month_signals)
     month_pnl = sum(s.get("pnl_points", 0) for s in month_signals)
@@ -2680,7 +2548,7 @@ async def get_leaderboard():
         "month_stats": {
             "signals": month_total,
             "wins": month_wins,
-            "win_rate": round(month_wins / month_total * 100, 1) if month_total > 0 else 0,
+            "win_rate": round(month_wins / month_total * 100, 1) if month_total > 0 else None,
             "pnl_points": round(month_pnl, 1),
         },
         "total_subscribers": await db.subscribers.count_documents({}),
@@ -2953,21 +2821,16 @@ async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
     _apply_fill(order, fill_price)
 
     entry = _build_journal_entry(order, fill_price)
-    ati_cmd = None
     try:
         await db.operator_orders.insert_one(dict(entry))
     except Exception as e:
         logger.warning(f"operator_orders insert failed: {e}")
-    try:
-        ati_cmd = await ati.enqueue(db, ati.build_ati_command_for_order(order, entry["id"]))
-    except Exception as e:
-        logger.warning(f"ati enqueue failed: {e}")
 
     return {
         "ok": True,
         "order": entry,
         "state": _operator_state["position"],
-        "ati": {"routed": ati_cmd is not None, "command_id": ati_cmd["id"] if ati_cmd else None},
+        "ati": {"routed": False, "command_id": None, "note": "Broker routing disabled (SIM log only)"},
     }
 
 
@@ -2981,7 +2844,6 @@ async def operator_control(action: str) -> Dict[str, Any]:
             "id": str(uuid.uuid4()), "ts": datetime.now(timezone.utc).isoformat(),
             "action": "FLATTEN_ALL", "phase": "SIM_LOG_ONLY",
         })
-        await ati.enqueue(db, ati.build_flatten_command())
         return {"ok": True, "action": "FLATTEN", "position": _operator_state["position"]}
     if action == "pause":
         _operator_state["automation_paused"] = True
@@ -2992,7 +2854,6 @@ async def operator_control(action: str) -> Dict[str, Any]:
     if action == "kill":
         _operator_state["kill_switch"] = True
         _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
-        await ati.enqueue(db, ati.build_flatten_command())
         return {"ok": True, "kill_switch": True}
     if action == "unkill":
         _operator_state["kill_switch"] = False
@@ -3130,13 +2991,7 @@ async def seed_auth() -> None:
     await pnl_journal.ensure_indexes(db)
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
-    # Prove the pipeline: seed one PAPER BUY + SELL if no signals exist at all
-    if await db.signals.count_documents({}) == 0:
-        price = get_last_mnq().get("price") or (await refresh_mnq()).get("price")
-        if price:
-            await _create_punch("long", float(price), "1", "test", "PAPER / SYSTEM TEST", "Startup pipeline check", True)
-            await _create_punch("short", float(price), "1", "test", "PAPER / SYSTEM TEST", "Startup pipeline check", True)
-            logger.info("Seeded PAPER test punches (empty signal table)")
+    # (startup PAPER test punches removed — no auto-generated signals)
     _asyncio.create_task(signal_resolver_loop())
     _asyncio.create_task(live_signal_engine_loop())
     _asyncio.create_task(daily_recap_loop())

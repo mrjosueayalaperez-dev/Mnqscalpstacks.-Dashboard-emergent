@@ -10,7 +10,6 @@ The bridge script itself is served at GET /api/ati/bridge-script.
 import time
 import uuid
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends
@@ -34,7 +33,8 @@ def bridge_online() -> bool:
 
 
 def ati_enabled() -> bool:
-    return bool(_ati_state["enabled"])
+    """P0 hardening: NinjaTrader ATI routing is hard-disabled. No config can enable it."""
+    return False
 
 
 class AtiConfig(BaseModel):
@@ -97,11 +97,8 @@ def build_flatten_command() -> Dict[str, Any]:
 
 
 async def enqueue(db: Any, command: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Insert a command in the queue if ATI routing is enabled."""
-    if command is None or not ati_enabled():
-        return None
-    await db.ati_commands.insert_one(dict(command))
-    return command
+    """P0 hardening: hard no-op. Nothing is ever queued for a broker."""
+    return None
 
 
 async def _status_payload(db: Any) -> Dict[str, Any]:
@@ -109,7 +106,7 @@ async def _status_payload(db: Any) -> Dict[str, Any]:
     dispatched = await db.ati_commands.count_documents({"status": "dispatched"})
     hb_age = time.time() - _ati_state["last_heartbeat"] if _ati_state["last_heartbeat"] else None
     return {
-        "enabled": _ati_state["enabled"],
+        "enabled": False,
         "account": _ati_state["account"],
         "instrument": _ati_state["instrument"],
         "atm_template": _ati_state["atm_template"],
@@ -126,15 +123,6 @@ def build_ati_router(db: Any, require_write_key: Any) -> APIRouter:
     @router.get("/status")
     async def ati_status() -> Dict[str, Any]:
         """Bridge + routing status for the cockpit UI and Retool."""
-        return await _status_payload(db)
-
-    @router.post("/config", dependencies=[Depends(require_write_key)])
-    async def ati_config(cfg: AtiConfig) -> Dict[str, Any]:
-        """Enable/disable live routing and set account / instrument / ATM template."""
-        for field in ("enabled", "account", "instrument", "atm_template"):
-            value = getattr(cfg, field)
-            if value is not None:
-                _ati_state[field] = value
         return await _status_payload(db)
 
     @router.get("/commands", dependencies=[Depends(require_write_key)])
@@ -167,10 +155,7 @@ def build_ati_router(db: Any, require_write_key: Any) -> APIRouter:
     @router.get("/bridge-script", response_class=PlainTextResponse)
     async def ati_bridge_script() -> PlainTextResponse:
         """Download the single-file Windows bridge script (Python 3, stdlib only)."""
-        script = (Path(__file__).parent / "bridge_template.py").read_text()
-        return PlainTextResponse(
-            script,
-            headers={"Content-Disposition": 'attachment; filename="mnq_ati_bridge.py"'},
-        )
+        """Disabled (P0): NinjaTrader bridge is not distributed."""
+        return PlainTextResponse("NinjaTrader bridge disabled.", status_code=410)
 
     return router

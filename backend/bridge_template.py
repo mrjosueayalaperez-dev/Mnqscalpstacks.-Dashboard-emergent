@@ -19,6 +19,8 @@ SETUP (one time):
 The bridge only writes text files — NinjaTrader stays in full control of
 broker connectivity and risk.
 """
+raise SystemExit("MNQ ATI bridge DISABLED (P0 hardening): no broker order routing.")
+
 import json
 import os
 import time

@@ -1,3 +1,4 @@
+import { feedLabel } from "@/lib/fmt";
 import React, { useEffect, useRef, useState } from "react";
 import { Activity, Wifi, WifiOff, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import useMnqLive from "@/components/operator/useMnqLive";
@@ -96,7 +97,7 @@ const SignalBar = ({ tick }) => {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 border-t border-white/10 bg-white/[0.02]" data-testid="terminal-signal-bar">
       <div className="flex items-center gap-2">
-        <span className="text-[0.55rem] uppercase tracking-[0.2em] text-zinc-500">Live Signal</span>
+        <span className="text-[0.55rem] uppercase tracking-[0.2em] text-zinc-500">PAPER Signal</span>
         {isBuy ? (
           <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-sm bg-[#34C759]/15 border border-[#34C759]/40 text-[#34C759] text-xs font-black tracking-wider" data-testid="terminal-signal-buy">
             <TrendingUp className="w-3.5 h-3.5" /> BUY PUNCH
@@ -159,9 +160,7 @@ export default function LiveTerminalChart() {
           <span className="text-xs md:text-sm font-black tracking-[0.2em] text-white">MNQ TERMINAL</span>
           <span className={`text-[0.6rem] font-mono font-bold px-1.5 py-0.5 rounded-sm ${IS_PROXY ? "bg-[#FFCC00]/15 text-[#FFCC00]" : "bg-white/5 text-zinc-300"}`} data-testid="chart-symbol-label">{PROXY_LABEL}</span>
           <span className="hidden sm:inline text-[0.6rem] font-mono text-zinc-500">
-            {tick?.source === "tradingview:live"
-              ? <>MNQ tape: <span className="text-[#34C759]">TradingView real-time</span></>
-              : <>MNQ tape: <span className="text-[#FFCC00]">~10 min delayed</span></>}
+            MNQ tape: <span className={feedLabel(tick) === "REAL-TIME" ? "text-[#34C759]" : "text-[#FFCC00]"} data-testid="feed-label">{feedLabel(tick)}</span>
           </span>
           <div
             className={`flex items-center gap-1 px-1.5 py-0.5 rounded-sm ${connected ? "bg-[#34C759]/10" : "bg-[#FF3B30]/10"}`}
@@ -169,7 +168,7 @@ export default function LiveTerminalChart() {
           >
             {connected ? <Wifi className="w-3 h-3 text-[#34C759]" /> : <WifiOff className="w-3 h-3 text-[#FF3B30]" />}
             <span className={`text-[0.5rem] font-bold tracking-wider ${connected ? "text-[#34C759]" : "text-[#FF3B30]"}`}>
-              {connected ? "LIVE" : "RECONNECT"}
+              {connected ? "CONNECTED" : "RECONNECT"}
             </span>
             {connected && <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] animate-pulse" />}
           </div>
