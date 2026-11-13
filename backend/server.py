@@ -1274,7 +1274,15 @@ async def _resolve_punch_price(price, action: str, source: str) -> float:
 
 @api_router.post("/signals/tradingview", tags=["signals"])
 async def signals_tradingview(request: Request):
-    """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
+    """Primary TradingView inbound, including the PR #15 Vercel-forwarded contract.
+
+    PR #15's Vercel receiver validates SIGNAL_WEBHOOK_SECRET, then POSTs JSON here
+    with Content-Type application/json and the Emergent secret in the body `secret`
+    field (other alert fields passed through verbatim; no auth header is forwarded).
+    This handler also accepts `X-Webhook-Secret` / `x-webhook-secret` for direct
+    posts. Query-string secrets are ignored. Responses are JSON; 503 if the secret
+    is unset, 401 if it does not match. Extra unknown fields are ignored.
+    """
     raw = (await request.body()).decode("utf-8", errors="ignore").strip()
     # Secret: X-Webhook-Secret header (plain-text alerts) or JSON body `secret`. Query string is ignored.
     a = _parse_tv_alert(raw, "")
