@@ -9,6 +9,7 @@ import pnl_journal
 import analytics
 import notify
 import notifications
+import strategy_engine
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -3011,11 +3012,122 @@ async def seed_auth() -> None:
     # (startup PAPER test punches removed — no auto-generated signals)
     _asyncio.create_task(signal_resolver_loop())
     _asyncio.create_task(live_signal_engine_loop())
+    _asyncio.create_task(configured_alert_engine_loop())
     _asyncio.create_task(daily_recap_loop())
 
 
+
+
+async def configured_alert_engine_loop() -> None:
+    """Evaluate Alerts-panel rules and (when parameters are approved) Strategy A/B. Alerts only."""
+    await _asyncio.sleep(25)
+    while True:
+        try:
+            await evaluate_configured_alerts()
+        except Exception as e:
+            logger.error(f"Configured alert engine error: {e}")
+        await _asyncio.sleep(60)
+
+
+async def evaluate_configured_alerts() -> Dict[str, Any]:
+    """Run panel + Strategy A/B evaluators. Never places an order. Never invents PENDING parameters."""
+    from market_feed import get_last, get_bars
+    snap = get_last() or {}
+    if snap.get("source", "").startswith("yahoo") or not snap.get("data_label"):
+        snap["data_label"] = "delayed"
+    bars = get_bars()
+    fired: List[Dict[str, Any]] = []
+
+    panel = await db.alerts.find({"triggered": {"$ne": True}}, {"_id": 0}).to_list(100)
+    for alert in panel:
+        result = strategy_engine.evaluate_panel_alert(alert, snap)
+        if result.get("fire"):
+            delivered = await _emit_practice_alert(result, snap)
+            if delivered:
+                await db.alerts.update_one({"id": alert["id"]}, {"$set": {"triggered": True, "triggered_at": datetime.now(timezone.utc).isoformat()}})
+            fired.append(result)
+
+    # Strategy B range must be supplied in settings; never inferred.
+    b_cfg = await db.settings.find_one({"_id": "strategy_b_range"}, {"_id": 0}) or {}
+    b_result = strategy_engine.evaluate_strategy_b(
+        bars,
+        range_high=b_cfg.get("range_high"),
+        range_low=b_cfg.get("range_low"),
+        risk_limit_dollars=b_cfg.get("risk_limit_dollars"),
+        exit_conditions=b_cfg.get("exit_conditions"),
+        snapshot=snap,
+    )
+    if b_result.get("fire"):
+        await _emit_practice_alert(b_result, snap)
+        fired.append(b_result)
+
+    a_cfg = await db.settings.find_one({"_id": "strategy_a_location"}, {"_id": 0}) or {}
+    a_result = strategy_engine.evaluate_strategy_a(
+        bars,
+        center=float(a_cfg.get("center") or 0),
+        es_aligned=a_cfg.get("es_aligned"),
+        snapshot=snap,
+        params={"max_risk_points": a_cfg.get("max_risk_points")} if a_cfg.get("max_risk_points") is not None else None,
+    )
+    if a_result.get("fire"):
+        await _emit_practice_alert(a_result, snap)
+        fired.append(a_result)
+
+    await db.alert_events.insert_one({
+        "id": str(uuid.uuid4()),
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "fired_count": len(fired),
+        "strategy_a_state": a_result.get("state"),
+        "strategy_b_state": b_result.get("state"),
+        "data_label": snap.get("data_label") or "delayed",
+    })
+    return {"fired": len(fired), "strategy_a": a_result.get("state"), "strategy_b": b_result.get("state")}
+
+
+async def _emit_practice_alert(result: Dict[str, Any], snap: Dict[str, Any]) -> bool:
+    """Notify only. Does not create a LIVE-badged punch or send a broker order."""
+    as_of = None
+    try:
+        from market_feed import get_bars
+        b = get_bars()
+        if b:
+            as_of = datetime.fromtimestamp(int(b[-1]["time"]), tz=timezone.utc)
+    except Exception:
+        as_of = datetime.now(timezone.utc)
+    payload = {
+        "strategy": result.get("strategy"),
+        "instrument": result.get("instrument") or "MNQ",
+        "timeframe": result.get("timeframe"),
+        "direction": result.get("direction"),
+        "trigger": result.get("trigger"),
+        "data_label": result.get("data_label") or "delayed",
+        "data_source": snap.get("source") or "yahoo:NQ=F",
+        "as_of": as_of,
+    }
+    out = await notifications.deliver_discord(payload, store=notifications.MongoDeliveryStore(db))
+    await db.alert_events.insert_one({
+        "id": str(uuid.uuid4()),
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "kind": "emit",
+        "strategy": result.get("strategy"),
+        "direction": result.get("direction"),
+        "delivery_status": out.get("status"),
+        "fire": True,
+        "order_placed": False,
+    })
+    return out.get("status") == "delivered"
+
+
+@api_router.get("/alerts/engine-status", tags=["alerts"])
+async def alerts_engine_status() -> Dict[str, Any]:
+    """Config and evaluator status. Never includes webhook URLs or secrets."""
+    status = strategy_engine.engine_status()
+    status.update(notifications.discord_config_status())
+    return status
+
+
 async def live_signal_engine_loop() -> None:
-    """Server-side Scalp Punch engine: EMA9/EMA21 cross + VWAP alignment on live 1m MNQ candles."""
+    """Legacy EMA 9 / EMA 21 cross + VWAP on delayed Yahoo 1m bars. This is NOT Strategy A or Strategy B."""
     await _asyncio.sleep(20)  # let the feed warm up
     while True:
         try:
