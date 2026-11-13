@@ -21,7 +21,7 @@ import { AIAnalysis } from "@/components/dashboard/AIAnalysis";
 import { PositionCalculator } from "@/components/dashboard/PositionCalculator";
 import { ApexPnlJournal } from "@/components/dashboard/ApexPnlJournal";
 import { AlertsPanel } from "@/components/dashboard/AlertsPanel";
-import { MoreTools, BottomNav, RiskDisclaimer } from "@/components/dashboard/MobileShell";
+import { MoreTools, BottomNav, SideRail, RiskDisclaimer } from "@/components/dashboard/MobileShell";
 import { ReferralCard } from "@/components/ReferralCard";
 import { CopilotChat } from "@/components/CopilotChat";
 import OrderFlowChart from "@/components/dashboard/OrderFlowChart";
@@ -187,10 +187,12 @@ export default function Dashboard() {
       />
       <Header onRefresh={handleRefreshAll} lastUpdate={lastUpdate} />
 
-      <main className="p-3 md:p-4">
+      <div className="lg:flex">
+      <SideRail />
+      <main className="flex-1 min-w-0 p-3 md:p-4">
         <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
           {/* ROW -1: MOBILE-FIRST EXECUTION STRIP — live price + one-thumb trading + signal card */}
-          <div id="exec-top" className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+          <div id="exec-top" className="col-span-1 md:col-span-4 lg:col-span-12 scroll-mt-14 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
             <ExecutionPanel
               checklistDone={checklist.filter((i) => i.completed).length}
               checklistTotal={checklist.length}
@@ -201,27 +203,35 @@ export default function Dashboard() {
           </div>
 
           {/* ROW 0: MAIN CHART — Standard (TradingView) or order-flow view via blue-circle switcher */}
-          <div id="chart-section" className="col-span-1 md:col-span-4 lg:col-span-12 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+          <div id="chart-section" className="col-span-1 md:col-span-4 lg:col-span-12 scroll-mt-14 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
             {chartMode === "standard" ? <LiveTerminalChart /> : <OrderFlowChart mode={chartMode} />}
           </div>
 
           {/* ROW 1: SIGNAL ENGINE — prominent stats + live feed */}
-          <SignalDashboard />
+          <div id="signals-section" className="col-span-1 md:col-span-4 lg:col-span-12 scroll-mt-14 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+            <SignalDashboard />
+          </div>
 
           {/* AI COPILOT — streaming GPT chat with live desk context */}
-          <CopilotChat />
+          <div id="copilot-section" className="col-span-1 md:col-span-4 lg:col-span-12 scroll-mt-14">
+            <CopilotChat />
+          </div>
 
           {/* ROW 2: DAILY CHECKLIST (prominent) + SUBSCRIPTION PLANS */}
-          <Checklist
-            items={checklist}
-            onToggle={handleToggleChecklist}
-            onReset={handleResetChecklist}
-            onAdd={handleAddChecklist}
-          />
-          <FreemiumGate />
+          <div id="checklist-section" className="col-span-1 md:col-span-4 lg:col-span-12 scroll-mt-14 grid grid-cols-1 md:grid-cols-4 lg:grid-cols-12 gap-3 md:gap-4">
+            <Checklist
+              items={checklist}
+              onToggle={handleToggleChecklist}
+              onReset={handleResetChecklist}
+              onAdd={handleAddChecklist}
+            />
+            <FreemiumGate />
+          </div>
 
           {/* SHARE & EARN — referral link strip */}
-          <ReferralCard />
+          <div id="referral-section" className="col-span-1 md:col-span-4 lg:col-span-12 scroll-mt-14">
+            <ReferralCard />
+          </div>
 
           {/* Plans anchor for bottom nav */}
           <div id="plans-section" className="col-span-1 md:col-span-4 lg:col-span-12 h-0" />
@@ -270,6 +280,7 @@ export default function Dashboard() {
           <AdBanner position="bottom" />
         </div>
       </main>
+      </div>
 
       {/* Mobile bottom navigation (replaces floating wallet FAB) */}
       <BottomNav />
