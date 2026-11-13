@@ -1,11 +1,11 @@
-import { fmtPct } from "@/lib/fmt";
+import { fmtPct, hasNum, RISK_DISCLAIMER } from "@/lib/fmt";
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import { Radio } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-/** Public proof strip — last 10 resolved signals, wins AND losses, posted live. */
+/** Public book strip — last resolved signals, wins and losses. Not verified live trading results. */
 const WinStreakStrip = () => {
   const [data, setData] = useState(null);
 
@@ -22,13 +22,13 @@ const WinStreakStrip = () => {
         <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <span className="flex items-center gap-2 text-[0.65rem] md:text-xs font-black tracking-[0.2em] text-zinc-400 uppercase">
             <Radio className="w-3.5 h-3.5 text-[#34C759] animate-pulse" />
-            Last {results.length} signals — posted live, wins &amp; losses
+            Last {results.length} signals in the public book — wins and losses. Not verified live results.
           </span>
           <span className="text-[0.65rem] md:text-xs font-mono text-zinc-500" data-testid="win-streak-summary">
             <span className="text-[#34C759] font-bold">{wins}W</span> / <span className="text-[#FF3B30] font-bold">{losses}L</span>
             {" · "}{fmtPct(win_rate)} win rate{" · "}
-            <span className={net_points >= 0 ? "text-[#34C759]" : "text-[#FF3B30]"}>
-              {net_points >= 0 ? "+" : ""}{net_points} pts
+            <span className={!hasNum(net_points) ? "text-zinc-500" : net_points >= 0 ? "text-[#34C759]" : "text-[#FF3B30]"}>
+              {hasNum(net_points) ? `${net_points >= 0 ? "+" : ""}${net_points} pts` : "—"}
             </span>
           </span>
         </div>
@@ -52,8 +52,8 @@ const WinStreakStrip = () => {
             );
           })}
         </div>
-        <p className="mt-2 text-[0.5rem] text-zinc-700">
-          Trading futures involves substantial risk of loss. Past performance is not indicative of future results.
+        <p className="mt-2 text-[0.5rem] text-zinc-600 leading-relaxed" data-testid="win-streak-disclaimer">
+          {RISK_DISCLAIMER}
         </p>
       </div>
     </section>
