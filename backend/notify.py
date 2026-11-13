@@ -9,6 +9,14 @@ logger = logging.getLogger(__name__)
 
 
 async def _post(payload: dict) -> None:
+    try:
+        from notifications import discord_webhook_configured
+        if not discord_webhook_configured():
+            return
+    except Exception:
+        url = os.environ.get("DISCORD_WEBHOOK_URL", "")
+        if not url or url == "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL":
+            return
     url = os.environ.get("DISCORD_WEBHOOK_URL", "")
     if not url:
         return
@@ -16,7 +24,8 @@ async def _post(payload: dict) -> None:
         async with httpx.AsyncClient(timeout=8) as client:
             await client.post(url, json=payload)
     except Exception as e:
-        logger.warning(f"owner alert failed: {e}")
+        # httpx exception messages often embed the request URL. Log the type only.
+        logger.warning("owner alert failed: %s", type(e).__name__)
 
 
 def owner_alert(title: str, description: str, color: int = 3447003) -> None:

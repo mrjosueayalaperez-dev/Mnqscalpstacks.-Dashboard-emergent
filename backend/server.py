@@ -8,6 +8,7 @@ import auth as auth_module
 import pnl_journal
 import analytics
 import notify
+import notifications
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -338,7 +339,8 @@ class BacktestCreate(BaseModel):
 # ============== Signal Engine Functions ==============
 
 def _discord_webhook_configured() -> bool:
-    return bool(DISCORD_WEBHOOK_URL) and DISCORD_WEBHOOK_URL != "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL"
+    """True when a real webhook is set. Never returns the URL."""
+    return notifications.discord_webhook_configured(DISCORD_WEBHOOK_URL)
 
 
 def _format_signal_pillars(components: dict) -> str:
@@ -360,10 +362,8 @@ def _rr_ratio(entry: float, stop: float, tp1: float) -> str:
 
 
 def _build_discord_payload(signal: dict) -> dict:
-    is_long = signal["side"] == "long"
-    side_label = "LONG" if is_long else "SHORT"
-    side_emoji = "🟢" if is_long else "🔴"
-    signal_color = 5763719 if is_long else 15548997  # Green / Red
+    is_long = signal.get("side") == "long"
+    side_label = "LONG" if is_long else ("SHORT" if signal.get("side") == "short" else "WAIT")
 
     pillar_status = _format_signal_pillars(signal.get("components", {}))
     score = signal.get("confluence_score", 0)
@@ -373,41 +373,54 @@ def _build_discord_payload(signal: dict) -> dict:
     tp1 = signal.get("tp1", 0)
     rr = _rr_ratio(entry, stop, tp1)
 
-    return {
-        "username": "MNQ SCALP STACKS BOT",
-        "avatar_url": "https://i.imgur.com/4S7S5vj.png",
-        "embeds": [{
-            "title": f"PAPER · {side_emoji} SCALP PUNCH — {side_label}",
-            "color": signal_color,
-            "fields": [
-                {"name": "Asset", "value": "MNQ (Micro Nasdaq)", "inline": True},
-                {"name": "Strategy", "value": f"Scalp Punch ({score}/2)", "inline": True},
-                {"name": "Status", "value": f"{'✅' if score >= 2 else '⚠️'} {pillar_status}", "inline": False},
-                {"name": "Entry", "value": f"```${entry:.2f}```", "inline": True},
-                {"name": "Stop Loss", "value": f"```${stop:.2f}```", "inline": True},
-                {"name": "R:R", "value": f"```{rr}```", "inline": True},
-                {"name": "TP1", "value": f"```${tp1:.2f}```", "inline": True},
-                {"name": "TP2", "value": f"```${signal.get('tp2', 0):.2f}```", "inline": True},
-                {"name": "Trend", "value": f"```{signal.get('trend_direction', 'neutral').upper()}```", "inline": True},
-            ],
-            "footer": {"text": "MNQ SCALP STACKS SaaS | Emergent.sh"},
-            "timestamp": signal.get("created_at", datetime.now(timezone.utc).isoformat()),
-        }],
-    }
+    source = str(signal.get("source") or "")
+    body = notifications.format_alert_message({
+        "strategy": signal.get("strategy_name") or f"Scalp Punch (legacy path — not Strategy A/B) ({score}/2)",
+        "instrument": signal.get("symbol") or "MNQ",
+        "timeframe": signal.get("interval") or signal.get("timeframe") or "1m",
+        "direction": side_label,
+        "trigger": (
+            f"{pillar_status}; entry {entry:.2f}, stop {stop:.2f}, TP1 {tp1:.2f}, "
+            f"TP2 {signal.get('tp2', 0):.2f}, R:R {rr}, trend {signal.get('trend_direction', 'neutral')}"
+        ),
+        "data_label": (signal.get("data_label") or notifications.data_label_for_source(source)),
+        "data_source": source,
+        "timestamp_et": None,
+    })
+    return {"username": body["username"], "embeds": body["embeds"]}
 
 
 async def send_discord_signal(signal: dict) -> bool:
-    """Send branded signal to Discord webhook — MNQ SCALP STACKS BOT."""
-    if not _discord_webhook_configured():
-        logger.info("Discord webhook not configured, skipping delivery")
-        return False
-    try:
-        async with httpx.AsyncClient() as http_client:
-            resp = await http_client.post(DISCORD_WEBHOOK_URL, json=_build_discord_payload(signal), timeout=5.0)
-            return resp.status_code in (200, 204)
-    except Exception as e:
-        logger.error(f"Discord send failed: {e}")
-        return False
+    """Send a practice Discord alert (retry, dedup, stale guard). Never implies an order was placed."""
+    source = str(signal.get("source") or "")
+    created = signal.get("created_at")
+    payload = {
+        "strategy": signal.get("strategy_name") or "Scalp Punch (legacy path — not Strategy A/B)",
+        "instrument": signal.get("symbol") or "MNQ",
+        "timeframe": signal.get("interval") or signal.get("timeframe") or "1m",
+        "direction": "LONG" if signal.get("side") == "long" else ("SHORT" if signal.get("side") == "short" else "WAIT"),
+        "trigger": signal.get("note") or signal.get("reason") or "",
+        "data_label": (signal.get("data_label") or notifications.data_label_for_source(source)).lower().replace("delayed 10m", "delayed"),
+        "data_source": source,
+        "as_of": created,
+        "timestamp_et": None,
+    }
+    # Prefer an explicit trigger from components, without claiming order flow.
+    comps = signal.get("components") or {}
+    if not signal.get("note") and not signal.get("reason"):
+        bits = []
+        if comps.get("ema21_cross"):
+            bits.append("EMA 21 condition")
+        if comps.get("vwap_filter"):
+            bits.append("VWAP condition")
+        if comps.get("ema9_cross"):
+            bits.append("EMA 9 condition")
+        payload["trigger"] = ", ".join(bits) if bits else "legacy scalp-punch path (see dashboard card)"
+    result = await notifications.deliver_discord(
+        payload,
+        store=notifications.MongoDeliveryStore(db),
+    )
+    return result.get("status") == "delivered"
 
 
 async def check_duplicate_signal(symbol: str, side: str, minutes: int = 5) -> bool:
@@ -1387,7 +1400,7 @@ async def signals_receiver_status(request: Request) -> Dict[str, Any]:
             "session_open": session_open,
             "now_et": now_et.strftime("%H:%M ET"),
         },
-        "discord_configured": bool(os.environ.get("DISCORD_WEBHOOK_URL")),
+        "discord_configured": notifications.discord_webhook_configured(DISCORD_WEBHOOK_URL),
     }
 
 
@@ -1631,7 +1644,7 @@ async def get_system_health():
     # Check auto kill-switch threshold (>5% error rate)
     auto_kill = error_rate > 5 and since_restart > 10
 
-    discord_configured = bool(DISCORD_WEBHOOK_URL) and DISCORD_WEBHOOK_URL != "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL"
+    discord_configured = notifications.discord_webhook_configured(DISCORD_WEBHOOK_URL)
 
     return {
         "status": "degraded" if signal_engine_state["kill_switch"] else ("warning" if error_rate > 3 else "healthy"),
@@ -2989,6 +3002,10 @@ async def seed_auth() -> None:
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
     await pnl_journal.ensure_indexes(db)
+    try:
+        await notifications.MongoDeliveryStore(db).ensure_indexes()
+    except Exception:
+        logger.warning("alert_deliveries index setup skipped")
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
     # (startup PAPER test punches removed — no auto-generated signals)

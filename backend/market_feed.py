@@ -1,9 +1,10 @@
 """
-MNQ live market data feed.
+MNQ market data feed.
 
-Yahoo Finance CME endpoint returns real-time NQ futures.
+Yahoo Finance CME endpoint returns DELAYED NQ futures (typically ~10 minutes).
+Never label Yahoo ticks as real-time or live.
 NQ (E-mini) and MNQ (Micro) trade at the SAME PRICE — MNQ is 1/10 contract size.
-So we fetch NQ=F and broadcast it as the MNQ tick.
+So we fetch NQ=F and broadcast it as the MNQ tick (delayed).
 
 Symbol mapping:
     TradingView      :  CME_MINI:MNQ1!    (continuous front month)
