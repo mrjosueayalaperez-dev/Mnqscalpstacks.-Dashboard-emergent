@@ -15,6 +15,10 @@ def test_no_bare_live_badges():
     bad = []
     for p, s in _all_js().items():
         for m in re.finditer(r'"LIVE"|>LIVE<|"LIVE MNQ"|LIVE FEED|PUNCH EXECUTED|"RECEIVER LIVE"|>Live Signal<|: live signals', s):
+            # ApexPnlJournal lists TEST/PAPER/LIVE as honest mode options for manual
+            # journal rows; that is a label picker, not a badge claiming sim data is live.
+            if p.name == "ApexPnlJournal.js" and m.group(0) == '"LIVE"' and 'MODES = ["TEST", "PAPER", "LIVE"]' in s:
+                continue
             bad.append(f"{p.name}:{m.group(0)}")
     assert not bad, bad
 
