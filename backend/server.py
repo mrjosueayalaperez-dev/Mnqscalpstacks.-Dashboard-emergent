@@ -1,10 +1,11 @@
 from fastapi import FastAPI, APIRouter, HTTPException, BackgroundTasks, Request, WebSocket, WebSocketDisconnect, Depends, Header
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from market_feed import broker as tick_broker, refresh_once as refresh_mnq, get_last as get_last_mnq, set_live_price as market_feed_set_live_price, tv_data_mode
 from market_context import get_market_context
 import ati
 import proof
 import auth as auth_module
+import pnl_journal
 import analytics
 import notify
 from dotenv import load_dotenv
@@ -23,6 +24,8 @@ import httpx
 import secrets
 import hashlib
 import hmac
+from pydantic import ValidationError
+from temporal import ingest_client as tv_ingest_client  # Temporal hook; OFF unless TEMPORAL_ENABLED=true
 from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
 from copilot import build_copilot_router, copilot_enabled, with_disclaimer, METHOD_PROMPT
 
@@ -793,26 +796,54 @@ async def get_trade_stats():
         "avg_loss": round(sum(t["pnl"] for t in losers) / len(losers), 2) if losers else 0
     }
 
-# Checklist Routes
+# Checklist Routes — per-user: every route requires auth (same resolver as /api/auth/me)
+# and every query/write is scoped by user_id. Legacy global docs (no user_id) are never exposed.
+DEFAULT_CHECKLIST = [
+    {"text": "Check pre-market futures direction", "category": "premarket", "order": 1},
+    {"text": "Review overnight news/earnings", "category": "premarket", "order": 2},
+    {"text": "Mark key support/resistance levels", "category": "premarket", "order": 3},
+    {"text": "Set daily max loss limit ($40)", "category": "premarket", "order": 4},
+    {"text": "Price above VWAP for longs", "category": "rules", "order": 5},
+    {"text": "9 EMA crosses 21 EMA", "category": "rules", "order": 6},
+    {"text": "RSI confirms (>50 long, <50 short)", "category": "rules", "order": 7},
+    {"text": "Max 2-3 trades per session", "category": "rules", "order": 8},
+    {"text": "Stop if 2 consecutive losses", "category": "rules", "order": 9},
+    {"text": "Journal all trades with notes", "category": "postmarket", "order": 10},
+    {"text": "Review wins and losses", "category": "postmarket", "order": 11},
+]
+_CHECKLIST_PROJECTION = {"_id": 0, "user_id": 0}
+_LEGACY_CHECKLIST = {"user_id": {"$exists": False}}
+
+
+async def _checklist_user(request: Request) -> Dict[str, Any]:
+    """Auth dependency for checklist routes (401 when unauthenticated)."""
+    return await auth_module.get_current_user(request, db)
+
+
 @api_router.get("/checklist")
-async def get_checklist():
-    """Get all checklist items"""
-    items = await db.checklist.find({}, {"_id": 0}).to_list(100)
+async def get_checklist(user: Dict[str, Any] = Depends(_checklist_user)):
+    """Get the current user's checklist items (seeded from defaults on first use)"""
+    uid = user["user_id"]
+    items = await db.checklist.find({"user_id": uid}, _CHECKLIST_PROJECTION).to_list(100)
+    if not items:
+        await db.checklist.insert_many(
+            [{**ChecklistItem(**d).model_dump(), "user_id": uid} for d in DEFAULT_CHECKLIST])
+        items = await db.checklist.find({"user_id": uid}, _CHECKLIST_PROJECTION).to_list(100)
     return items
 
 @api_router.post("/checklist", response_model=ChecklistItem)
-async def add_checklist_item(item: ChecklistItemCreate):
+async def add_checklist_item(item: ChecklistItemCreate, user: Dict[str, Any] = Depends(_checklist_user)):
     """Add checklist item"""
     checklist_item = ChecklistItem(**item.model_dump())
-    doc = checklist_item.model_dump()
+    doc = {**checklist_item.model_dump(), "user_id": user["user_id"]}
     await db.checklist.insert_one(doc)
     return checklist_item
 
 @api_router.patch("/checklist/{item_id}")
-async def toggle_checklist(item_id: str, completed: bool):
+async def toggle_checklist(item_id: str, completed: bool, user: Dict[str, Any] = Depends(_checklist_user)):
     """Toggle checklist item completion"""
     result = await db.checklist.update_one(
-        {"id": item_id}, 
+        {"id": item_id, "user_id": user["user_id"]},
         {"$set": {"completed": completed}}
     )
     if result.matched_count == 0:
@@ -820,17 +851,17 @@ async def toggle_checklist(item_id: str, completed: bool):
     return {"message": "Updated"}
 
 @api_router.delete("/checklist/{item_id}")
-async def delete_checklist_item(item_id: str):
+async def delete_checklist_item(item_id: str, user: Dict[str, Any] = Depends(_checklist_user)):
     """Delete checklist item"""
-    result = await db.checklist.delete_one({"id": item_id})
+    result = await db.checklist.delete_one({"id": item_id, "user_id": user["user_id"]})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Item not found")
     return {"message": "Deleted"}
 
 @api_router.post("/checklist/reset")
-async def reset_checklist():
-    """Reset all checklist items to uncompleted"""
-    await db.checklist.update_many({}, {"$set": {"completed": False}})
+async def reset_checklist(user: Dict[str, Any] = Depends(_checklist_user)):
+    """Reset the current user's checklist items to uncompleted"""
+    await db.checklist.update_many({"user_id": user["user_id"]}, {"$set": {"completed": False}})
     return {"message": "Reset complete"}
 
 # Alerts Routes
@@ -1008,15 +1039,33 @@ async def ai_analyze(request: AIAnalysisRequest):
 # ============== Signal Engine Routes ==============
 
 # TradingView Webhook Receiver
-@api_router.post("/webhook/tradingview", dependencies=[Depends(verify_webhook_secret)])
-async def receive_tradingview_webhook(payload: TradingViewWebhook, background_tasks: BackgroundTasks):
-    """Legacy TradingView webhook — same verifier as /signals/tradingview (header secret)."""
+@api_router.post("/webhook/tradingview")
+async def receive_tradingview_webhook(request: Request, background_tasks: BackgroundTasks):
+    """Legacy TradingView webhook. Secret required (X-Webhook-Secret header or JSON body `secret`)."""
+    raw = await request.body()
+    try:
+        data = json.loads(raw or b"{}")
+    except ValueError:
+        data = None
+    body_secret = data.get("secret") if isinstance(data, dict) else None
+    _verify_webhook_secret(request.headers.get("X-Webhook-Secret", ""), body_secret)
+    try:
+        payload = TradingViewWebhook(**data) if isinstance(data, dict) else None
+    except ValidationError:
+        payload = None
+    if payload is None:
+        raise HTTPException(status_code=422, detail="Invalid webhook payload")
     if signal_engine_state["kill_switch"]:
         return {"status": "blocked", "reason": "Kill switch active"}
 
     # Check duplicate
     side = "long" if payload.type and payload.type.lower() == "buy" else "short"
     symbol = payload.symbol or "MNQ"
+    if tv_ingest_client.temporal_enabled():
+        return await _ingest_via_temporal({
+            "route": "legacy", "action": "BUY" if side == "long" else "SELL", "symbol": symbol,
+            "db_symbol": symbol, "price": payload.price, "interval": "1",
+            "source": "TradingView legacy webhook", "note": ""}, payload.time)
     is_dup = await check_duplicate_signal(symbol, side, minutes=3)
     if is_dup:
         return {"status": "duplicate", "reason": "Signal already active"}
@@ -1087,6 +1136,29 @@ from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
 SYMBOL_MAP = {"MNQ1!": "MNQ", "NQ1!": "MNQ", "MNQ": "MNQ", "NQ": "MNQ", "CME_MINI:MNQ1!": "MNQ", "CME_MINI:NQ1!": "MNQ"}
+
+
+def _verify_webhook_secret(*candidates) -> None:
+    """Fail closed: 503 when SIGNAL_WEBHOOK_SECRET is unset; 401 unless the X-Webhook-Secret header
+    or JSON body `secret` matches (constant-time). Query-string secrets are ignored."""
+    if not SIGNAL_WEBHOOK_SECRET:
+        raise HTTPException(status_code=503, detail="Webhook disabled: secret not configured")
+    want = SIGNAL_WEBHOOK_SECRET.encode()
+    if not any(c and hmac.compare_digest(str(c).encode(), want) for c in candidates):
+        raise HTTPException(status_code=401, detail="Invalid webhook secret")
+
+
+async def _ingest_via_temporal(p: Dict[str, Any], alert_time: Optional[str]):
+    """TEMPORAL_ENABLED path: TvIngestWorkflow (idempotent + audited). No local fallback when down."""
+    try:
+        status, body = await tv_ingest_client.run_ingest(p, alert_time)
+    except tv_ingest_client.IngestUnavailable:
+        await _log_signal_event(False, 503, "Ingest unavailable: Temporal unreachable", p.get("action", ""), p.get("source", ""))
+        return JSONResponse(status_code=503, content={"detail": "ingest unavailable"})
+    if status == 200 and body.get("status") in ("created", "received"):
+        signal_engine_state["total_signals"] += 1
+        signal_engine_state["last_signal_time"] = datetime.now(timezone.utc).isoformat()
+    return JSONResponse(status_code=status, content=body)
 
 
 async def _log_signal_event(ok: bool, status: int, detail: str, action: str = "", source: str = "") -> None:
@@ -1186,15 +1258,30 @@ async def _resolve_punch_price(price, action: str, source: str) -> float:
 
 @api_router.post("/signals/tradingview", tags=["signals"])
 async def signals_tradingview(request: Request):
-    """Primary TradingView inbound. Strict JSON schema with loose text fallback. Responds <2s."""
+    """Primary TradingView inbound, including the PR #15 Vercel-forwarded contract.
+
+    PR #15's Vercel receiver validates SIGNAL_WEBHOOK_SECRET, then POSTs JSON here
+    with Content-Type application/json and the Emergent secret in the body `secret`
+    field (other alert fields passed through verbatim; no auth header is forwarded).
+    This handler also accepts `X-Webhook-Secret` / `x-webhook-secret` for direct
+    posts. Query-string secrets are ignored. Responses are JSON; 503 if the secret
+    is unset, 401 if it does not match. Extra unknown fields are ignored.
+    """
     raw = (await request.body()).decode("utf-8", errors="ignore").strip()
+    # Secret: X-Webhook-Secret header (plain-text alerts) or JSON body `secret`. Query string is ignored.
     a = _parse_tv_alert(raw, "")
     action, symbol, interval, source, note = a["action"], a["symbol"], a["interval"], a["source"], a["note"]
     try:
-        verify_webhook_secret(request)  # header-only; query/body secrets are ignored
+        _verify_webhook_secret(request.headers.get("X-Webhook-Secret", ""), a["secret"])
     except HTTPException as e:
-        await _log_signal_event(False, e.status_code, "Bad or missing secret", action, source)
+        await _log_signal_event(False, e.status_code, "Bad or missing secret" if e.status_code == 401 else e.detail, action, source)
         raise
+    try:
+        alert_time = json.loads(raw).get("time") or None
+    except (ValueError, AttributeError):
+        alert_time = None
+    tv_p = {"route": "primary", "action": action, "symbol": symbol, "interval": interval, "price": a["price"],
+            "source": source, "note": note, "cooldown_min": signal_engine_state["cooldown_min"]}
     if action not in ("BUY", "SELL", "CLOSE", "HOLD", "PRICE"):
         await _log_signal_event(False, 400, f"Unknown action: {action or raw[:60]}", action, source)
         raise HTTPException(status_code=400, detail="action must be BUY, SELL, HOLD, PRICE, or CLOSE")
@@ -1210,12 +1297,16 @@ async def signals_tradingview(request: Request):
         await _log_signal_event(False, 400, f"Unsupported symbol: {symbol}", action, source)
         raise HTTPException(status_code=400, detail=f"Unsupported symbol {symbol} — use MNQ1! or NQ1!")
     if action == "HOLD":
+        if tv_ingest_client.temporal_enabled():
+            return await _ingest_via_temporal(tv_p, alert_time)
         result = await _record_hold(source, note or "HOLD — waiting for confirmation", False)
         await _log_signal_event(True, 200, "HOLD accepted — no trade placed.", action, source)
         return result
     if signal_engine_state["kill_switch"]:
         await _log_signal_event(False, 200, "Blocked: kill switch active", action, source)
         return {"status": "blocked", "reason": "Kill switch active"}
+    if tv_ingest_client.temporal_enabled():
+        return await _ingest_via_temporal(tv_p, alert_time)
 
     if action == "CLOSE":
         r = await db.signals.update_many({"status": "active"}, {"$set": {"status": "expired"}})
@@ -1271,12 +1362,14 @@ async def signals_receiver_status(request: Request) -> Dict[str, Any]:
     in_rth = now_et.weekday() < 5 and (9, 30) <= (now_et.hour, now_et.minute) < (16, 0)
     session_open = True if (signal_engine_state["globex"] or not signal_engine_state["session_filter"]) else in_rth
     alert_template = json.dumps({
+        "secret": "<paste your SIGNAL_WEBHOOK_SECRET>" if SIGNAL_WEBHOOK_SECRET else "<set SIGNAL_WEBHOOK_SECRET>",
         "action": "{{strategy.order.action}}", "symbol": "MNQ1!", "interval": "{{interval}}",
         "price": "{{close}}", "time": "{{timenow}}", "source": "MNQ Scalp Punch v1",
     }, indent=2)
     return {
         "webhook_url": f"{base}/api/signals/tradingview",
         "secret_configured": bool(SIGNAL_WEBHOOK_SECRET),
+        "secret_masked": "********" if SIGNAL_WEBHOOK_SECRET else "",
         "alert_template": alert_template,
         "receiver_live": bool(last_in and last_in["ts"] > live_cutoff),
         "last_inbound": last_in,
@@ -1653,7 +1746,7 @@ def _build_webhook_instructions(base_url: str) -> str:
 
 ### Webhook URL (signal + price ingest):
 {backend}/api/signals/tradingview
-Auth: X-Webhook-Secret header (server env SIGNAL_WEBHOOK_SECRET). Query/body secrets are rejected.
+Auth: X-Webhook-Secret header or JSON body `secret` (server env SIGNAL_WEBHOOK_SECRET). Query-string secrets are ignored.
 Data label: server env TV_DATA_MODE=delayed|realtime (default delayed). All signals are PAPER.
 
 ### Setup Steps:
@@ -1777,7 +1870,7 @@ async def seed_data():
     """Seed default watchlist and checklist items"""
     # Check if already seeded
     existing_watchlist = await db.watchlist.count_documents({})
-    existing_checklist = await db.checklist.count_documents({})
+    existing_checklist = await db.checklist.count_documents(_LEGACY_CHECKLIST)
     
     if existing_watchlist > 0 and existing_checklist > 0:
         return {"message": "Data already seeded"}
@@ -1787,24 +1880,12 @@ async def seed_data():
         {"symbol": "MNQ", "name": "Micro E-mini Nasdaq-100", "category": "futures", "notes": "Primary instrument — live CME feed"},
     ]
     
-    # Default checklist
-    default_checklist = [
-        {"text": "Check pre-market futures direction", "category": "premarket", "order": 1},
-        {"text": "Review overnight news/earnings", "category": "premarket", "order": 2},
-        {"text": "Mark key support/resistance levels", "category": "premarket", "order": 3},
-        {"text": "Set daily max loss limit ($40)", "category": "premarket", "order": 4},
-        {"text": "Price above VWAP for longs", "category": "rules", "order": 5},
-        {"text": "9 EMA crosses 21 EMA", "category": "rules", "order": 6},
-        {"text": "RSI confirms (>50 long, <50 short)", "category": "rules", "order": 7},
-        {"text": "Max 2-3 trades per session", "category": "rules", "order": 8},
-        {"text": "Stop if 2 consecutive losses", "category": "rules", "order": 9},
-        {"text": "Journal all trades with notes", "category": "postmarket", "order": 10},
-        {"text": "Review wins and losses", "category": "postmarket", "order": 11},
-    ]
+    # Default checklist (legacy global copy; per-user copies are seeded by GET /checklist)
+    default_checklist = DEFAULT_CHECKLIST
     
     # Clear and seed
     await db.watchlist.delete_many({})
-    await db.checklist.delete_many({})
+    await db.checklist.delete_many(_LEGACY_CHECKLIST)  # never wipe per-user items
     
     for item in default_watchlist:
         watchlist_item = WatchlistItem(**item)
@@ -2360,7 +2441,19 @@ async def auto_log_trade(signal_id: str, outcome: str, pnl_points: Optional[floa
 
 # ============== Admin Panel Routes ==============
 
-@api_router.get("/admin/overview")
+
+async def _require_admin(request: Request, x_api_key: Optional[str] = Header(default=None, alias="X-API-Key")) -> None:
+    """Admin gate: a matching X-API-Key (only when RETOOL_API_KEY is set; fails
+    closed otherwise) or an authenticated session whose role is 'admin'."""
+    env_key = os.environ.get("RETOOL_API_KEY", "")
+    if env_key and x_api_key is not None and hmac.compare_digest(x_api_key.encode(), env_key.encode()):
+        return
+    user = await auth_module.get_current_user(request, db)  # 401 when unauthenticated
+    if user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+
+@api_router.get("/admin/overview", dependencies=[Depends(_require_admin)])
 async def admin_overview():
     """Admin dashboard overview"""
     total_subs = await db.subscribers.count_documents({})
@@ -2388,14 +2481,14 @@ async def admin_overview():
     }
 
 
-@api_router.get("/admin/subscribers")
+@api_router.get("/admin/subscribers", dependencies=[Depends(_require_admin)])
 async def admin_get_subscribers(limit: int = 50):
     """Get all subscribers for admin"""
     subs = await db.subscribers.find({}, {"_id": 0}).sort("created_at", -1).to_list(limit)
     return subs
 
 
-@api_router.patch("/admin/subscribers/{sub_id}/tier")
+@api_router.patch("/admin/subscribers/{sub_id}/tier", dependencies=[Depends(_require_admin)])
 async def admin_update_tier(sub_id: str, tier: str):
     """Admin: update subscriber tier"""
     if tier not in ("free", "pro", "elite"):
@@ -2406,7 +2499,7 @@ async def admin_update_tier(sub_id: str, tier: str):
     return {"message": f"Tier updated to {tier}"}
 
 
-@api_router.delete("/admin/subscribers/{sub_id}")
+@api_router.delete("/admin/subscribers/{sub_id}", dependencies=[Depends(_require_admin)])
 async def admin_delete_subscriber(sub_id: str):
     """Admin: remove subscriber"""
     result = await db.subscribers.delete_one({"id": sub_id})
@@ -2831,7 +2924,7 @@ async def affiliate_redirect(partner: str, request: Request, src: Optional[str] 
     return RedirectResponse(url=target, status_code=302)
 
 
-@api_router.get("/admin/clicks", tags=["admin"])
+@api_router.get("/admin/clicks", tags=["admin"], dependencies=[Depends(_require_admin)])
 async def affiliate_click_stats() -> Dict[str, Any]:
     """Aggregated click stats per partner + src (for the admin revenue card)."""
     pipeline = [
@@ -2872,6 +2965,7 @@ api_router.include_router(ati.build_ati_router(db, require_write_key))
 api_router.include_router(proof.build_proof_router(db, require_write_key))
 api_router.include_router(auth_module.build_auth_router(db))
 api_router.include_router(analytics.build_analytics_router(db))
+api_router.include_router(pnl_journal.build_pnl_journal_router(db, auth_module.get_current_user))
 @api_router.post("/signals/daily-recap", tags=["admin"])
 async def trigger_daily_recap(request: Request) -> Dict[str, Any]:
     actor = await auth_module.get_current_user(request, db)
@@ -2894,6 +2988,7 @@ async def seed_auth() -> None:
     await db.users.create_index("email", unique=True)
     await db.user_sessions.create_index("session_token")
     await db.login_attempts.create_index("identifier")
+    await pnl_journal.ensure_indexes(db)
     await db.analytics_visits.create_index([("visitor_id", 1), ("path", 1), ("date", 1)], unique=True)
     await purge_stale_market_data()
     # (startup PAPER test punches removed — no auto-generated signals)
@@ -3149,10 +3244,16 @@ async def purge_stale_market_data() -> None:
         logger.error(f"Stale-data purge failed: {e}")
 
 
+# CORS: set CORS_ORIGINS to a comma-separated list of exact origins (e.g. the
+# Vercel production domain) and optionally CORS_ORIGIN_REGEX for Vercel preview
+# URLs (e.g. ^https://mnq-scalp-stacks-[a-z0-9-]+\.vercel\.app$). Unset keeps
+# the legacy '*' default for local dev only — always set it in production.
+_cors_origins = [o.strip().rstrip('/') for o in os.environ.get('CORS_ORIGINS', '*').split(',') if o.strip()]
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=_cors_origins or ['*'],
+    allow_origin_regex=(os.environ.get('CORS_ORIGIN_REGEX', '').strip() or None),
     allow_methods=["*"],
     allow_headers=["*"],
 )

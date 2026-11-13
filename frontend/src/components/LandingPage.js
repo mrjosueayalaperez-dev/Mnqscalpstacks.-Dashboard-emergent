@@ -3,8 +3,6 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
 import ProofGallery from "./ProofGallery";
-import LiveCounters from "./LiveCounters";
-import WinStreakStrip from "./WinStreakStrip";
 import { paymentLinkFor } from "@/lib/paymentLinks";
 import {
   Zap, TrendingUp, Target, Shield, ChevronRight, Check, X, Star, Crown,
@@ -63,27 +61,6 @@ const AnimatedCounter = ({ end, duration = 2000, prefix = "", suffix = "" }) => 
   }, [end, duration]);
 
   return <span ref={ref}>{prefix}{count}{suffix}</span>;
-};
-
-// ======================== SOCIAL PROOF TICKER ========================
-const SocialProofTicker = () => {
-  const [count, setCount] = useState(0);
-
-  useEffect(() => {
-    axios.get(`${API}/subscribers/count`).then(r => setCount(r.data.total || 0)).catch(() => setCount(15));
-  }, []);
-
-  if (count === 0) return null;
-
-  return (
-    <div className="fixed bottom-4 left-4 z-40 animate-fade-in stagger-6 hidden md:flex items-center gap-2 px-4 py-2 bg-[#121212] border border-[#34C759]/30 rounded-sm shadow-lg" data-testid="social-proof-ticker">
-      <div className="w-2 h-2 bg-[#34C759] rounded-full animate-pulse" />
-      <span className="text-xs text-zinc-300">
-        <strong className="text-[#34C759]">{count} traders</strong> on board
-      </span>
-      <Flame className="w-3 h-3 text-[#FFCC00]" />
-    </div>
-  );
 };
 
 // ======================== HERO ========================
@@ -275,16 +252,6 @@ const CommunityLabSection = () => {
               >
                 OPEN THE FREE LAB <ArrowRight className="w-4 h-4" />
               </a>
-            </div>
-            <div className="hidden md:block w-64 flex-shrink-0">
-              <div className="border border-white/10 rounded-sm bg-[#07090e] p-4">
-                <span className="text-[0.55rem] uppercase tracking-widest text-zinc-500">Live expectancy calc</span>
-                <p className="font-mono text-2xl font-black text-[#5eead4] mt-2 mb-1">+0.375R</p>
-                <p className="text-[0.65rem] text-zinc-500 leading-relaxed">
-                  55% win rate × 1.5R avg win − 45% × 1R avg loss. Positive expectancy ≠ next trade wins — the Lab
-                  teaches why.
-                </p>
-              </div>
             </div>
           </div>
         </div>
@@ -638,14 +605,11 @@ const LandingPage = () => {
         <BeforeAfter />
         <HowItWorks sectionRef={howRef} />
         <CommunityLabSection />
-        <LiveCounters />
-        <WinStreakStrip />
         <ProofGallery />
         <Pricing ctaRef={ctaRef} onSignup={handleSignup} onCheckout={handleCheckout} loading={loading}
           signedUp={signedUp} discordInvite={discordInvite} referralCode={referralCode}
           welcomeSteps={welcomeSteps} onCompleteStep={handleCompleteStep} referrerName={referrerName} />
         <Footer />
-        <SocialProofTicker />
       </div>
     </div>
   );

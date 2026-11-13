@@ -1,4 +1,4 @@
-"""Item 2 — fail-closed write key, header-only webhook secret, no broker routing."""
+"""Item 2 — fail-closed write key, header-or-body webhook secret (query ignored), no broker routing."""
 import asyncio
 import json
 from pathlib import Path
@@ -51,9 +51,10 @@ def test_webhook_rejects(client, path, kw):
     assert r.status_code in (401, 403), r.text
 
 
-def test_webhook_body_secret_not_accepted(client):
-    r = client.post("/api/signals/tradingview", content=json.dumps({"action": "HOLD", "secret": SEC}))
-    assert r.status_code == 401
+def test_webhook_body_secret_ok(client):
+    # TradingView cannot send custom headers, so the body `secret` field must work.
+    r = client.post("/api/signals/tradingview", content=json.dumps({"action": "HOLD", "symbol": "MNQ1!", "secret": SEC}))
+    assert r.status_code == 200, r.text
 
 
 @pytest.mark.parametrize("path", ["/api/signals/tradingview", "/api/webhook/tradingview"])
