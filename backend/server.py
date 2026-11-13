@@ -3090,10 +3090,11 @@ async def _emit_practice_alert(result: Dict[str, Any], snap: Dict[str, Any]) -> 
     try:
         from market_feed import get_bars
         b = get_bars()
-        if b:
+        if b and b[-1].get("time") is not None:
             as_of = datetime.fromtimestamp(int(b[-1]["time"]), tz=timezone.utc)
     except Exception:
-        as_of = datetime.now(timezone.utc)
+        # Missing or unreadable bar time is stale (fail closed). Do not invent 'now'.
+        as_of = None
     payload = {
         "strategy": result.get("strategy"),
         "instrument": result.get("instrument") or "MNQ",

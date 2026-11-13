@@ -254,3 +254,72 @@ def test_bullish_engulfing_requires_body_not_wick():
 def test_seven_rules_are_exactly_seven():
     assert len(rules.STRATEGY_B_RULES) == 7
     assert rules.STRATEGY_B_RULES[1]["text"].startswith("Trade only extremes")
+
+
+@pytest.mark.parametrize(
+    "value,expected",
+    [
+        ("true", True),
+        ("TRUE", True),
+        ("True", True),
+        (" true ", True),
+        ("True ", True),
+        ("1", False),
+        ("yes", False),
+        ("on", False),
+        ("Y", False),
+        ("approved", False),
+        ("", False),
+        ("false", False),
+        ("0", False),
+    ],
+)
+def test_approval_flag_is_exactly_true(monkeypatch, value, expected):
+    monkeypatch.setenv("STRATEGY_A_PARAMETERS_APPROVED", value)
+    monkeypatch.setenv("STRATEGY_B_PARAMETERS_APPROVED", value)
+    assert rules.strategy_a_approved() is expected
+    assert rules.strategy_b_approved() is expected
+
+
+def test_approval_flag_unset_is_disabled(monkeypatch):
+    monkeypatch.delenv("STRATEGY_A_PARAMETERS_APPROVED", raising=False)
+    monkeypatch.delenv("STRATEGY_B_PARAMETERS_APPROVED", raising=False)
+    assert rules.strategy_a_approved() is False
+    assert rules.strategy_b_approved() is False
+
+
+def test_strategy_a_flag_on_without_params_does_not_fire(monkeypatch):
+    monkeypatch.setenv("STRATEGY_A_PARAMETERS_APPROVED", "true")
+    bars = _trend(28000, 40, 1)
+    out = eng.evaluate_strategy_a(
+        bars,
+        center=bars[-1]["close"],
+        approved=rules.strategy_a_approved(),
+        params={"max_risk_points": None, "zone_width_points": 500},
+    )
+    assert out["fire"] is False
+    assert out.get("parameters_pending") or out["state"] in {"WAIT", "DISABLED_PENDING_PARAMETERS"}
+
+
+def test_strategy_b_flag_on_without_risk_or_range_does_not_fire(monkeypatch):
+    monkeypatch.setenv("STRATEGY_B_PARAMETERS_APPROVED", "true")
+    bars = _b_setup_engulfing_at_low()
+    missing_risk = eng.evaluate_strategy_b(
+        bars,
+        range_high=120,
+        range_low=85,
+        risk_limit_dollars=None,
+        approved=rules.strategy_b_approved(),
+        exit_conditions="PAPER: exit if close back through 85",
+    )
+    assert missing_risk["fire"] is False
+    missing_range = eng.evaluate_strategy_b(
+        bars,
+        range_high=None,
+        range_low=None,
+        risk_limit_dollars=500,
+        approved=rules.strategy_b_approved(),
+        exit_conditions="PAPER: exit if close back through 85",
+    )
+    assert missing_range["fire"] is False
+    assert "will not invent a range" in missing_range["trigger"]

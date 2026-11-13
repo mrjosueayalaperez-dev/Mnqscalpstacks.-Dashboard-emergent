@@ -51,7 +51,11 @@ MNQ_DOLLARS_PER_POINT = 2.0  # CME MNQ spec; also cited in strategy_a_report.md 
 
 
 def _flag(name: str) -> bool:
-    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+    """True only when the env var is exactly 'true' after trim and case-fold.
+
+    'true', 'TRUE', and 'True ' all enable. '1', 'yes', and 'on' do not.
+    """
+    return os.environ.get(name, "").strip().lower() == "true"
 
 
 def strategy_a_approved() -> bool:
