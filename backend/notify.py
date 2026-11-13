@@ -9,6 +9,14 @@ logger = logging.getLogger(__name__)
 
 
 async def _post(payload: dict) -> None:
+    try:
+        from notifications import discord_webhook_configured
+        if not discord_webhook_configured():
+            return
+    except Exception:
+        url = os.environ.get("DISCORD_WEBHOOK_URL", "")
+        if not url or url == "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL":
+            return
     url = os.environ.get("DISCORD_WEBHOOK_URL", "")
     if not url:
         return

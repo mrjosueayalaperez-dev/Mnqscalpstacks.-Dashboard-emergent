@@ -8,6 +8,7 @@ import auth as auth_module
 import pnl_journal
 import analytics
 import notify
+import notifications
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -338,7 +339,8 @@ class BacktestCreate(BaseModel):
 # ============== Signal Engine Functions ==============
 
 def _discord_webhook_configured() -> bool:
-    return bool(DISCORD_WEBHOOK_URL) and DISCORD_WEBHOOK_URL != "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL"
+    """True when a real webhook is set. Never returns the URL."""
+    return notifications.discord_webhook_configured(DISCORD_WEBHOOK_URL)
 
 
 def _format_signal_pillars(components: dict) -> str:
@@ -397,17 +399,37 @@ def _build_discord_payload(signal: dict) -> dict:
 
 
 async def send_discord_signal(signal: dict) -> bool:
-    """Send branded signal to Discord webhook — MNQ SCALP STACKS BOT."""
-    if not _discord_webhook_configured():
-        logger.info("Discord webhook not configured, skipping delivery")
-        return False
-    try:
-        async with httpx.AsyncClient() as http_client:
-            resp = await http_client.post(DISCORD_WEBHOOK_URL, json=_build_discord_payload(signal), timeout=5.0)
-            return resp.status_code in (200, 204)
-    except Exception as e:
-        logger.error(f"Discord send failed: {e}")
-        return False
+    """Send a practice Discord alert (retry, dedup, stale guard). Never implies an order was placed."""
+    source = str(signal.get("source") or "")
+    created = signal.get("created_at")
+    payload = {
+        "strategy": signal.get("strategy_name") or "Scalp Punch (legacy path — not Strategy A/B)",
+        "instrument": signal.get("symbol") or "MNQ",
+        "timeframe": signal.get("interval") or signal.get("timeframe") or "1m",
+        "direction": "LONG" if signal.get("side") == "long" else ("SHORT" if signal.get("side") == "short" else "WAIT"),
+        "trigger": signal.get("note") or signal.get("reason") or "",
+        "data_label": (signal.get("data_label") or notifications.data_label_for_source(source)).lower().replace("delayed 10m", "delayed"),
+        "data_source": source,
+        "as_of": created,
+        "timestamp_et": None,
+    }
+    # Prefer an explicit trigger from components, without claiming order flow.
+    comps = signal.get("components") or {}
+    if not signal.get("note") and not signal.get("reason"):
+        bits = []
+        if comps.get("ema21_cross"):
+            bits.append("EMA 21 condition")
+        if comps.get("vwap_filter"):
+            bits.append("VWAP condition")
+        if comps.get("ema9_cross"):
+            bits.append("EMA 9 condition")
+        payload["trigger"] = ", ".join(bits) if bits else "legacy scalp-punch path (see dashboard card)"
+    result = await notifications.deliver_discord(
+        payload,
+        store=notifications.MongoDeliveryStore(db),
+        webhook_url=DISCORD_WEBHOOK_URL if _discord_webhook_configured() else "",
+    )
+    return result.get("status") == "delivered"
 
 
 async def check_duplicate_signal(symbol: str, side: str, minutes: int = 5) -> bool:
@@ -1387,7 +1409,7 @@ async def signals_receiver_status(request: Request) -> Dict[str, Any]:
             "session_open": session_open,
             "now_et": now_et.strftime("%H:%M ET"),
         },
-        "discord_configured": bool(os.environ.get("DISCORD_WEBHOOK_URL")),
+        "discord_configured": notifications.discord_webhook_configured(DISCORD_WEBHOOK_URL),
     }
 
 
@@ -1631,7 +1653,7 @@ async def get_system_health():
     # Check auto kill-switch threshold (>5% error rate)
     auto_kill = error_rate > 5 and since_restart > 10
 
-    discord_configured = bool(DISCORD_WEBHOOK_URL) and DISCORD_WEBHOOK_URL != "REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL"
+    discord_configured = notifications.discord_webhook_configured(DISCORD_WEBHOOK_URL)
 
     return {
         "status": "degraded" if signal_engine_state["kill_switch"] else ("warning" if error_rate > 3 else "healthy"),
