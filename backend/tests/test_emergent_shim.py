@@ -10,6 +10,7 @@ import os
 import pytest
 
 from emergentintegrations.llm.chat import (
+    LLM_TIMEOUT_SECONDS,
     LlmChat,
     StreamDone,
     TextDelta,
@@ -76,6 +77,83 @@ async def test_send_message_fails_fast_without_key():
     chat = LlmChat(api_key="")
     with pytest.raises(RuntimeError, match="OPENAI_API_KEY"):
         await chat.send_message(UserMessage(text="hello"))
+
+
+class _FakeChoice:
+    def __init__(self, content):
+        self.message = type("M", (), {"content": content})()
+        self.delta = type("D", (), {"content": content})()
+
+
+class _FakeResponse:
+    def __init__(self, content="ok"):
+        self.choices = [_FakeChoice(content)]
+
+
+@pytest.mark.asyncio
+async def test_send_message_passes_timeout(monkeypatch):
+    import emergentintegrations.llm.chat as chat_mod
+
+    seen = {}
+
+    async def fake_acompletion(**kwargs):
+        seen.update(kwargs)
+        return _FakeResponse("timed reply")
+
+    monkeypatch.setattr(chat_mod.litellm, "acompletion", fake_acompletion)
+    chat = LlmChat(api_key="k")
+    assert await chat.send_message(UserMessage(text="hi")) == "timed reply"
+    assert seen["timeout"] == LLM_TIMEOUT_SECONDS == 120.0
+
+
+@pytest.mark.asyncio
+async def test_stream_message_passes_timeout(monkeypatch):
+    import emergentintegrations.llm.chat as chat_mod
+
+    seen = {}
+
+    async def fake_stream(**kwargs):
+        seen.update(kwargs)
+        yield _FakeResponse("chunk")
+
+    async def fake_acompletion(**kwargs):
+        return fake_stream(**kwargs)
+
+    monkeypatch.setattr(chat_mod.litellm, "acompletion", fake_acompletion)
+    chat = LlmChat(api_key="k")
+    events = [ev async for ev in chat.stream_message(UserMessage(text="hi"))]
+    assert seen["timeout"] == LLM_TIMEOUT_SECONDS == 120.0
+    assert any(isinstance(ev, TextDelta) and ev.content == "chunk" for ev in events)
+    assert isinstance(events[-1], StreamDone)
+    assert events[-1].usage is None  # provider supplied none
+
+
+@pytest.mark.asyncio
+async def test_stream_message_captures_usage(monkeypatch):
+    import emergentintegrations.llm.chat as chat_mod
+
+    class _Usage:
+        prompt_tokens = 7
+        completion_tokens = 3
+        total_tokens = 10
+
+    usage_chunk = _FakeResponse("")
+    usage_chunk.usage = _Usage()
+    usage_chunk.choices = []
+
+    async def fake_stream(**kwargs):
+        assert kwargs.get("stream_options") == {"include_usage": True}
+        yield _FakeResponse("chunk")
+        yield usage_chunk
+
+    async def fake_acompletion(**kwargs):
+        return fake_stream(**kwargs)
+
+    monkeypatch.setattr(chat_mod.litellm, "acompletion", fake_acompletion)
+    chat = LlmChat(api_key="k")
+    events = [ev async for ev in chat.stream_message(UserMessage(text="hi"))]
+    assert isinstance(events[-1], StreamDone)
+    assert events[-1].usage == {"prompt_tokens": 7, "completion_tokens": 3, "total_tokens": 10}
 
 
 def test_checkout_request_defaults():

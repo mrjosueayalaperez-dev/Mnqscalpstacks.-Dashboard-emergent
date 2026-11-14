@@ -29,7 +29,7 @@ import hmac
 from pydantic import ValidationError
 from temporal import ingest_client as tv_ingest_client  # Temporal hook; OFF unless TEMPORAL_ENABLED=true
 from emergentintegrations.llm.chat import LlmChat, UserMessage, is_llm_configured
-from copilot import build_copilot_router, copilot_enabled, with_disclaimer, METHOD_PROMPT
+from copilot import UsageChunk, build_copilot_router, build_provider_dispatch, copilot_enabled, with_disclaimer, METHOD_PROMPT
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -986,16 +986,17 @@ async def calculate_mnq_position(stop_points: int = 15, risk_amount: float = 30.
 
 # AI Analysis Routes
 @api_router.post("/ai/analyze")
-async def ai_analyze(request: AIAnalysisRequest):
-    """Legacy AI analysis — gated behind COPILOT_ENABLED (404 when off)."""
+async def ai_analyze(payload: AIAnalysisRequest, request: Request):
+    """Legacy AI analysis — login-required; gated behind COPILOT_ENABLED (404 when off)."""
     if not copilot_enabled():
         raise HTTPException(status_code=404, detail="Not Found")
+    await auth_module.get_current_user(request, db)  # 401 when unauthenticated
     if not is_llm_configured():
         raise HTTPException(status_code=500, detail="AI service not configured")
-    
+
     # Fetch current data for the symbol
-    quote = await fetch_stock_quote(request.symbol)
-    indicators = await fetch_technical_indicators(request.symbol)
+    quote = await fetch_stock_quote(payload.symbol)
+    indicators = await fetch_technical_indicators(payload.symbol)
     
     # Handle None values safely
     price = quote.get('price', 'N/A') if quote else 'N/A'
@@ -1008,7 +1009,7 @@ async def ai_analyze(request: AIAnalysisRequest):
     system_message = METHOD_PROMPT
 
     context_data = f"""
-    Symbol: {request.symbol}
+    Symbol: {payload.symbol}
     Current Price: ${price}
     Change: {change_pct}%
     Volume: {volume}
@@ -1018,28 +1019,28 @@ async def ai_analyze(request: AIAnalysisRequest):
     """
     
     prompts = {
-        "general": f"Analyze {request.symbol} for potential trading opportunity. {context_data}",
-        "entry": f"Walk through the five-step stack for {request.symbol} as an educational review. {context_data}",
-        "exit": f"Review the open practice position on {request.symbol} against the stack, educationally. {context_data}",
-        "sentiment": f"What's the market sentiment for {request.symbol}? {context_data}"
+        "general": f"Analyze {payload.symbol} for potential trading opportunity. {context_data}",
+        "entry": f"Walk through the five-step stack for {payload.symbol} as an educational review. {context_data}",
+        "exit": f"Review the open practice position on {payload.symbol} against the stack, educationally. {context_data}",
+        "sentiment": f"What's the market sentiment for {payload.symbol}? {context_data}"
     }
-    
-    user_prompt = prompts.get(request.analysis_type, prompts["general"])
-    if request.context:
-        user_prompt += f"\nAdditional context: {request.context}"
-    
+
+    user_prompt = prompts.get(payload.analysis_type, prompts["general"])
+    if payload.context:
+        user_prompt += f"\nAdditional context: {payload.context}"
+
     try:
         chat = LlmChat(
             api_key=EMERGENT_LLM_KEY,
-            session_id=f"trade-analysis-{request.symbol}-{uuid.uuid4()}",
+            session_id=f"trade-analysis-{payload.symbol}-{uuid.uuid4()}",
             system_message=system_message
         ).with_model("openai", "gpt-4o")
-        
+
         response = await chat.send_message(UserMessage(text=user_prompt))
-        
+
         return {
-            "symbol": request.symbol,
-            "analysis_type": request.analysis_type,
+            "symbol": payload.symbol,
+            "analysis_type": payload.analysis_type,
             "analysis": with_disclaimer(response),
             "data_used": {
                 "quote": quote,
@@ -1501,28 +1502,45 @@ from fastapi.responses import StreamingResponse
 
 
 
-async def _copilot_stream(provider: str, model: str, system: str, msg: str, session_id: str):
-    if provider == "grok":
-        from openai import AsyncOpenAI
-        xai = AsyncOpenAI(api_key=os.environ["XAI_API_KEY"], base_url="https://api.x.ai/v1", timeout=120.0)
-        stream = await xai.chat.completions.create(
-            model=model,
-            messages=[{"role": "system", "content": system}, {"role": "user", "content": msg}],
-            stream=True, temperature=0.3,
-        )
-        async for chunk in stream:
-            delta = chunk.choices[0].delta.content if chunk.choices else None
-            if delta:
-                yield delta
-    else:
-        chat = LlmChat(
-            api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=session_id, system_message=system,
-        ).with_model("openai", model)
-        async for ev in chat.stream_message(UserMessage(text=msg)):
-            if isinstance(ev, TextDelta):
-                yield ev.content
-            elif isinstance(ev, StreamDone):
-                break
+async def _grok_stream(model: str, system: str, msg: str, session_id: str):
+    from openai import AsyncOpenAI
+    xai = AsyncOpenAI(api_key=os.environ["XAI_API_KEY"], base_url="https://api.x.ai/v1", timeout=120.0)
+    stream = await xai.chat.completions.create(
+        model=model,
+        messages=[{"role": "system", "content": system}, {"role": "user", "content": msg}],
+        stream=True, temperature=0.3, stream_options={"include_usage": True},
+    )
+    usage = None
+    async for chunk in stream:
+        raw_usage = getattr(chunk, "usage", None)
+        if raw_usage is not None:
+            usage = {
+                k: getattr(raw_usage, k)
+                for k in ("prompt_tokens", "completion_tokens", "total_tokens")
+                if getattr(raw_usage, k, None) is not None
+            } or None
+        delta = chunk.choices[0].delta.content if chunk.choices else None
+        if delta:
+            yield delta
+    if usage:
+        yield UsageChunk(usage=usage)
+
+
+async def _gpt_stream(model: str, system: str, msg: str, session_id: str):
+    chat = LlmChat(
+        api_key=os.environ.get("EMERGENT_LLM_KEY", ""), session_id=session_id, system_message=system,
+    ).with_model("openai", model)
+    async for ev in chat.stream_message(UserMessage(text=msg)):
+        if isinstance(ev, TextDelta):
+            yield ev.content
+        elif isinstance(ev, StreamDone):
+            if ev.usage:
+                yield UsageChunk(usage=ev.usage)
+            break
+
+
+# Single shared dispatch: both providers behind the copilot Provider signature.
+_copilot_stream = build_provider_dispatch({"gpt": _gpt_stream, "grok": _grok_stream})
 
 
 async def _copilot_context() -> str:
