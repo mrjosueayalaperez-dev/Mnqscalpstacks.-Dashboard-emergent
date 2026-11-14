@@ -13,7 +13,25 @@ const getSessionId = () => {
   return id;
 };
 
-const SUGGESTIONS = ["What's the current setup?", "Explain the active signal", "How's my session going?"];
+const SUGGESTIONS = {
+  en: ["What's the current setup?", "Explain the active signal", "How's my session going?"],
+  es: ["¿Cuál es el escenario actual?", "Explica la señal activa", "¿Cómo va mi sesión?"],
+};
+
+const STRINGS = {
+  en: {
+    tagline: "knows your live price, signal & position",
+    empty: "Ask about the current setup, the active signal, your open position, or risk rules. Educational only — not financial advice.",
+    placeholder: "Ask the copilot…",
+    unavailable: "Copilot is unavailable right now — try again.",
+  },
+  es: {
+    tagline: "conoce tu precio, señal y posición",
+    empty: "Pregunta sobre el escenario actual, la señal activa, tu posición abierta o las reglas de riesgo. Solo educación — no es asesoramiento financiero.",
+    placeholder: "Pregunta al copiloto…",
+    unavailable: "El copiloto no está disponible ahora — inténtalo de nuevo.",
+  },
+};
 
 const GPT_MODELS = [
   { id: "gpt-5.6-sol", label: "GPT-5.6 Sol" },
@@ -29,12 +47,19 @@ export const CopilotChat = () => {
   const [busy, setBusy] = useState(false);
   const [provider, setProvider] = useState(() => localStorage.getItem("copilot_provider") || "gpt");
   const [model, setModel] = useState(() => localStorage.getItem("copilot_model") || "gpt-5.4");
+  const [language, setLanguage] = useState(() => localStorage.getItem("copilot_language") || "en");
   const sessionId = useRef(getSessionId());
   const scrollRef = useRef(null);
+  const t = STRINGS[language] || STRINGS.en;
 
   const pickProvider = (p) => {
     setProvider(p);
     localStorage.setItem("copilot_provider", p);
+  };
+
+  const pickLanguage = (l) => {
+    setLanguage(l);
+    localStorage.setItem("copilot_language", l);
   };
 
   const pickModel = (m) => {
@@ -66,7 +91,7 @@ export const CopilotChat = () => {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ session_id: sessionId.current, message: msg, provider, model }),
+        body: JSON.stringify({ session_id: sessionId.current, message: msg, provider, model, language }),
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
@@ -84,7 +109,7 @@ export const CopilotChat = () => {
     } catch (e) {
       setMessages((m) => {
         const out = [...m];
-        out[out.length - 1] = { role: "assistant", content: "Copilot is unavailable right now — try again." };
+        out[out.length - 1] = { role: "assistant", content: t.unavailable };
         return out;
       });
     }
@@ -124,13 +149,29 @@ export const CopilotChat = () => {
             ))}
           </select>
         )}
-        <span className="text-[0.55rem] font-mono text-zinc-500">knows your live price, signal &amp; position</span>
+        <div className="flex rounded-sm border border-white/10 overflow-hidden" data-testid="copilot-language-toggle">
+          <button
+            onClick={() => pickLanguage("en")}
+            className={`px-2 py-0.5 text-[0.55rem] font-black transition-colors ${language === "en" ? "bg-[#007AFF] text-white" : "text-zinc-500 hover:text-white"}`}
+            data-testid="copilot-language-en"
+          >
+            EN
+          </button>
+          <button
+            onClick={() => pickLanguage("es")}
+            className={`px-2 py-0.5 text-[0.55rem] font-black transition-colors ${language === "es" ? "bg-[#007AFF] text-white" : "text-zinc-500 hover:text-white"}`}
+            data-testid="copilot-language-es"
+          >
+            ES
+          </button>
+        </div>
+        <span className="text-[0.55rem] font-mono text-zinc-500">{t.tagline}</span>
       </div>
 
       <div ref={scrollRef} className="max-h-72 overflow-y-auto space-y-2 mb-2 pr-1" data-testid="copilot-messages">
         {messages.length === 0 && (
           <p className="text-[0.65rem] text-zinc-600 py-2">
-            Ask about the current setup, the active signal, your open position, or risk rules. Educational only — not financial advice.
+            {t.empty}
           </p>
         )}
         {messages.map((m, i) => (
@@ -148,7 +189,7 @@ export const CopilotChat = () => {
 
       {messages.length === 0 && (
         <div className="flex flex-wrap gap-1.5 mb-2">
-          {SUGGESTIONS.map((s) => (
+          {SUGGESTIONS[language].map((s) => (
             <button
               key={s}
               onClick={() => send(s)}
@@ -166,7 +207,7 @@ export const CopilotChat = () => {
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && send()}
-          placeholder="Ask the copilot…"
+          placeholder={t.placeholder}
           className="flex-1 bg-white/5 border border-white/10 rounded-sm px-3 py-2 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-[#007AFF]/50"
           data-testid="copilot-input"
         />

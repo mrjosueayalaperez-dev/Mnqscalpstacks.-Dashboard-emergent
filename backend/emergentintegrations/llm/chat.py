@@ -17,9 +17,13 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from typing import AsyncIterator, List, Optional
+from typing import Any, AsyncIterator, List, Optional
 
 import litellm
+
+# Hard ceiling on every provider call, matching the xAI/Grok path's 120s
+# timeout in server.py (_copilot_stream). No LLM request may hang forever.
+LLM_TIMEOUT_SECONDS = 120.0
 
 
 def resolve_api_key(passed: Optional[str] = None) -> str:
@@ -57,7 +61,20 @@ class TextDelta:
 
 @dataclass
 class StreamDone:
-    pass
+    # Provider-reported token usage when the stream supplies it, else None.
+    usage: Optional[dict] = None
+
+
+def _usage_dict(raw: Any) -> Optional[dict]:
+    """Normalize a provider usage object to plain token counts (or None)."""
+    if raw is None:
+        return None
+    out = {}
+    for key in ("prompt_tokens", "completion_tokens", "total_tokens"):
+        value = getattr(raw, key, None)
+        if value is not None:
+            out[key] = value
+    return out or None
 
 
 class LlmChat:
@@ -99,6 +116,7 @@ class LlmChat:
             model=self._litellm_model(),
             messages=self._messages(message.text),
             api_key=key,
+            timeout=LLM_TIMEOUT_SECONDS,
         )
         return response.choices[0].message.content or ""
 
@@ -109,8 +127,12 @@ class LlmChat:
             messages=self._messages(message.text),
             api_key=key,
             stream=True,
+            timeout=LLM_TIMEOUT_SECONDS,
+            stream_options={"include_usage": True},
         )
+        usage: Optional[dict] = None
         async for chunk in stream:
+            usage = _usage_dict(getattr(chunk, "usage", None)) or usage
             delta = None
             try:
                 delta = chunk.choices[0].delta.content
@@ -118,4 +140,4 @@ class LlmChat:
                 delta = None
             if delta:
                 yield TextDelta(content=delta)
-        yield StreamDone()
+        yield StreamDone(usage=usage)
