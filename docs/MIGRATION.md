@@ -1,3 +1,5 @@
+> **Prefer [MIGRATION-OFF-EMERGENT.md](./MIGRATION-OFF-EMERGENT.md).** That is the current runbook (Vercel receiver, Mongo copy script, post-#17/#18 env vars, and the 4-point TradingView gate). As of Nov 14, 2026 the founder has decided to leave Emergent and ordered the migration (see the status update at the top of MIGRATION-OFF-EMERGENT.md); do not execute a cut-over from this older checklist. In particular, do not follow §7's TradingView step as written — TradingView stays on Emergent until the 4-point check passes, and the Vercel receiver should be pointed at the new host rather than sending alerts directly to the backend.
+
 # Backend migration: Emergent.host → Render + MongoDB Atlas
 
 Status: **prepared, not executed.** Nothing in this branch touches production or deploys anything.
