@@ -242,19 +242,109 @@ def discord_config_status() -> Dict[str, Any]:
     return {"discord_configured": discord_webhook_configured()}
 
 
-def data_label_for_source(source: str, tv_data_mode: str = "delayed") -> str:
-    """Honest label for the actual feed. Yahoo is always delayed. 'live' only if licensed TV real-time."""
+# ---- Alert labels -------------------------------------------------------------
+# Nothing in this system places a trade; every body says so. Never "LIVE".
+
+# Data-feed kinds (internal keys).
+FEED_TRADINGVIEW = "tradingview"
+FEED_DELAYED = "delayed"
+FEED_TEST = "test"
+FEED_PAPER = "paper"
+FEED_SIMULATED = "simulated"
+FEED_UNVERIFIED = "unverified"
+
+# Founder-approved TradingView real-time title (Josue, Nov 13 2026 6:51 PM ET).
+# The single place this wording lives.
+TRADINGVIEW_TITLE_PREFIX = "REAL-TIME · alert"
+
+# Title prefix per feed: "<prefix> · <DIRECTION> · <INSTRUMENT>".
+TITLE_PREFIXES: Dict[str, str] = {
+    FEED_TRADINGVIEW: TRADINGVIEW_TITLE_PREFIX,
+    FEED_DELAYED: "DELAYED · practice alert",
+    FEED_TEST: "TEST · practice alert",
+    FEED_PAPER: "PAPER · practice alert",
+    FEED_SIMULATED: "SIMULATED · practice alert",
+    FEED_UNVERIFIED: "data source unverified · practice alert",
+}
+
+# Short data label for the "Data:" line in the body.
+DATA_QUALIFIERS: Dict[str, str] = {
+    FEED_TRADINGVIEW: "REAL-TIME (TradingView)",
+    FEED_DELAYED: "DELAYED",
+    FEED_TEST: "TEST",
+    FEED_PAPER: "PAPER",
+    FEED_SIMULATED: "SIMULATED",
+    FEED_UNVERIFIED: "data source unverified",
+}
+
+# Stale-data guard windows (seconds since the alert's as_of timestamp).
+# Yahoo is expected to be ~10 minutes behind, plus 5 minutes of grace.
+# TradingView webhook alerts are stamped on arrival, so they get a tighter window.
+TRADINGVIEW_STALE_MAX_AGE_SECONDS = 3 * 60
+YAHOO_STALE_MAX_AGE_SECONDS = DEFAULT_YAHOO_DELAY_SECONDS + DEFAULT_STALE_GRACE_SECONDS
+
+_TEST_SOURCES = {"test", "test-button", "test-punch"}
+_SIM_SOURCES = {"demo", "sim", "simulated", "seed", "random"}
+_YAHOO_SOURCES = {"live_engine", "legacy_ema_cross", "nq=f"}
+_TV_SOURCES = {"webhook", "tradingview alert", "tradingview legacy webhook"}
+
+
+def data_label_for_source(source: str, tv_data_mode: str = "") -> str:
+    """Honest feed kind for a signal source. Unknown/empty is 'unverified', never TradingView.
+
+    `tv_data_mode` is accepted for backward compatibility and ignored.
+    """
     src = (source or "").strip().lower()
-    if src in {"test", "paper", "test-button", "paper-test", "test-punch"} or src.startswith("paper"):
-        return "paper"
-    if src in {"demo", "sim", "simulated", "seed"}:
-        return "simulated"
-    if src.startswith("yahoo") or src in {"live_engine", "legacy_ema_cross", "nq=f"}:
-        return "delayed"
-    if src in {"tradingview:live", "tradingview"} and (tv_data_mode or "").lower() == "realtime":
-        return "live"
-    # TradingView webhook with default / delayed mode, or unknown
-    return "delayed"
+    if src.startswith("paper"):
+        return FEED_PAPER
+    if src in _TEST_SOURCES or src.startswith("test"):
+        return FEED_TEST
+    if src in _SIM_SOURCES:
+        return FEED_SIMULATED
+    if src.startswith("yahoo") or src in _YAHOO_SOURCES:
+        return FEED_DELAYED
+    if src in _TV_SOURCES or src.startswith("tradingview"):
+        return FEED_TRADINGVIEW
+    return FEED_UNVERIFIED
+
+
+def normalize_feed_label(label: Optional[str]) -> str:
+    """Map any legacy label value onto a feed kind. Unknown values are 'unverified'."""
+    raw = (label or "").strip().lower()
+    if raw in {"delayed", "delayed 10m", "yahoo"}:
+        return FEED_DELAYED
+    if raw in {"tradingview", "realtime", "real-time", "live"}:
+        return FEED_TRADINGVIEW
+    if raw == "test":
+        return FEED_TEST
+    if raw in {"paper", "paper-test"}:
+        return FEED_PAPER
+    if raw in {"simulated", "sim", "demo"}:
+        return FEED_SIMULATED
+    return FEED_UNVERIFIED
+
+
+def signal_feed_label(signal: Dict[str, Any]) -> str:
+    """Feed kind for a stored signal. Ignores the stored display label ('PAPER')."""
+    if signal.get("is_test"):
+        return FEED_TEST
+    if signal.get("is_demo"):
+        return FEED_SIMULATED
+    return data_label_for_source(str(signal.get("source") or ""))
+
+
+def data_qualifier(label: Optional[str]) -> str:
+    return DATA_QUALIFIERS[normalize_feed_label(label)]
+
+
+def title_prefix(label: Optional[str]) -> str:
+    return TITLE_PREFIXES[normalize_feed_label(label)]
+
+
+def stale_max_age_seconds(label: Optional[str]) -> int:
+    if normalize_feed_label(label) == FEED_TRADINGVIEW:
+        return TRADINGVIEW_STALE_MAX_AGE_SECONDS
+    return YAHOO_STALE_MAX_AGE_SECONDS
 
 
 def et_timestamp(when: Optional[datetime] = None) -> str:
@@ -335,13 +425,7 @@ def format_alert_message(payload: Dict[str, Any]) -> Dict[str, Any]:
     reserved and cannot be dropped by Discord's 4000-character embed cap. Only the
     trigger text is truncated if the body would overflow.
     """
-    label = (payload.get("data_label") or "delayed").lower()
-    label_display = {
-        "delayed": "DELAYED",
-        "simulated": "SIMULATED",
-        "paper": "PAPER",
-        "live": "LIVE",
-    }.get(label, label.upper())
+    label_display = data_qualifier(payload.get("data_label"))
     strategy = payload.get("strategy") or "unspecified"
     direction = (payload.get("direction") or "WAIT").upper()
     instrument = payload.get("instrument") or "MNQ"
@@ -354,7 +438,7 @@ def format_alert_message(payload: Dict[str, Any]) -> Dict[str, Any]:
         trigger += " (candle range/delta only — not exchange bid/ask order-flow data)"
     trigger_out = trigger
 
-    title = f"{label_display} · practice alert · {direction} · {instrument}"
+    title = f"{title_prefix(payload.get('data_label'))} · {direction} · {instrument}"
     header = (
         f"This is an education/practice alert. No trade was placed.\n\n"
         f"**Time (ET):** {when}\n"
@@ -508,7 +592,8 @@ async def deliver_discord(
         return _result(status="skipped_unconfigured", attempts=0)
 
     as_of = parse_as_of(payload.get("as_of"))
-    if is_stale(as_of, now=now):
+    if is_stale(as_of, now=now, expected_delay_seconds=0,
+                grace_seconds=stale_max_age_seconds(payload.get("data_label"))):
         doc = {
             "id": delivery_id,
             "alert_key": key,

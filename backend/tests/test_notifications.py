@@ -47,12 +47,15 @@ def test_placeholder_and_empty_are_not_configured(monkeypatch):
     [
         ("yahoo:NQ=F", "delayed", "delayed"),
         ("live_engine", "delayed", "delayed"),
-        ("test", "delayed", "paper"),
+        ("test", "delayed", "test"),
         ("paper-test", "delayed", "paper"),
         ("demo", "delayed", "simulated"),
-        ("tradingview:live", "delayed", "delayed"),
-        ("tradingview:live", "realtime", "live"),
-        ("unknown", "delayed", "delayed"),
+        ("tradingview:live", "delayed", "tradingview"),
+        ("tradingview:live", "realtime", "tradingview"),
+        ("webhook", "", "tradingview"),
+        ("TradingView alert", "", "tradingview"),
+        ("unknown", "delayed", "unverified"),
+        ("", "", "unverified"),
     ],
 )
 def test_data_label_is_honest(source, mode, expected):
@@ -557,3 +560,43 @@ async def test_dedup_state_survives_store_rebuild(monkeypatch):
     )
     assert second["status"] == "skipped_duplicate"
     assert len(calls) == 1
+
+
+def test_tradingview_title_is_a_single_constant():
+    assert n.TITLE_PREFIXES[n.FEED_TRADINGVIEW] is n.TRADINGVIEW_TITLE_PREFIX
+    assert n.TRADINGVIEW_TITLE_PREFIX == "REAL-TIME · alert"
+
+
+@pytest.mark.parametrize("label", [None, "", "bogus", "unverified"])
+def test_unknown_label_is_unverified_never_tradingview(label):
+    body = n.format_alert_message({"data_label": label, "direction": "LONG", "instrument": "MNQ",
+                                   "timestamp_et": "t"})
+    title = body["embeds"][0]["title"]
+    assert title == "data source unverified · practice alert · LONG · MNQ"
+    assert "REAL-TIME" not in title
+    assert "LIVE" not in title
+
+
+def test_stale_window_tighter_for_tradingview():
+    assert n.TRADINGVIEW_STALE_MAX_AGE_SECONDS < n.YAHOO_STALE_MAX_AGE_SECONDS
+    assert n.stale_max_age_seconds("tradingview") == n.TRADINGVIEW_STALE_MAX_AGE_SECONDS
+    assert n.stale_max_age_seconds("delayed") == n.YAHOO_STALE_MAX_AGE_SECONDS
+    assert n.stale_max_age_seconds("unverified") == n.YAHOO_STALE_MAX_AGE_SECONDS
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("label,age_s,expected", [
+    ("tradingview", 60, "delivered"),
+    ("tradingview", 5 * 60, "skipped_stale"),
+    ("delayed", 10 * 60, "delivered"),
+    ("delayed", 20 * 60, "skipped_stale"),
+])
+async def test_stale_guard_per_feed(store, label, age_s, expected):
+    async def post(url, body):
+        return _FakeResp(204)
+    now = datetime(2026, 11, 13, 23, 0, tzinfo=timezone.utc)
+    out = await n.deliver_discord(
+        {"strategy": "S", "instrument": "MNQ", "direction": "LONG", "trigger": f"{label}-{age_s}",
+         "timeframe": "1m", "data_label": label, "as_of": now - timedelta(seconds=age_s)},
+        store=store, webhook_url="https://example.invalid/hook", http_post=post, now=now)
+    assert out["status"] == expected

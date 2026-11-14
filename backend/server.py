@@ -384,7 +384,7 @@ def _build_discord_payload(signal: dict) -> dict:
             f"{pillar_status}; entry {entry:.2f}, stop {stop:.2f}, TP1 {tp1:.2f}, "
             f"TP2 {signal.get('tp2', 0):.2f}, R:R {rr}, trend {signal.get('trend_direction', 'neutral')}"
         ),
-        "data_label": (signal.get("data_label") or notifications.data_label_for_source(source)),
+        "data_label": notifications.signal_feed_label(signal),
         "data_source": source,
         "timestamp_et": None,
     })
@@ -401,7 +401,7 @@ async def send_discord_signal(signal: dict) -> bool:
         "timeframe": signal.get("interval") or signal.get("timeframe") or "1m",
         "direction": "LONG" if signal.get("side") == "long" else ("SHORT" if signal.get("side") == "short" else "WAIT"),
         "trigger": signal.get("note") or signal.get("reason") or "",
-        "data_label": (signal.get("data_label") or notifications.data_label_for_source(source)).lower().replace("delayed 10m", "delayed"),
+        "data_label": notifications.signal_feed_label(signal),
         "data_source": source,
         "as_of": created,
         "timestamp_et": None,
@@ -1141,6 +1141,8 @@ async def get_signals(limit: int = 50, status: Optional[str] = None):
     for sig in signals:
         demo = sig.get("source") in ("demo", "seed", "random") or sig.get("is_demo")
         sig["data_label"] = "DEMO" if demo else "PAPER"  # display-only, never live orders; DEMO rows are KPI-excluded
+        sig["data_qualifier"] = notifications.data_qualifier(
+            notifications.FEED_SIMULATED if demo else notifications.signal_feed_label(sig))
     return signals
 
 
