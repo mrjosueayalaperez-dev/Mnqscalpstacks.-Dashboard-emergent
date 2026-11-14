@@ -600,3 +600,104 @@ async def test_stale_guard_per_feed(store, label, age_s, expected):
          "timeframe": "1m", "data_label": label, "as_of": now - timedelta(seconds=age_s)},
         store=store, webhook_url="https://example.invalid/hook", http_post=post, now=now)
     assert out["status"] == expected
+
+
+# ---- HTTPS-only webhook configuration ------------------------------------------
+
+def test_http_webhook_is_not_configured():
+    assert n.discord_webhook_configured("http://example.invalid/hook") is False
+    assert n.discord_webhook_configured("http://discord.com/api/webhooks/123/abc") is False
+
+
+def test_bare_https_scheme_is_not_configured():
+    assert n.discord_webhook_configured("https://") is False
+    assert n.discord_webhook_configured("https:///path-only") is False
+
+
+def test_valid_https_webhook_is_configured():
+    assert n.discord_webhook_configured("https://example.invalid/hook") is True
+    assert n.discord_webhook_configured("https://discord.com/api/webhooks/123/abc") is True
+
+
+def test_placeholder_webhook_is_not_configured():
+    assert n.discord_webhook_configured("REPLACE_WITH_YOUR_DISCORD_WEBHOOK_URL") is False
+    assert n.discord_webhook_configured("YOUR_WEBHOOK_URL") is False
+    assert n.discord_webhook_configured("changeme") is False
+    assert n.discord_webhook_configured("") is False
+
+
+@pytest.mark.asyncio
+async def test_http_webhook_delivery_is_skipped_unconfigured(store):
+    calls = []
+
+    async def post(url, body):
+        calls.append(1)
+        return _FakeResp(204)
+
+    now = datetime.now(timezone.utc)
+    result = await n.deliver_discord(
+        {"strategy": "A Six Gates", "instrument": "MNQ", "direction": "LONG", "trigger": "t",
+         "timeframe": "1m", "data_label": "delayed", "as_of": now},
+        store=store,
+        webhook_url="http://example.invalid/hook",
+        http_post=post,
+        now=now,
+    )
+    assert result["status"] == "skipped_unconfigured"
+    assert result["discord_configured"] is False
+    assert calls == []
+
+
+# ---- Future timestamps fail closed ----------------------------------------------
+
+def test_stale_guard_rejects_future_timestamps():
+    now = datetime(2026, 11, 13, 23, 0, tzinfo=timezone.utc)
+    # 5 minutes ahead: beyond the 120s skew allowance — stale (fail closed)
+    assert n.is_stale(now + timedelta(minutes=5), now=now) is True
+    # 60 seconds ahead: inside the clock-skew allowance — not stale
+    assert n.is_stale(now + timedelta(seconds=60), now=now) is False
+
+
+# ---- Event identity: source + event timestamp ------------------------------------
+
+def test_alert_key_includes_source_and_event_ts_when_supplied():
+    base = dict(strategy="A Six Gates", instrument="MNQ", timeframe="1m",
+                direction="LONG", trigger="G1")
+    plain = n.make_alert_key(**base)
+    with_source = n.make_alert_key(**base, source="yahoo:NQ=F")
+    ev1 = n.make_alert_key(**base, source="yahoo:NQ=F", event_ts="2026-11-14T14:00:00+00:00")
+    ev2 = n.make_alert_key(**base, source="yahoo:NQ=F", event_ts="2026-11-14T14:01:00+00:00")
+    assert plain != with_source
+    assert ev1 != ev2
+    # Identical event (source normalized for case) -> identical key
+    assert ev1 == n.make_alert_key(**base, source="Yahoo:NQ=F", event_ts="2026-11-14T14:00:00+00:00")
+    # Omitting the new params is backward compatible
+    assert plain == n.make_alert_key(**base, source="", event_ts="")
+
+
+@pytest.mark.asyncio
+async def test_dedup_distinguishes_events_by_timestamp(store, monkeypatch):
+    monkeypatch.setenv("ALERT_DEDUP_WINDOW_SECONDS", "180")
+    calls = []
+
+    async def post(url, body):
+        calls.append(1)
+        return _FakeResp(204)
+
+    now = datetime.now(timezone.utc)
+    base = {"strategy": "A Six Gates", "instrument": "MNQ", "direction": "LONG",
+            "trigger": "G1 location", "timeframe": "1m", "data_label": "delayed",
+            "source": "yahoo:NQ=F"}
+    event_one = {**base, "as_of": now}
+    event_two = {**base, "as_of": now + timedelta(minutes=1)}  # next bar: a new event
+    first = await n.deliver_discord(event_one, store=store, webhook_url="https://example.invalid/hook",
+                                    http_post=post, now=now)
+    second = await n.deliver_discord(event_two, store=store, webhook_url="https://example.invalid/hook",
+                                     http_post=post, now=now + timedelta(seconds=30))
+    repeat = await n.deliver_discord(event_one, store=store, webhook_url="https://example.invalid/hook",
+                                     http_post=post, now=now + timedelta(seconds=40))
+    assert first["status"] == "delivered"
+    assert second["status"] == "delivered"  # different event, not a duplicate
+    assert repeat["status"] == "skipped_duplicate"  # same event re-delivered in window
+    assert repeat["duplicate_of"] == first["id"]
+    assert len(calls) == 2

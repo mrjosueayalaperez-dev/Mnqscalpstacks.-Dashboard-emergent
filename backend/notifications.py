@@ -12,6 +12,7 @@ import os
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Awaitable, Callable, Dict, Optional, Protocol
+from urllib.parse import urlparse
 
 import httpx
 
@@ -40,6 +41,8 @@ _PLACEHOLDER_URLS = frozenset({
 # Yahoo tape is delayed ~10 minutes; "stale" means older than that expected delay plus a grace window.
 DEFAULT_YAHOO_DELAY_SECONDS = 10 * 60
 DEFAULT_STALE_GRACE_SECONDS = 5 * 60
+# A timestamp further ahead of now than this is not clock skew; it is bad data (fail closed).
+FUTURE_SKEW_SECONDS = 120
 DEFAULT_DEDUP_WINDOW_SECONDS = 3 * 60
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF_BASE_SECONDS = 0.5
@@ -229,12 +232,18 @@ class MongoDeliveryStore:
 
 
 def discord_webhook_configured(url: Optional[str] = None) -> bool:
-    """True when a non-placeholder webhook is set. Never returns or logs the value."""
+    """True when a well-formed HTTPS webhook is set. Never returns or logs the value.
+
+    HTTPS only: an http:// URL (or a bare "https://" with no host) is not configured,
+    so a misconfigured or downgraded endpoint fails closed instead of posting secrets
+    and alert bodies over plaintext.
+    """
     raw = os.environ.get("DISCORD_WEBHOOK_URL", "") if url is None else url
     value = (raw or "").strip()
     if value in _PLACEHOLDER_URLS:
         return False
-    return value.startswith("https://") or value.startswith("http://")
+    parsed = urlparse(value)
+    return parsed.scheme == "https" and bool(parsed.hostname)
 
 
 def discord_config_status() -> Dict[str, Any]:
@@ -361,14 +370,24 @@ def make_alert_key(
     timeframe: str,
     direction: str,
     trigger: str,
+    source: str = "",
+    event_ts: str = "",
 ) -> str:
-    raw = "|".join([
+    parts = [
         (strategy or "").strip().lower(),
         (instrument or "").strip().upper(),
         (timeframe or "").strip().lower(),
         (direction or "").strip().lower(),
         (trigger or "").strip().lower(),
-    ])
+    ]
+    # Event identity: source and the event's own timestamp distinguish two real
+    # events that share the headline fields. Appended only when supplied, so keys
+    # built without them are unchanged.
+    if (source or "").strip():
+        parts.append("source=" + (source or "").strip().lower())
+    if (event_ts or "").strip():
+        parts.append("ts=" + (event_ts or "").strip())
+    raw = "|".join(parts)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:24]
 
 
@@ -383,6 +402,8 @@ def is_stale(
 
     Yahoo's ~10 minute delay is expected and is not, by itself, stale.
     Missing timestamps are treated as stale (fail closed).
+    A timestamp more than FUTURE_SKEW_SECONDS ahead of now is also stale:
+    future-dated data is bad data, not an early delivery.
     Timezone-aware values are compared in UTC; naive values are treated as UTC.
     """
     if as_of is None:
@@ -393,7 +414,10 @@ def is_stale(
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
     max_age = expected_delay_seconds + grace_seconds
-    return (now - as_of).total_seconds() > max_age
+    age = (now - as_of).total_seconds()
+    if age < -FUTURE_SKEW_SECONDS:
+        return True
+    return age > max_age
 
 
 def parse_as_of(value: Any) -> Optional[datetime]:
@@ -547,6 +571,18 @@ def _send_outcome(exc: BaseException) -> str:
     return "ambiguous"
 
 
+def _payload_event_ts(payload: Dict[str, Any]) -> str:
+    """The event's own timestamp as text, for dedup identity. Empty when absent."""
+    raw = payload.get("as_of")
+    if raw is None:
+        raw = payload.get("timestamp")
+    if raw is None:
+        return ""
+    if isinstance(raw, datetime):
+        return raw.isoformat()
+    return str(raw)
+
+
 async def deliver_discord(
     payload: Dict[str, Any],
     *,
@@ -571,6 +607,8 @@ async def deliver_discord(
         timeframe=str(payload.get("timeframe") or ""),
         direction=str(payload.get("direction") or ""),
         trigger=str(payload.get("trigger") or ""),
+        source=str(payload.get("source") or payload.get("data_source") or ""),
+        event_ts=_payload_event_ts(payload),
     )
 
     def _result(**extra: Any) -> Dict[str, Any]:
@@ -652,7 +690,8 @@ async def deliver_discord(
                 code = getattr(resp, "status_code", 0)
             else:
                 async with httpx.AsyncClient(timeout=8.0) as client:
-                    resp = await client.post(url, json={k: body[k] for k in ("username", "embeds")}, timeout=8.0)
+                    # follow_redirects=False: never chase a redirect that could downgrade https -> http.
+                    resp = await client.post(url, json={k: body[k] for k in ("username", "embeds")}, timeout=8.0, follow_redirects=False)
                     code = resp.status_code
             if code in (200, 204):
                 await store.update(delivery_id, {

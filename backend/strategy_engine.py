@@ -6,8 +6,14 @@ disabled until the founder approves PENDING parameters.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
+from notifications import (
+    DEFAULT_STALE_GRACE_SECONDS,
+    DEFAULT_YAHOO_DELAY_SECONDS,
+    FUTURE_SKEW_SECONDS,
+    parse_as_of,
+)
 from strategy_rules import (
     MNQ_DOLLARS_PER_POINT,
     STRATEGY_A_PLACEHOLDERS,
@@ -85,6 +91,45 @@ def rsi_last(closes: Sequence[float], period: int = 14) -> Optional[float]:
 
 def last_completed(bars: Sequence[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     return dict(bars[-1]) if bars else None
+
+
+# Snapshot timestamp fields, in preference order. market_feed.get_last() stamps
+# `fetched_at` (epoch seconds); bar-shaped snapshots carry `time` (epoch seconds).
+_SNAPSHOT_TS_FIELDS = ("fetched_at", "time", "as_of", "timestamp")
+
+
+def snapshot_freshness(snap: Optional[Dict[str, Any]], now: Optional[datetime] = None) -> Tuple[bool, str]:
+    """Pre-evaluation timestamp gate for market snapshots. Pure; no I/O.
+
+    Returns (True, "ok") only for a parseable timestamp inside the same bound the
+    delivery guard uses: no older than the Yahoo delay (600s) plus grace (300s),
+    and no more than FUTURE_SKEW_SECONDS in the future. Anything else fails closed
+    with a machine-readable reason: "missing_timestamp", "malformed_timestamp",
+    "stale_timestamp", or "future_timestamp".
+    """
+    raw: Any = None
+    if snap:
+        for field in _SNAPSHOT_TS_FIELDS:
+            value = snap.get(field)
+            if value not in (None, "", 0, 0.0):
+                raw = value
+                break
+    if raw is None:
+        return (False, "missing_timestamp")
+    as_of = parse_as_of(raw)
+    if as_of is None:
+        return (False, "malformed_timestamp")
+    now = now or datetime.now(timezone.utc)
+    if as_of.tzinfo is None:
+        as_of = as_of.replace(tzinfo=timezone.utc)
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    age = (now - as_of).total_seconds()
+    if age < -FUTURE_SKEW_SECONDS:
+        return (False, "future_timestamp")
+    if age > DEFAULT_YAHOO_DELAY_SECONDS + DEFAULT_STALE_GRACE_SECONDS:
+        return (False, "stale_timestamp")
+    return (True, "ok")
 
 
 def timeframe_alignment(bars_tf: Sequence[Dict[str, Any]], ema_slow: int, direction: str) -> Dict[str, Any]:
