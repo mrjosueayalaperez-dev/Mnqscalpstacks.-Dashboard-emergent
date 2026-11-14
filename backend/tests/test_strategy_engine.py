@@ -4,6 +4,7 @@ No network, no Discord, no broker, no production writes.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import List
 
 import pytest
@@ -323,3 +324,46 @@ def test_strategy_b_flag_on_without_risk_or_range_does_not_fire(monkeypatch):
     )
     assert missing_range["fire"] is False
     assert "will not invent a range" in missing_range["trigger"]
+
+
+# ---- Snapshot freshness gate -----------------------------------------------------
+
+_NOW = datetime(2026, 11, 14, 12, 0, tzinfo=timezone.utc)
+
+
+def test_snapshot_freshness_ok_for_recent_fetch():
+    snap = {"fetched_at": (_NOW - timedelta(seconds=120)).timestamp(), "price": 28000.0}
+    assert eng.snapshot_freshness(snap, now=_NOW) == (True, "ok")
+
+
+def test_snapshot_freshness_missing_timestamp():
+    assert eng.snapshot_freshness({}, now=_NOW) == (False, "missing_timestamp")
+    assert eng.snapshot_freshness(None, now=_NOW) == (False, "missing_timestamp")
+    # market_feed's warm cache starts at fetched_at = 0.0 (never fetched)
+    assert eng.snapshot_freshness({"fetched_at": 0.0}, now=_NOW) == (False, "missing_timestamp")
+
+
+def test_snapshot_freshness_malformed_timestamp():
+    assert eng.snapshot_freshness({"fetched_at": "not-a-date"}, now=_NOW) == (False, "malformed_timestamp")
+
+
+def test_snapshot_freshness_stale_timestamp():
+    old = _NOW - timedelta(seconds=901)  # beyond Yahoo delay 600 + grace 300
+    assert eng.snapshot_freshness({"fetched_at": old.timestamp()}, now=_NOW) == (False, "stale_timestamp")
+    # Exactly at the 900s bound is still fresh.
+    edge = _NOW - timedelta(seconds=900)
+    assert eng.snapshot_freshness({"fetched_at": edge.timestamp()}, now=_NOW) == (True, "ok")
+
+
+def test_snapshot_freshness_future_timestamp():
+    future = _NOW + timedelta(seconds=300)  # beyond the 120s skew allowance
+    assert eng.snapshot_freshness({"fetched_at": future.timestamp()}, now=_NOW) == (False, "future_timestamp")
+    skew = _NOW + timedelta(seconds=60)
+    assert eng.snapshot_freshness({"fetched_at": skew.timestamp()}, now=_NOW) == (True, "ok")
+
+
+def test_snapshot_freshness_accepts_iso_strings_and_bar_time():
+    iso = (_NOW - timedelta(seconds=60)).isoformat()
+    assert eng.snapshot_freshness({"fetched_at": iso}, now=_NOW) == (True, "ok")
+    bar_time = int((_NOW - timedelta(seconds=60)).timestamp())
+    assert eng.snapshot_freshness({"time": bar_time}, now=_NOW) == (True, "ok")

@@ -3020,6 +3020,46 @@ async def seed_auth() -> None:
 
 
 
+# ---- Cross-worker lease for the configured-alert engine -----------------------
+# Every worker process runs configured_alert_engine_loop; without coordination
+# they all evaluate (and can all fire) on the same tick. A single lease document
+# in Mongo elects one runner per cycle; the lease expires so a dead worker's
+# lock never wedges the engine.
+_ALERT_ENGINE_OWNER = uuid.uuid4().hex
+_ALERT_ENGINE_LOCK_ID = "configured_alert_engine"
+_ALERT_ENGINE_LEASE_TTL_SECONDS = 90
+
+
+async def try_acquire_lease(collection: Any, lock_id: str, owner: str, now: datetime, ttl_seconds: int) -> bool:
+    """Atomically acquire or renew the lease `lock_id` for `owner`.
+
+    Succeeds when no lock document exists (insert wins the race), when the stored
+    lease has expired (atomic compare-and-update takes it over), or when `owner`
+    already holds it (renewal extends expires_at). Returns False when another
+    owner holds an unexpired lease. Uses only find_one_and_update / insert_one so
+    tests can back it with a fake collection.
+    """
+    expires_at = now + timedelta(seconds=ttl_seconds)
+    updated = await collection.find_one_and_update(
+        {"_id": lock_id, "$or": [{"owner": owner}, {"expires_at": {"$lte": now}}]},
+        {"$set": {"owner": owner, "expires_at": expires_at, "acquired_at": now}},
+    )
+    if updated is not None:
+        return True
+    try:
+        await collection.insert_one({
+            "_id": lock_id,
+            "owner": owner,
+            "expires_at": expires_at,
+            "acquired_at": now,
+        })
+        return True
+    except Exception as exc:  # DuplicateKeyError: another worker holds the lease
+        if type(exc).__name__ in {"DuplicateKeyError", "BulkWriteError"}:
+            return False
+        raise
+
+
 async def configured_alert_engine_loop() -> None:
     """Evaluate Alerts-panel rules and (when parameters are approved) Strategy A/B. Alerts only."""
     await _asyncio.sleep(25)
@@ -3033,10 +3073,26 @@ async def configured_alert_engine_loop() -> None:
 
 async def evaluate_configured_alerts() -> Dict[str, Any]:
     """Run panel + Strategy A/B evaluators. Never places an order. Never invents PENDING parameters."""
+    # Single-runner: only the worker holding the lease evaluates this cycle.
+    lease_ok = await try_acquire_lease(
+        db.engine_locks,
+        _ALERT_ENGINE_LOCK_ID,
+        _ALERT_ENGINE_OWNER,
+        datetime.now(timezone.utc),
+        _ALERT_ENGINE_LEASE_TTL_SECONDS,
+    )
+    if not lease_ok:
+        logger.info("Configured alert engine: skipped run — another worker holds the lease")
+        return {"fired": 0, "strategy_a": "WAIT", "strategy_b": "WAIT", "skipped_reason": "lease_held_by_another_worker"}
     from market_feed import get_last, get_bars
     snap = get_last() or {}
     if snap.get("source", "").startswith("yahoo") or not snap.get("data_label"):
         snap["data_label"] = "delayed"
+    # Timestamp gate: never evaluate on missing, malformed, stale, or future-dated data.
+    fresh, fresh_reason = strategy_engine.snapshot_freshness(snap)
+    if not fresh:
+        logger.warning(f"Configured alert evaluation WAIT: {fresh_reason}")
+        return {"fired": 0, "strategy_a": "WAIT", "strategy_b": "WAIT", "wait_reason": fresh_reason}
     bars = get_bars()
     fired: List[Dict[str, Any]] = []
 
@@ -3107,6 +3163,17 @@ async def _emit_practice_alert(result: Dict[str, Any], snap: Dict[str, Any]) -> 
         "data_source": snap.get("source") or "yahoo:NQ=F",
         "as_of": as_of,
     }
+    # Stable event identity: the same bar event re-evaluated next tick dedups;
+    # a new bar is a new event. event_ts is the bar time already derived above.
+    payload["alert_key"] = notifications.make_alert_key(
+        strategy=str(payload["strategy"] or ""),
+        instrument=str(payload["instrument"] or ""),
+        timeframe=str(payload["timeframe"] or ""),
+        direction=str(payload["direction"] or ""),
+        trigger=str(payload["trigger"] or ""),
+        source=str(payload["data_source"] or ""),
+        event_ts=as_of.isoformat() if as_of is not None else "",
+    )
     out = await notifications.deliver_discord(payload, store=notifications.MongoDeliveryStore(db))
     await db.alert_events.insert_one({
         "id": str(uuid.uuid4()),
