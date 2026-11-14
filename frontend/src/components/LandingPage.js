@@ -140,12 +140,12 @@ const Solution = () => {
       <h2 className="text-2xl md:text-4xl font-black tracking-tighter text-white text-center mb-3">
         Trade with a <span className="text-[#34C759]">clear framework</span>
       </h2>
-      <p className="text-zinc-500 text-center text-sm max-w-lg mx-auto mb-8 md:mb-12">MNQ Scalp Stacks delivers precision futures intelligence:</p>
+      <p className="text-zinc-500 text-center text-sm max-w-lg mx-auto mb-8 md:mb-12">MNQ Scalp Stacks is a structured practice desk for MNQ / NQ:</p>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
         {[
           { icon: Target, title: "Wave Validation", desc: "Location, alignment, and risk checked before any study idea counts — process over guesswork", color: "#007AFF" },
           { icon: Crosshair, title: "Institutional Guardrails", desc: "Automated detection of psychological levels and resistance zones", color: "#34C759" },
-          { icon: Layers, title: "Full Stack Integration", desc: "Pine Script v3 synced with Python backend for zero-lag execution", color: "#FFCC00" },
+          { icon: Layers, title: "Full Stack Integration", desc: "Share Session / Location / Trigger language with Command Center", color: "#FFCC00" },
         ].map((item) => (
           <div key={item.title} className="p-5 md:p-6 bg-[#121212] border border-white/10 rounded-sm text-center hover:border-white/20 transition-colors">
             <div className="w-12 h-12 mx-auto mb-4 rounded-sm flex items-center justify-center" style={{ background: `${item.color}15` }}>
@@ -183,7 +183,7 @@ const BeforeAfter = () => {
           <div className="absolute top-3 left-3 px-3 py-1 bg-[#34C759] text-black text-xs font-black rounded-sm z-10">AFTER</div>
           <img src="https://images.pexels.com/photos/7567223/pexels-photo-7567223.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940" alt="Clean chart" className="w-full h-48 md:h-64 object-cover opacity-80" />
           <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0A0A0A] to-transparent p-4">
-            <p className="text-sm text-[#34C759]">Clean stack zones. Clear entries. Confident execution.</p>
+            <p className="text-sm text-[#34C759]">Clean stack zones. Clear study language. Checklist before size.</p>
           </div>
         </div>
       </div>
@@ -202,8 +202,8 @@ const HowItWorks = ({ sectionRef }) => (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
         {[
           { step: "01", title: "Load the System", desc: "Add MNQ Scalp Stacks v3 to your TradingView 1-min chart. One click." },
-          { step: "02", title: "Wave Validation", desc: "EMA 21 Spine + VWAP + live key-level resistance — the system does the thinking." },
-          { step: "03", title: "Execute the Punch", desc: "BUY/SELL Punches fire to Discord + Dashboard. Trade with precision." },
+          { step: "02", title: "Wave Validation", desc: "EMA 21 Spine + VWAP + key levels — you still check Location / Trigger / Risk." },
+          { step: "03", title: "Read the Punch", desc: "GO only when Location + Trigger + Risk align; else Neutral — WAIT. Study on the dashboard until Discord is connected." },
         ].map((item) => (
           <div key={item.step} className="relative">
             <span className="text-5xl md:text-6xl font-black text-white/5 absolute -top-2 md:-top-4 -left-1 md:-left-2">{item.step}</span>
@@ -378,7 +378,8 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
           {/* Welcome onboarding */}
           <WelcomeOnboarding steps={welcomeSteps} onComplete={onCompleteStep} />
           {/* Referral */}
-          {referralCode && <ReferralBanner referralCode={referralCode} onCopy={() => toast.success("Referral link copied!")} />}
+          {/* Referral credits hidden until a live referral link is published (P0-M1). */}
+          {false && referralCode && <ReferralBanner referralCode={referralCode} onCopy={() => toast.success("Referral link copied!")} />}
         </div>
       </section>
     );
@@ -431,7 +432,7 @@ const Pricing = ({ ctaRef, onSignup, onCheckout, loading, signedUp, discordInvit
               selectedTier === "free" ? <>Start Free <ArrowRight className="w-4 h-4" /></> :
               <>Get {tiers.find(t => t.id === selectedTier)?.name} Access — Secure Checkout <ArrowRight className="w-4 h-4" /></>}
           </button>
-          <p className="text-center text-[0.65rem] text-zinc-600">Free forever · Instant Discord access · Educational only, not financial advice</p>
+          <p className="text-center text-[0.65rem] text-zinc-600">Secure payment by Stripe · Cancel anytime · Discord invite when connected. Education only — not financial advice.</p>
         </form>
       </div>
     </section>

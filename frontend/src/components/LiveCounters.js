@@ -3,7 +3,7 @@ import { Eye, Users } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-/** Public social-proof strip: traders on board + site visitors. */
+/** Public visit counter. Not a trader-count testimonial. */
 export default function LiveCounters() {
   const [data, setData] = useState(null);
 
@@ -21,8 +21,8 @@ export default function LiveCounters() {
       <span className="flex items-center gap-1.5 text-[0.65rem] font-mono text-zinc-400">
         <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] animate-pulse" />
         <Users className="w-3 h-3 text-[#34C759]" />
-        <span className="text-[#34C759] font-bold" data-testid="counter-traders">{data.traders.toLocaleString()}</span>
-        traders on board
+        <span className="text-[#34C759] font-bold" data-testid="counter-traders">Neutral — WAIT</span>
+        is a valid outcome
       </span>
       <span className="flex items-center gap-1.5 text-[0.65rem] font-mono text-zinc-400">
         <Eye className="w-3 h-3 text-[#007AFF]" />

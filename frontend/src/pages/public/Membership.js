@@ -51,7 +51,7 @@ export default function Membership() {
 
         <p className="text-center text-[0.65rem] text-zinc-600 leading-relaxed">
           Educational simulation only — not a brokerage, not a signal-selling service, not financial advice.
-          Futures trading involves substantial risk of loss and is not suitable for all investors.
+          Futures trading involves substantial risk of loss and is not suitable for all investors. This is education and structured practice, not financial advice. Past performance is not indicative of future results.
         </p>
       </div>
     </PublicLayout>
