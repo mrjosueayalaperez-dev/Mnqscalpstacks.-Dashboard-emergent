@@ -49,6 +49,12 @@ read_secret() {
 }
 WEBHOOK_CRON_SECRET="$(read_secret)"
 
+# Fail closed: an empty secret must never dispatch with an empty Bearer header.
+if [ -z "$WEBHOOK_CRON_SECRET" ]; then
+	echo "dispatch aborted: WEBHOOK_CRON_SECRET is empty (no secret line in $WEBHOOK_ENV_FILE)" >&2
+	exit 1
+fi
+
 # RUN_ID is the idempotency key: cron name + fire time (minute granularity
 # matches the schedule floor).
 RUN_ID="${CRON_NAME}-$(date -u +%Y%m%dT%H%M)"
