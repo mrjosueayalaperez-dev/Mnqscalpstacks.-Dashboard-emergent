@@ -38,6 +38,7 @@ def _pristine_state():
         "kill_switch": False,
         "last_order_at": 0.0,
         "journal_failures": 0,
+        "persistence_ok": True,
         "position": {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0,
                      "sl_price": None, "tp_price": None},
     }
@@ -60,11 +61,17 @@ def srv(monkeypatch):
         return {"price": PRICE}
     monkeypatch.setattr(server, "refresh_mnq", _refresh)
 
+    saved_state = copy.deepcopy(server._operator_state)
+    saved_kill = server.signal_engine_state["kill_switch"]
     server._operator_state.clear()
     server._operator_state.update(copy.deepcopy(_pristine_state()))
     server.signal_engine_state["kill_switch"] = False
     server._test_db = mdb
-    return server
+    yield server
+    # Never leak mutated module state into other suites sharing this process.
+    server._operator_state.clear()
+    server._operator_state.update(saved_state)
+    server.signal_engine_state["kill_switch"] = saved_kill
 
 
 @pytest.fixture()
@@ -315,4 +322,107 @@ def test_journal_failure_counted(srv, monkeypatch):
     order = srv.OperatorOrder(action="BUY", qty=1, order_type="LIMIT", limit_price=24000.0)
     res = _run(srv._execute_order(order))
     assert res["ok"] is True           # manual-path contract preserved
-    assert srv._operator_state["journal_failures"] == 1  # ...but never silent
+    assert res["journal_ok"] is False and res["degraded"] is True  # ...but visible
+    assert srv._operator_state["journal_failures"] == 1  # ...and never silent
+
+
+# --- Zelator PR #24 review corrections (Nov 16) ------------------------------
+# Finding 1: persistence fails closed. Finding 2: hard ceilings.
+# Finding 3: journal failure reaches the execution decision.
+
+class _OkColl:
+    async def insert_one(self, doc):
+        return None
+
+    async def replace_one(self, *a, **k):
+        return None
+
+    async def find_one(self, *a, **k):
+        return None
+
+
+class _DownColl:
+    async def insert_one(self, doc):
+        raise RuntimeError("mongo down")
+
+    async def replace_one(self, *a, **k):
+        raise RuntimeError("mongo down")
+
+    async def find_one(self, *a, **k):
+        raise RuntimeError("mongo down")
+
+
+class _FakeDB2:
+    def __init__(self, orders=None, state=None):
+        self.operator_orders = orders or _OkColl()
+        self.operator_state = state or _OkColl()
+
+    def __getattr__(self, name):
+        return _OkColl()
+
+
+def test_persist_failure_forces_automation_off(srv, monkeypatch):
+    monkeypatch.setattr(srv, "db", _FakeDB2(state=_DownColl()))
+    srv._operator_state["automation_paused"] = False
+    ok = _run(srv._persist_operator_state())
+    assert ok is False
+    assert srv._operator_state["persistence_ok"] is False
+    assert srv._operator_state["automation_paused"] is True  # fail closed
+
+
+def test_hydrate_failure_blocks_automation(client, srv, monkeypatch):
+    monkeypatch.setattr(srv, "db", _FakeDB2(state=_DownColl()))
+    _run(srv._hydrate_operator_state())
+    assert srv._operator_state["persistence_ok"] is False
+    # Even with automation otherwise enabled, the auto path refuses.
+    srv._operator_state["automation_paused"] = False
+    monkeypatch.setattr(srv, "db", srv._test_db)  # healthy db for the rest of the flow
+    r = _alert(client, _buy_alert())
+    body = r.json()
+    assert body["auto_execution"]["status"] == "blocked"
+    assert body["auto_execution"]["reason"] == "state_persistence_unavailable"
+    assert _orders(srv) == []
+
+
+def test_persistence_recovery_restores_flag(srv, monkeypatch):
+    monkeypatch.setattr(srv, "db", _FakeDB2(state=_DownColl()))
+    assert _run(srv._persist_operator_state()) is False
+    monkeypatch.setattr(srv, "db", srv._test_db)
+    assert _run(srv._persist_operator_state()) is True
+    assert srv._operator_state["persistence_ok"] is True
+    # Recovery does NOT auto-resume automation — that stays a human action.
+    assert srv._operator_state["automation_paused"] is True
+
+
+def test_oversized_alert_rejected(client, srv):
+    _enable(srv)
+    r = _alert(client, _buy_alert(qty=50))
+    body = r.json()
+    assert body["auto_execution"]["status"] == "rejected"
+    assert body["auto_execution"]["reason"] == "quantity_exceeds_max_10"
+    assert _orders(srv) == []
+    r2 = _alert(client, _buy_alert(action="SELL", sl_ticks=5000))
+    assert r2.json()["auto_execution"]["reason"] == "bracket_ticks_exceed_max_400"
+    assert _orders(srv) == []
+
+
+def test_validate_order_qty_ceiling(srv):
+    from fastapi import HTTPException
+    order = srv.OperatorOrder(action="BUY", qty=11)
+    with pytest.raises(HTTPException) as ei:
+        srv._validate_order(order, 9999999999.0)
+    assert ei.value.status_code == 400
+    order2 = srv.OperatorOrder(action="BUY", qty=1, sl_ticks=401)
+    with pytest.raises(HTTPException):
+        srv._validate_order(order2, 9999999999.0)
+
+
+def test_auto_journal_failure_halts_automation(srv, monkeypatch):
+    monkeypatch.setattr(srv, "db", _FakeDB2(orders=_DownColl()))
+    srv._operator_state["automation_paused"] = False
+    import json as _json
+    raw = _json.dumps(_buy_alert())
+    res = _run(srv._maybe_auto_execute({"signal_id": "sig-x"}, "BUY", "test", raw))
+    assert res["status"] == "executed_journal_failed"  # never a clean success
+    assert srv._operator_state["journal_failures"] == 1
+    assert srv._operator_state["automation_paused"] is True  # explicit halt state

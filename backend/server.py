@@ -1273,27 +1273,33 @@ async def _resolve_punch_price(price, action: str, source: str) -> float:
     return float(fp)
 
 
-def _alert_exec_params(raw: str) -> Optional[Dict[str, int]]:
+def _alert_exec_params(raw: str):
     """Stage 2: execution parameters carried BY the alert itself.
 
     qty / sl_ticks / tp_ticks are never invented server-side: an alert that
     does not carry all three is recorded as a signal but is NOT auto-executed.
+    Returns (params, None) or (None, reason): missing parameters skip the
+    trade; values beyond the safety ceilings are REJECTED (finding 2).
     """
     try:
         p = json.loads(raw)
     except (ValueError, AttributeError):
-        return None
+        return None, "missing_execution_parameters"
     if not isinstance(p, dict):
-        return None
+        return None, "missing_execution_parameters"
     try:
         qty = int(p.get("qty") or 0)
         sl_ticks = int(p.get("sl_ticks") or 0)
         tp_ticks = int(p.get("tp_ticks") or 0)
     except (TypeError, ValueError):
-        return None
+        return None, "missing_execution_parameters"
     if qty <= 0 or sl_ticks <= 0 or tp_ticks <= 0:
-        return None
-    return {"qty": qty, "sl_ticks": sl_ticks, "tp_ticks": tp_ticks}
+        return None, "missing_execution_parameters"
+    if qty > MAX_ORDER_QTY:
+        return None, f"quantity_exceeds_max_{MAX_ORDER_QTY}"
+    if sl_ticks > MAX_BRACKET_TICKS or tp_ticks > MAX_BRACKET_TICKS:
+        return None, f"bracket_ticks_exceed_max_{MAX_BRACKET_TICKS}"
+    return {"qty": qty, "sl_ticks": sl_ticks, "tp_ticks": tp_ticks}, None
 
 
 async def _maybe_auto_execute(punch: Dict[str, Any], action: str, source: str,
@@ -1309,10 +1315,14 @@ async def _maybe_auto_execute(punch: Dict[str, Any], action: str, source: str,
     if _operator_state["automation_paused"]:
         await _log_signal_event(True, 200, "Auto-exec skipped: automation OFF (not founder-enabled)", action, source)
         return {"status": "skipped", "reason": "automation_off"}
-    params = _alert_exec_params(raw)
+    if not _operator_state.get("persistence_ok", True):
+        await _log_signal_event(False, 503, "Auto-exec blocked: state persistence unavailable (fail-closed)", action, source)
+        return {"status": "blocked", "reason": "state_persistence_unavailable"}
+    params, reject = _alert_exec_params(raw)
     if params is None:
-        await _log_signal_event(False, 200, "Auto-exec skipped: alert carries no execution parameters (qty/sl_ticks/tp_ticks)", action, source)
-        return {"status": "skipped", "reason": "missing_execution_parameters"}
+        status = "skipped" if reject == "missing_execution_parameters" else "rejected"
+        await _log_signal_event(False, 200, f"Auto-exec {status}: {reject}", action, source)
+        return {"status": status, "reason": reject}
     order = OperatorOrder(action=action, symbol="MNQ", qty=params["qty"],
                           order_type="MARKET", sl_ticks=params["sl_ticks"],
                           tp_ticks=params["tp_ticks"])
@@ -1323,6 +1333,11 @@ async def _maybe_auto_execute(punch: Dict[str, Any], action: str, source: str,
     except HTTPException as e:
         await _log_signal_event(False, e.status_code, f"Auto-exec blocked: {e.detail}", action, source)
         return {"status": "blocked", "reason": e.detail}
+    if res.get("journal_ok") is False:
+        # Finding 3: never report a clean success when the journal failed.
+        await _log_signal_event(False, 500, "Auto-exec DEGRADED: journal write failed — automation halted until reconciled", action, source)
+        return {"status": "executed_journal_failed", "order_id": res["order"]["id"],
+                "fill_price": res["order"]["fill_price"]}
     await _log_signal_event(True, 200, f"Auto-exec: {action} x{params['qty']} filled @ {res['order']['fill_price']}", action, source)
     return {"status": "executed", "order_id": res["order"]["id"],
             "fill_price": res["order"]["fill_price"]}
@@ -1336,6 +1351,8 @@ async def _maybe_auto_close(source: str) -> Dict[str, Any]:
     """
     if _operator_state["automation_paused"]:
         return {"status": "skipped", "reason": "automation_off"}
+    if not _operator_state.get("persistence_ok", True):
+        return {"status": "blocked", "reason": "state_persistence_unavailable"}
     pos = _operator_state["position"]
     if not pos.get("side"):
         return {"status": "skipped", "reason": "no_open_position"}
@@ -2696,12 +2713,20 @@ _operator_state = {
     "kill_switch": False,
     "last_order_at": 0.0,  # unix ts
     "journal_failures": 0,
+    # Runtime-only (never persisted): False after any persistence failure —
+    # automatic execution stays blocked until a persist succeeds again.
+    "persistence_ok": True,
     "position": {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0,
                  "sl_price": None, "tp_price": None},
 }
 
 # Order cooldown (server-side, ms)
 _ORDER_COOLDOWN_MS = 1500
+
+# Stage 2 safety ceilings (Zelator PR #24 review, finding 2): hard caps on
+# every order path — a malformed alert must never size an outsized position.
+MAX_ORDER_QTY = 10
+MAX_BRACKET_TICKS = 400
 
 
 # ---- Stage 2: operator-state persistence (readiness finding F1) ----
@@ -2718,16 +2743,27 @@ _OPERATOR_PERSISTED_KEYS = (
 )
 
 
-async def _persist_operator_state() -> None:
+async def _persist_operator_state() -> bool:
+    """Persist the state snapshot. FAILS CLOSED (Zelator PR #24 review,
+    finding 1): on failure, automation is forced OFF and persistence_ok is
+    cleared — automatic execution stays blocked until a persist succeeds."""
     try:
         doc = {k: _operator_state[k] for k in _OPERATOR_PERSISTED_KEYS}
         await db.operator_state.replace_one(
             {"_id": _OPERATOR_STATE_ID}, {"_id": _OPERATOR_STATE_ID, **doc}, upsert=True)
-    except Exception as e:  # persistence must never crash an order path
-        logger.error(f"operator_state persist failed: {e}")
+        _operator_state["persistence_ok"] = True
+        return True
+    except Exception as e:
+        _operator_state["persistence_ok"] = False
+        _operator_state["automation_paused"] = True
+        logger.error(f"operator_state persist FAILED — automation forced OFF until recovery: {e}")
+        return False
 
 
 async def _hydrate_operator_state() -> None:
+    """Restore state at startup. FAILS CLOSED: if the saved state cannot be
+    read, the process starts with automation unavailable (paused + not ok)
+    rather than silently trusting default in-memory state."""
     try:
         saved = await db.operator_state.find_one({"_id": _OPERATOR_STATE_ID})
         if saved:
@@ -2736,7 +2772,9 @@ async def _hydrate_operator_state() -> None:
                     _operator_state[k] = saved[k]
             logger.info("operator_state hydrated from db (position + risk state restored)")
     except Exception as e:
-        logger.warning(f"operator_state hydrate skipped: {e}")
+        _operator_state["persistence_ok"] = False
+        _operator_state["automation_paused"] = True
+        logger.error(f"operator_state hydrate FAILED — automation unavailable until state recovers: {e}")
 
 
 async def _journal_operator(entry: Dict[str, Any]) -> bool:
@@ -2894,6 +2932,12 @@ def _validate_order(order: OperatorOrder, now_ts: float) -> None:
         raise HTTPException(status_code=429, detail=f"Cooldown — wait {int(_ORDER_COOLDOWN_MS - elapsed_ms)}ms")
     if order.order_type == "LIMIT" and order.limit_price is None:
         raise HTTPException(status_code=400, detail="LIMIT order requires limit_price")
+    # Stage 2 ceilings (finding 2): quantity + bracket distance, every path.
+    if not (1 <= order.qty <= MAX_ORDER_QTY):
+        raise HTTPException(status_code=400, detail=f"Quantity {order.qty} outside allowed range 1..{MAX_ORDER_QTY}")
+    for _label, _ticks in (("sl_ticks", order.sl_ticks), ("tp_ticks", order.tp_ticks)):
+        if _ticks is not None and not (0 < _ticks <= MAX_BRACKET_TICKS):
+            raise HTTPException(status_code=400, detail=f"{_label} {_ticks} outside allowed range 1..{MAX_BRACKET_TICKS}")
 
 
 async def _resolve_fill_price(order: OperatorOrder) -> float:
@@ -3076,6 +3120,8 @@ async def _execute_order(order: OperatorOrder, origin: str = "MANUAL",
     engine a chance to act on the fill price. Raises HTTPException when the
     safety chain blocks the order.
     """
+    if origin == "AUTO" and not _operator_state.get("persistence_ok", True):
+        raise HTTPException(status_code=503, detail="State persistence unavailable — automatic execution blocked (fail-closed)")
     now_ts = datetime.now(timezone.utc).timestamp()
     _validate_order(order, now_ts)
 
@@ -3086,12 +3132,19 @@ async def _execute_order(order: OperatorOrder, origin: str = "MANUAL",
     _apply_fill(order, fill_price)
 
     entry = _build_journal_entry(order, fill_price, origin=origin, source_alert=source_alert)
-    await _journal_operator(entry)
+    journaled = await _journal_operator(entry)
+    if not journaled and origin == "AUTO":
+        # Finding 3: explicit failure state — automation halts until the
+        # journal is reconciled; the result is never a clean success.
+        _operator_state["automation_paused"] = True
+        logger.error("AUTO execution journal FAILED — automation halted until reconciled")
     await _persist_operator_state()
     await _check_bracket_exits(fill_price)
 
     return {
         "ok": True,
+        "journal_ok": journaled,
+        "degraded": not journaled,
         "order": entry,
         "state": _operator_state["position"],
         "ati": {"routed": False, "command_id": None, "note": "Broker routing disabled (SIM log only)"},
