@@ -1273,6 +1273,103 @@ async def _resolve_punch_price(price, action: str, source: str) -> float:
     return float(fp)
 
 
+def _alert_exec_params(raw: str):
+    """Stage 2: execution parameters carried BY the alert itself.
+
+    qty / sl_ticks / tp_ticks are never invented server-side: an alert that
+    does not carry all three is recorded as a signal but is NOT auto-executed.
+    Returns (params, None) or (None, reason): missing parameters skip the
+    trade; values beyond the safety ceilings are REJECTED (finding 2).
+    """
+    try:
+        p = json.loads(raw)
+    except (ValueError, AttributeError):
+        return None, "missing_execution_parameters"
+    if not isinstance(p, dict):
+        return None, "missing_execution_parameters"
+    try:
+        qty = int(p.get("qty") or 0)
+        sl_ticks = int(p.get("sl_ticks") or 0)
+        tp_ticks = int(p.get("tp_ticks") or 0)
+    except (TypeError, ValueError):
+        return None, "missing_execution_parameters"
+    if qty <= 0 or sl_ticks <= 0 or tp_ticks <= 0:
+        return None, "missing_execution_parameters"
+    if qty > MAX_ORDER_QTY:
+        return None, f"quantity_exceeds_max_{MAX_ORDER_QTY}"
+    if sl_ticks > MAX_BRACKET_TICKS or tp_ticks > MAX_BRACKET_TICKS:
+        return None, f"bracket_ticks_exceed_max_{MAX_BRACKET_TICKS}"
+    return {"qty": qty, "sl_ticks": sl_ticks, "tp_ticks": tp_ticks}, None
+
+
+async def _maybe_auto_execute(punch: Dict[str, Any], action: str, source: str,
+                              raw: str) -> Dict[str, Any]:
+    """Stage 2, Part B: connect a validated BUY/SELL punch to the paper engine.
+
+    Gates, in order: automation must be founder-enabled (automation_paused
+    False); the alert must carry its own execution parameters; the shared
+    safety chain (_validate_order) still runs inside _execute_order. Every
+    outcome — executed, skipped, blocked — is returned and logged, never
+    silent. The journal entry carries the originating signal's identity.
+    """
+    if _operator_state["automation_paused"]:
+        await _log_signal_event(True, 200, "Auto-exec skipped: automation OFF (not founder-enabled)", action, source)
+        return {"status": "skipped", "reason": "automation_off"}
+    if not _operator_state.get("persistence_ok", True):
+        await _log_signal_event(False, 503, "Auto-exec blocked: state persistence unavailable (fail-closed)", action, source)
+        return {"status": "blocked", "reason": "state_persistence_unavailable"}
+    params, reject = _alert_exec_params(raw)
+    if params is None:
+        status = "skipped" if reject == "missing_execution_parameters" else "rejected"
+        await _log_signal_event(False, 200, f"Auto-exec {status}: {reject}", action, source)
+        return {"status": status, "reason": reject}
+    order = OperatorOrder(action=action, symbol="MNQ", qty=params["qty"],
+                          order_type="MARKET", sl_ticks=params["sl_ticks"],
+                          tp_ticks=params["tp_ticks"])
+    try:
+        res = await _execute_order(order, origin="AUTO",
+                                   source_alert={"signal_id": punch.get("signal_id"),
+                                                 "action": action, "source": source})
+    except HTTPException as e:
+        await _log_signal_event(False, e.status_code, f"Auto-exec blocked: {e.detail}", action, source)
+        return {"status": "blocked", "reason": e.detail}
+    if res.get("journal_ok") is False:
+        # Finding 3: never report a clean success when the journal failed.
+        await _log_signal_event(False, 500, "Auto-exec DEGRADED: journal write failed — automation halted until reconciled", action, source)
+        return {"status": "executed_journal_failed", "order_id": res["order"]["id"],
+                "fill_price": res["order"]["fill_price"]}
+    await _log_signal_event(True, 200, f"Auto-exec: {action} x{params['qty']} filled @ {res['order']['fill_price']}", action, source)
+    return {"status": "executed", "order_id": res["order"]["id"],
+            "fill_price": res["order"]["fill_price"]}
+
+
+async def _maybe_auto_close(source: str) -> Dict[str, Any]:
+    """Stage 2, Part B (finding F5): wire alert CLOSE to the POSITION, deliberately.
+
+    Alert-side CLOSE also expires active signals (existing behavior, kept);
+    this is the separate, explicit position-side act.
+    """
+    if _operator_state["automation_paused"]:
+        return {"status": "skipped", "reason": "automation_off"}
+    if not _operator_state.get("persistence_ok", True):
+        return {"status": "blocked", "reason": "state_persistence_unavailable"}
+    pos = _operator_state["position"]
+    if not pos.get("side"):
+        return {"status": "skipped", "reason": "no_open_position"}
+    order = OperatorOrder(
+        action="CLOSE_LONG" if pos["side"] == "LONG" else "CLOSE_SHORT",
+        symbol="MNQ", qty=pos["qty"], order_type="MARKET")
+    try:
+        res = await _execute_order(order, origin="AUTO",
+                                   source_alert={"action": "CLOSE", "source": source})
+    except HTTPException as e:
+        await _log_signal_event(False, e.status_code, f"Auto-close blocked: {e.detail}", "CLOSE", source)
+        return {"status": "blocked", "reason": e.detail}
+    await _log_signal_event(True, 200, f"Auto-close: position closed @ {res['order']['fill_price']}", "CLOSE", source)
+    return {"status": "executed", "order_id": res["order"]["id"],
+            "fill_price": res["order"]["fill_price"]}
+
+
 @api_router.post("/signals/tradingview", tags=["signals"])
 async def signals_tradingview(request: Request):
     """Primary TradingView inbound, including the PR #15 Vercel-forwarded contract.
@@ -1309,7 +1406,14 @@ async def signals_tradingview(request: Request):
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail="PRICE action requires a numeric price")
         market_feed_set_live_price(fp)
-        return {"ok": True, "action": "PRICE", "price": fp}
+        # Stage 2: the tape drives the bracket exit engine.
+        exit_entry = await _check_bracket_exits(fp)
+        out = {"ok": True, "action": "PRICE", "price": fp}
+        if exit_entry:
+            out["exit"] = {"reason": exit_entry["exit_reason"],
+                           "fill_price": exit_entry["fill_price"],
+                           "pnl": exit_entry["exit_pnl"]}
+        return out
     if symbol not in SYMBOL_MAP:
         await _log_signal_event(False, 400, f"Unsupported symbol: {symbol}", action, source)
         raise HTTPException(status_code=400, detail=f"Unsupported symbol {symbol} — use MNQ1! or NQ1!")
@@ -1328,12 +1432,15 @@ async def signals_tradingview(request: Request):
     if action == "CLOSE":
         r = await db.signals.update_many({"status": "active"}, {"$set": {"status": "expired"}})
         await _log_signal_event(True, 200, f"CLOSE: expired {r.modified_count} active", action, source)
-        return {"status": "closed", "expired": r.modified_count}
+        auto_close = await _maybe_auto_close(source)
+        return {"status": "closed", "expired": r.modified_count, "auto_close": auto_close}
 
     fp = await _resolve_punch_price(a["price"], action, source)
     side = "long" if action == "BUY" else "short"
     result = await _create_punch(side, fp, interval, "webhook", note, f"{source} · {symbol} {interval}m", False)
     await _log_signal_event(result["status"] == "created", 200, f"{result['status']}: {action} @ {fp}", action, source)
+    if result["status"] == "created":
+        result["auto_execution"] = await _maybe_auto_execute(result, action, source, raw)
     return result
 
 
@@ -2600,14 +2707,89 @@ _operator_state = {
     "max_daily_loss": -100.00,
     "max_daily_trades": 20,
     "session_started_at": datetime.now(timezone.utc).isoformat(),
-    "automation_paused": False,
+    # Stage 2 (F2): automation defaults OFF — the founder explicitly enables
+    # paper automation; until then AUTO execution is blocked by the gate.
+    "automation_paused": True,
     "kill_switch": False,
     "last_order_at": 0.0,  # unix ts
-    "position": {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0},
+    "journal_failures": 0,
+    # Runtime-only (never persisted): False after any persistence failure —
+    # automatic execution stays blocked until a persist succeeds again.
+    "persistence_ok": True,
+    "position": {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0,
+                 "sl_price": None, "tp_price": None},
 }
 
 # Order cooldown (server-side, ms)
 _ORDER_COOLDOWN_MS = 1500
+
+# Stage 2 safety ceilings (Zelator PR #24 review, finding 2): hard caps on
+# every order path — a malformed alert must never size an outsized position.
+MAX_ORDER_QTY = 10
+MAX_BRACKET_TICKS = 400
+
+
+# ---- Stage 2: operator-state persistence (readiness finding F1) ----
+# Position AND risk state (daily P&L, trade count, kill switch, automation
+# gate) must survive a backend restart; an in-memory-only lockout can be
+# bypassed by restarting the process. The working copy stays in
+# _operator_state; every mutation persists a snapshot to db.operator_state
+# and startup hydrates it back.
+_OPERATOR_STATE_ID = "operator"
+_OPERATOR_PERSISTED_KEYS = (
+    "balance", "daily_pnl", "daily_trades", "max_daily_loss", "max_daily_trades",
+    "session_started_at", "automation_paused", "kill_switch", "last_order_at",
+    "journal_failures", "position",
+)
+
+
+async def _persist_operator_state() -> bool:
+    """Persist the state snapshot. FAILS CLOSED (Zelator PR #24 review,
+    finding 1): on failure, automation is forced OFF and persistence_ok is
+    cleared — automatic execution stays blocked until a persist succeeds."""
+    try:
+        doc = {k: _operator_state[k] for k in _OPERATOR_PERSISTED_KEYS}
+        await db.operator_state.replace_one(
+            {"_id": _OPERATOR_STATE_ID}, {"_id": _OPERATOR_STATE_ID, **doc}, upsert=True)
+        _operator_state["persistence_ok"] = True
+        return True
+    except Exception as e:
+        _operator_state["persistence_ok"] = False
+        _operator_state["automation_paused"] = True
+        logger.error(f"operator_state persist FAILED — automation forced OFF until recovery: {e}")
+        return False
+
+
+async def _hydrate_operator_state() -> None:
+    """Restore state at startup. FAILS CLOSED: if the saved state cannot be
+    read, the process starts with automation unavailable (paused + not ok)
+    rather than silently trusting default in-memory state."""
+    try:
+        saved = await db.operator_state.find_one({"_id": _OPERATOR_STATE_ID})
+        if saved:
+            for k in _OPERATOR_PERSISTED_KEYS:
+                if k in saved:
+                    _operator_state[k] = saved[k]
+            logger.info("operator_state hydrated from db (position + risk state restored)")
+    except Exception as e:
+        _operator_state["persistence_ok"] = False
+        _operator_state["automation_paused"] = True
+        logger.error(f"operator_state hydrate FAILED — automation unavailable until state recovers: {e}")
+
+
+async def _journal_operator(entry: Dict[str, Any]) -> bool:
+    """Journal write with integrity surfacing (readiness finding F3).
+
+    A lost journal write is a defect, not a warning: failures are counted on
+    the operator state (visible via /operator/state) and logged at ERROR.
+    """
+    try:
+        await db.operator_orders.insert_one(dict(entry))
+        return True
+    except Exception as e:
+        _operator_state["journal_failures"] = _operator_state.get("journal_failures", 0) + 1
+        logger.error(f"operator_orders insert FAILED (journal integrity): {e}")
+        return False
 
 
 class OperatorOrder(BaseModel):
@@ -2750,6 +2932,12 @@ def _validate_order(order: OperatorOrder, now_ts: float) -> None:
         raise HTTPException(status_code=429, detail=f"Cooldown — wait {int(_ORDER_COOLDOWN_MS - elapsed_ms)}ms")
     if order.order_type == "LIMIT" and order.limit_price is None:
         raise HTTPException(status_code=400, detail="LIMIT order requires limit_price")
+    # Stage 2 ceilings (finding 2): quantity + bracket distance, every path.
+    if not (1 <= order.qty <= MAX_ORDER_QTY):
+        raise HTTPException(status_code=400, detail=f"Quantity {order.qty} outside allowed range 1..{MAX_ORDER_QTY}")
+    for _label, _ticks in (("sl_ticks", order.sl_ticks), ("tp_ticks", order.tp_ticks)):
+        if _ticks is not None and not (0 < _ticks <= MAX_BRACKET_TICKS):
+            raise HTTPException(status_code=400, detail=f"{_label} {_ticks} outside allowed range 1..{MAX_BRACKET_TICKS}")
 
 
 async def _resolve_fill_price(order: OperatorOrder) -> float:
@@ -2773,36 +2961,62 @@ def _weighted_avg(prev_qty: int, prev_avg: float, add_qty: int, add_price: float
 
 
 def _flat_position() -> Dict[str, Any]:
-    return {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+    return {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0,
+            "sl_price": None, "tp_price": None}
+
+
+def _pnl_for_close(side: Optional[str], avg_entry: float, exit_price: float, qty: int) -> float:
+    """Realized P&L for closing qty of a position. MNQ = $2 per point."""
+    if side == "LONG":
+        return (exit_price - avg_entry) * qty * 2
+    if side == "SHORT":
+        return (avg_entry - exit_price) * qty * 2
+    return 0.0
 
 
 def _apply_fill(order: OperatorOrder, fill_price: float) -> None:
-    """Mutate _operator_state['position'] and ['daily_pnl'] based on the action."""
+    """Mutate _operator_state['position'] and ['daily_pnl'] based on the action.
+
+    Stage 2 (readiness finding F4): opposing actions are quantity-aware — an
+    opposing order first closes min(order qty, position qty) and books P&L on
+    the closed part only; any leftover quantity opens the new side. Brackets
+    attach at the fill that OPENS a position (flat -> positioned) and stay
+    with the remainder on a partial close; stacking keeps the opening
+    brackets.
+    """
     pos = _operator_state["position"]
     action = order.action
 
-    if action == "BUY":
-        if pos["side"] == "SHORT":
-            pnl = (pos["avg_entry"] - fill_price) * pos["qty"] * 2
-            _operator_state["daily_pnl"] += pnl
-            _operator_state["position"] = _flat_position()
-        else:
-            new_qty = pos["qty"] + order.qty
-            new_avg = _weighted_avg(pos["qty"], pos["avg_entry"], order.qty, fill_price)
-            _operator_state["position"] = {"side": "LONG", "qty": new_qty, "avg_entry": round(new_avg, 2), "unrealized_pnl": 0.0}
-    elif action == "SELL":
-        if pos["side"] == "LONG":
-            pnl = (fill_price - pos["avg_entry"]) * pos["qty"] * 2
-            _operator_state["daily_pnl"] += pnl
-            _operator_state["position"] = _flat_position()
-        else:
-            new_qty = pos["qty"] + order.qty
-            new_avg = _weighted_avg(pos["qty"], pos["avg_entry"], order.qty, fill_price)
-            _operator_state["position"] = {"side": "SHORT", "qty": new_qty, "avg_entry": round(new_avg, 2), "unrealized_pnl": 0.0}
+    if action in ("BUY", "SELL"):
+        want_side = "LONG" if action == "BUY" else "SHORT"
+        remaining = order.qty
+        if pos["side"] and pos["side"] != want_side:
+            close_qty = min(remaining, pos["qty"])
+            _operator_state["daily_pnl"] += _pnl_for_close(
+                pos["side"], pos["avg_entry"], fill_price, close_qty)
+            remaining -= close_qty
+            left = pos["qty"] - close_qty
+            if left == 0:
+                _operator_state["position"] = _flat_position()
+            else:
+                pos["qty"] = left  # remainder keeps its avg entry and brackets
+            pos = _operator_state["position"]
+        if remaining > 0:
+            if pos["side"] == want_side:
+                new_qty = pos["qty"] + remaining
+                new_avg = _weighted_avg(pos["qty"], pos["avg_entry"], remaining, fill_price)
+                pos["qty"] = new_qty
+                pos["avg_entry"] = round(new_avg, 2)
+            else:
+                _operator_state["position"] = {
+                    "side": want_side, "qty": remaining,
+                    "avg_entry": round(fill_price, 2), "unrealized_pnl": 0.0,
+                    "sl_price": _bracket_price(action, fill_price, order.sl_ticks, is_stop=True),
+                    "tp_price": _bracket_price(action, fill_price, order.tp_ticks, is_stop=False),
+                }
     elif action in ("CLOSE_LONG", "CLOSE_SHORT") and pos["side"]:
-        mult = 1 if pos["side"] == "LONG" else -1
-        pnl = (fill_price - pos["avg_entry"]) * pos["qty"] * 2 * mult
-        _operator_state["daily_pnl"] += pnl
+        _operator_state["daily_pnl"] += _pnl_for_close(
+            pos["side"], pos["avg_entry"], fill_price, pos["qty"])
         _operator_state["position"] = _flat_position()
     # BREAK_EVEN is a no-op on PnL (SL→BE marker only in a real engine)
 
@@ -2821,7 +3035,9 @@ def _bracket_price(action: str, fill_price: float, ticks: Optional[int], is_stop
     return None
 
 
-def _build_journal_entry(order: OperatorOrder, fill_price: float) -> Dict[str, Any]:
+def _build_journal_entry(order: OperatorOrder, fill_price: float,
+                         origin: str = "MANUAL",
+                         source_alert: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     return {
         "id": str(uuid.uuid4()),
         "ts": datetime.now(timezone.utc).isoformat(),
@@ -2839,12 +3055,73 @@ def _build_journal_entry(order: OperatorOrder, fill_price: float) -> Dict[str, A
         "resulting_position": _operator_state["position"],
         "daily_pnl": _operator_state["daily_pnl"],
         "phase": "SIM_LOG_ONLY",
+        "origin": origin,
+        "source_alert": source_alert,
     }
 
 
-@api_router.post("/operator/order", tags=["operator"], dependencies=[Depends(require_write_key)])
-async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
-    """Server-side validated order. PHASE 1: logs only, does NOT submit to a broker."""
+async def _check_bracket_exits(price: float) -> Optional[Dict[str, Any]]:
+    """Stage 2 exit engine (Package 4, Part A2).
+
+    If the open simulated position carries bracket prices and the tape price
+    crosses one, close the position AT the bracket price, book the P&L, and
+    journal the exit with its reason. Fill model (stated, v1): exits fill at
+    the bracket price itself; zero slippage, zero fees.
+    """
+    pos = _operator_state["position"]
+    if not pos.get("side") or not pos.get("qty"):
+        return None
+    sl, tp = pos.get("sl_price"), pos.get("tp_price")
+    reason = exit_price = None
+    if pos["side"] == "LONG":
+        if sl is not None and price <= sl:
+            reason, exit_price = "STOP_LOSS", sl
+        elif tp is not None and price >= tp:
+            reason, exit_price = "TAKE_PROFIT", tp
+    else:  # SHORT
+        if sl is not None and price >= sl:
+            reason, exit_price = "STOP_LOSS", sl
+        elif tp is not None and price <= tp:
+            reason, exit_price = "TAKE_PROFIT", tp
+    if reason is None:
+        return None
+    pnl = _pnl_for_close(pos["side"], pos["avg_entry"], exit_price, pos["qty"])
+    _operator_state["daily_pnl"] = round(_operator_state["daily_pnl"] + pnl, 2)
+    entry = {
+        "id": str(uuid.uuid4()),
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "action": f"EXIT_{pos['side']}",
+        "symbol": "MNQ",
+        "qty": pos["qty"],
+        "order_type": "BRACKET_EXIT",
+        "limit_price": None,
+        "fill_price": exit_price,
+        "exit_reason": reason,
+        "exit_pnl": round(pnl, 2),
+        "resulting_position": _flat_position(),
+        "daily_pnl": _operator_state["daily_pnl"],
+        "phase": "SIM_LOG_ONLY",
+        "origin": "ENGINE",
+        "source_alert": None,
+    }
+    _operator_state["position"] = _flat_position()
+    await _journal_operator(entry)
+    await _persist_operator_state()
+    logger.info(f"bracket exit: {reason} @ {exit_price} pnl {pnl}")
+    return entry
+
+
+async def _execute_order(order: OperatorOrder, origin: str = "MANUAL",
+                         source_alert: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    """Shared execution core for the manual endpoint and the Stage 2 auto path.
+
+    Runs the full safety chain, resolves the fill, applies it, journals with
+    origin + originating-alert identity, persists state, and gives the exit
+    engine a chance to act on the fill price. Raises HTTPException when the
+    safety chain blocks the order.
+    """
+    if origin == "AUTO" and not _operator_state.get("persistence_ok", True):
+        raise HTTPException(status_code=503, detail="State persistence unavailable — automatic execution blocked (fail-closed)")
     now_ts = datetime.now(timezone.utc).timestamp()
     _validate_order(order, now_ts)
 
@@ -2854,18 +3131,30 @@ async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
     fill_price = await _resolve_fill_price(order)
     _apply_fill(order, fill_price)
 
-    entry = _build_journal_entry(order, fill_price)
-    try:
-        await db.operator_orders.insert_one(dict(entry))
-    except Exception as e:
-        logger.warning(f"operator_orders insert failed: {e}")
+    entry = _build_journal_entry(order, fill_price, origin=origin, source_alert=source_alert)
+    journaled = await _journal_operator(entry)
+    if not journaled and origin == "AUTO":
+        # Finding 3: explicit failure state — automation halts until the
+        # journal is reconciled; the result is never a clean success.
+        _operator_state["automation_paused"] = True
+        logger.error("AUTO execution journal FAILED — automation halted until reconciled")
+    await _persist_operator_state()
+    await _check_bracket_exits(fill_price)
 
     return {
         "ok": True,
+        "journal_ok": journaled,
+        "degraded": not journaled,
         "order": entry,
         "state": _operator_state["position"],
         "ati": {"routed": False, "command_id": None, "note": "Broker routing disabled (SIM log only)"},
     }
+
+
+@api_router.post("/operator/order", tags=["operator"], dependencies=[Depends(require_write_key)])
+async def operator_order(order: OperatorOrder) -> Dict[str, Any]:
+    """Server-side validated order. PHASE 1: logs only, does NOT submit to a broker."""
+    return await _execute_order(order)
 
 
 @api_router.post("/operator/control/{action}", tags=["operator"], dependencies=[Depends(require_write_key)])
@@ -2873,30 +3162,36 @@ async def operator_control(action: str) -> Dict[str, Any]:
     """Master controls: flatten | pause | resume | kill | reset_session"""
     action = action.lower()
     if action == "flatten":
-        _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
-        await db.operator_orders.insert_one({
+        _operator_state["position"] = _flat_position()
+        await _journal_operator({
             "id": str(uuid.uuid4()), "ts": datetime.now(timezone.utc).isoformat(),
             "action": "FLATTEN_ALL", "phase": "SIM_LOG_ONLY",
         })
+        await _persist_operator_state()
         return {"ok": True, "action": "FLATTEN", "position": _operator_state["position"]}
     if action == "pause":
         _operator_state["automation_paused"] = True
+        await _persist_operator_state()
         return {"ok": True, "automation_paused": True}
     if action == "resume":
         _operator_state["automation_paused"] = False
+        await _persist_operator_state()
         return {"ok": True, "automation_paused": False}
     if action == "kill":
         _operator_state["kill_switch"] = True
-        _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        _operator_state["position"] = _flat_position()
+        await _persist_operator_state()
         return {"ok": True, "kill_switch": True}
     if action == "unkill":
         _operator_state["kill_switch"] = False
+        await _persist_operator_state()
         return {"ok": True, "kill_switch": False}
     if action == "reset_session":
         _operator_state["daily_pnl"] = 0.0
         _operator_state["daily_trades"] = 0
         _operator_state["session_started_at"] = datetime.now(timezone.utc).isoformat()
-        _operator_state["position"] = {"side": None, "qty": 0, "avg_entry": 0.0, "unrealized_pnl": 0.0}
+        _operator_state["position"] = _flat_position()
+        await _persist_operator_state()
         return {"ok": True, "action": "RESET_SESSION"}
     raise HTTPException(status_code=400, detail=f"Unknown control action: {action}")
 
@@ -3014,6 +3309,7 @@ app.include_router(api_router)
 @app.on_event("startup")
 async def seed_auth() -> None:
     await auth_module.seed_admin(db)
+    await _hydrate_operator_state()
     saved = await db.settings.find_one({"_id": "signal_engine"})
     if saved:
         signal_engine_state["session_filter"] = saved.get("session_filter", signal_engine_state["session_filter"])
