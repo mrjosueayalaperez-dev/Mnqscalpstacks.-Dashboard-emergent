@@ -1394,6 +1394,12 @@ async def signals_tradingview(request: Request):
         alert_time = json.loads(raw).get("time") or None
     except (ValueError, AttributeError):
         alert_time = None
+    if isinstance(alert_time, (int, float)) and not isinstance(
+            alert_time, bool):
+        # A numeric alert time is an epoch; normalize it to the ISO
+        # form the paper bridge's timestamp handling reads.
+        alert_time = datetime.fromtimestamp(
+            float(alert_time), tz=timezone.utc).isoformat()
     tv_p = {"route": "primary", "action": action, "symbol": symbol, "interval": interval, "price": a["price"],
             "source": source, "note": note, "cooldown_min": signal_engine_state["cooldown_min"]}
     if action not in ("BUY", "SELL", "CLOSE", "HOLD", "PRICE"):
@@ -1406,8 +1412,23 @@ async def signals_tradingview(request: Request):
         except (TypeError, ValueError):
             raise HTTPException(status_code=422, detail="PRICE action requires a numeric price")
         market_feed_set_live_price(fp)
-        # Stage 2: the tape drives the bracket exit engine.
-        exit_entry = await _check_bracket_exits(fp)
+        # Stage 2: the tape drives the bracket exit engine. When the
+        # paper bridge exists in this process (the local integrated
+        # system served by paper_bridge_api), it is the single
+        # driver: the price is presented to it — with the alert's own
+        # time field, offset preserved — so bracket exits, the
+        # Amendment A1 scheduled/recovery time exits, and the bridge
+        # journal all evaluate through one path (readiness package
+        # §5.2). A missing time field presents the price with no
+        # timestamp (no time evaluation); an unparseable one is
+        # journaled by the bridge as a PRICE_TIME_GAP. Without a
+        # bridge, the engine's bracket check runs directly, as before.
+        _bridge = _paper_bridge_api._bridge
+        if _bridge is not None:
+            exit_entry = await _asyncio.to_thread(
+                _bridge.on_price, fp, alert_time)
+        else:
+            exit_entry = await _check_bracket_exits(fp)
         out = {"ok": True, "action": "PRICE", "price": fp}
         if exit_entry:
             out["exit"] = {"reason": exit_entry["exit_reason"],
@@ -3295,6 +3316,12 @@ api_router.include_router(proof.build_proof_router(db, require_write_key))
 api_router.include_router(auth_module.build_auth_router(db))
 api_router.include_router(analytics.build_analytics_router(db))
 api_router.include_router(pnl_journal.build_pnl_journal_router(db, auth_module.get_current_user))
+# Paper bridge status surface (Phase 2 paper-readiness mission, Stage 3):
+# read-only joined-chain status at /api/paper-bridge/status. The bridge
+# module imports server lazily inside its own functions, so including
+# this router here creates no import cycle.
+import paper_bridge_api as _paper_bridge_api  # noqa: E402
+api_router.include_router(_paper_bridge_api.build_paper_bridge_router())
 @api_router.post("/signals/daily-recap", tags=["admin"])
 async def trigger_daily_recap(request: Request) -> Dict[str, Any]:
     actor = await auth_module.get_current_user(request, db)
@@ -3330,6 +3357,7 @@ async def seed_auth() -> None:
     _asyncio.create_task(live_signal_engine_loop())
     _asyncio.create_task(configured_alert_engine_loop())
     _asyncio.create_task(daily_recap_loop())
+    _asyncio.create_task(paper_bridge_time_exit_loop())
 
 
 
@@ -3660,6 +3688,24 @@ async def send_daily_recap(force: bool = False) -> Dict[str, Any]:
         3066993 if net_pts >= 0 else 15105570,
     )
     return {**summary, "posted": True}
+
+
+async def paper_bridge_time_exit_loop() -> None:
+    """Amendment A1 Mechanism 1 driver: tick the paper bridge's
+    scheduled 16:00 ET time exit. The bridge is the process-wide
+    singleton owned by paper_bridge_api (created once per process);
+    each tick is a no-op unless a Strategy B position is open on its
+    own session date at or past the deadline. The bridge's startup
+    recovery pass (Mechanism 2) runs at its construction, before any
+    tick can matter."""
+    await _asyncio.sleep(20)  # let the feed warm up
+    while True:
+        try:
+            bridge = _paper_bridge_api.get_bridge()
+            await _asyncio.to_thread(bridge.tick_time_exit)
+        except Exception as e:
+            logger.error(f"Paper bridge time-exit error: {e}")
+        await _asyncio.sleep(30)
 
 
 async def daily_recap_loop() -> None:

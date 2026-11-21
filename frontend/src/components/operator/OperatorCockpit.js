@@ -9,6 +9,7 @@ import PositionInfo from "./PositionInfo";
 import RiskPanel from "./RiskPanel";
 import SignalPanel from "./SignalPanel";
 import JournalPanel from "./JournalPanel";
+import PaperBridgePanel from "./PaperBridgePanel";
 import MasterControls from "./MasterControls";
 import MarketContext from "./MarketContext";
 import KeyLevels from "./KeyLevels";
@@ -272,6 +273,13 @@ export default function OperatorCockpit() {
         </div>
         <div className="col-span-12 md:col-span-7">
           <JournalPanel entries={journal} />
+        </div>
+
+        {/* PAPER BRIDGE — joined signal pipeline -> Analyst -> risk ->
+            Stage 2 paper engine status. Read-only; renders only the
+            /api/paper-bridge/status payload. */}
+        <div className="col-span-12">
+          <PaperBridgePanel />
         </div>
 
         <div className="col-span-12 mt-1">
